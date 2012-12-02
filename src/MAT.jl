@@ -124,15 +124,15 @@ function read_struct(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32}, i
 		class = ascii(read_element(f, swap_bytes, Uint8))
 	end
 
-	n_dimensions = prod(dimensions)
+	n_el = prod(dimensions)
 	local data
-	if n_dimensions != 1
+	if n_el != 1
 		data = Array(Dict{ASCIIString, Any}, tuple(int(dimensions)...))
 	end
 
-	for i = 1:n_dimensions
+	for i = 1:n_el
 		struct = Dict{ASCIIString, Any}(n_fields+1)
-		if n_dimensions == 1
+		if n_el == 1
 			data = struct
 		else
 			data[i] = struct
@@ -156,21 +156,23 @@ end
 function read_string(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32})
 	(dtype, nbytes, hbytes) = read_header(f, swap_bytes)
 	if dtype <= 2 || dtype == 16
+		chars = read(f, Uint8, nbytes)
 		if dimensions[1] == 1
-			data = utf8(read(f, Uint8, dimensions[2]))
+			data = utf8(chars)
 		else
-			data = Array(UTF16String, dimensions[1])
+			data = Array(String, dimensions[1])
 			for i = 1:dimensions[1]
-				data[i] = utf8(read(f, Uint8, dimensions[2]))
+				data[i] = rstrip(utf8(chars[i:dimensions[1]:end]))
 			end
 		end
 	elseif dtype <= 4 || dtype == 17
+		chars = read_bswap(f, swap_bytes, Uint16, div(nbytes, 2))
 		if dimensions[1] == 1
-			data = UTF16String(read(f, Uint16, dimensions[2]))
+			data = UTF16String(chars)
 		else
 			data = Array(UTF16String, dimensions[1])
 			for i = 1:dimensions[1]
-				data[i] = UTF16String(read(f, Uint16, dimensions[2]))
+				data[i] = rstrip(UTF16String(chars[i:dimensions[1]:end]))
 			end
 		end
 	else
@@ -187,7 +189,9 @@ function read_matrix(f::IOStream, swap_bytes::Bool)
 		mi = memio(length(bytes))
 		write(mi, bytes)
 		seek(mi, 0)
-		return read_matrix(mi, swap_bytes)
+		output = read_matrix(mi, swap_bytes)
+		close(mi)
+		return output
 	elseif dtype != miMATRIX
 		error("Unexpected data type")
 	end
