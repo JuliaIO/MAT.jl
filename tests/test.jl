@@ -55,3 +55,9 @@ result = {
 }
 @time mat = matread("tests/compressed.mat")
 @assert result == mat
+
+result = {
+	"imaginary" => [1 -1 1+im 1-im -1+im -1-im im]
+}
+@time mat = matread("tests/complex.mat")
+@assert result == mat
