@@ -1,4 +1,4 @@
-load("MAT")
+load("src/MAT")
 using MAT
 
 result = {
@@ -32,7 +32,6 @@ result = {
 	"accented_string" => "thé qüîck browñ fòx"
 }
 @time mat = matread("test/string.mat")
-println(mat)
 @assert result == mat
 
 result = {
