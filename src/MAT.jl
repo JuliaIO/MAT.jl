@@ -215,7 +215,7 @@ function read_matrix(f::IOStream, swap_bytes::Bool)
 		data = read_struct(f, swap_bytes, dimensions, class == mxOBJECT_CLASS)
 	elseif class == mxSPARSE_CLASS
 		error("Sparse matrices not currently supported")
-	elseif class == mxCHAR_CLASS && (length(dimensions) <= 2 || all(dimensions[3:end] .== 2))
+	elseif class == mxCHAR_CLASS && length(dimensions) <= 2
 		data = read_string(f, swap_bytes, dimensions)
 	else
 		convert_type = CONVERT_TYPES[class]
