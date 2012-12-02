@@ -56,7 +56,7 @@ const mxUINT64_CLASS = 15
 
 const READ_TYPES = Type[Int8, Uint8, Int16, Uint16, Int32, Uint32, Float32, None, Float64,
 	None, None, Int64, Uint64]
-const CONVERT_TYPES = Type[None, None, None, String, None, Float64, Float32, Int8, Uint8,
+const CONVERT_TYPES = Type[None, None, None, None, None, Float64, Float32, Int8, Uint8,
 	Int16, Uint16, Int32, Uint32, Int64, Uint64]
 
 read_bswap{T}(f::IOStream, swap_bytes::Bool, ::Type{T}) = 
@@ -102,7 +102,7 @@ function read_data{T}(f::IOStream, swap_bytes::Bool, ::Type{T}, dimensions::Vect
 	end
 	skip_padding(f, nbytes, hbytes)
 
-	if read_type != T
+	if read_type != T && T != None
 		data = read_array ? convert(Array{T}, data) : convert(T, data)
 	end
 	data
