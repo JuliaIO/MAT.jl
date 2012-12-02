@@ -47,3 +47,11 @@ result = {
 }
 @time mat = matread("tests/struct.mat")
 @assert result == mat
+
+result = {
+	"vector" => float64([1:10]'),
+	"struct" => { "my"=>"struct" },
+	"cell" => {"my" "cell"}
+}
+@time mat = matread("tests/compressed.mat")
+@assert result == mat

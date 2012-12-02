@@ -16,9 +16,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 load("UTF16")
+load("zlib")
 
 module MAT
-using Base, UTF16
+using Base, UTF16, Zlib
 
 export matread
 
@@ -163,7 +164,13 @@ end
 
 function read_matrix(f::IOStream, swap_bytes::Bool)
 	(dtype, nbytes) = read_header(f, swap_bytes)
-	if dtype != miMATRIX
+	if dtype == miCOMPRESSED
+		bytes = uncompress(read(f, Uint8, nbytes))
+		mi = memio(length(bytes))
+		write(mi, bytes)
+		seek(mi, 0)
+		return read_matrix(mi, swap_bytes)
+	elseif dtype != miMATRIX
 		error("Unexpected data type")
 	end
 
