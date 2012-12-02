@@ -156,6 +156,10 @@ end
 function read_string(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32})
 	(dtype, nbytes, hbytes) = read_header(f, swap_bytes)
 	if dtype <= 2 || dtype == 16
+		# If dtype <= 2, this may give an error on non-ASCII characters, since the string
+		# would be ISO-8859-1 and not UTF-8. However, MATLAB 2012b always saves strings with
+		# a 2-byte encoding in v6 format, and saves UTF-8 in v7 format. Thus, this may never
+		# happen in the wild.
 		chars = read(f, Uint8, nbytes)
 		if dimensions[1] == 1
 			data = utf8(chars)
@@ -166,6 +170,9 @@ function read_string(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32})
 			end
 		end
 	elseif dtype <= 4 || dtype == 17
+		# Technically, if dtype == 3 or dtype == 4, this is ISO-8859-1 and not Unicode.
+		# However, the first 256 Unicode code points are derived from ISO-8859-1, so UTF-16
+		# is a superset of 2-byte ISO-8859-1.
 		chars = read_bswap(f, swap_bytes, Uint16, div(nbytes, 2))
 		if dimensions[1] == 1
 			data = UTF16String(chars)

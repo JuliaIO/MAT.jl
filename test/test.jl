@@ -35,6 +35,8 @@ result = {
 }
 @time mat = matread("test/string.mat")
 @assert result == mat
+@time mat = matread("test/string_unicode.mat")
+@assert result == mat
 
 result = {
 	"a1x2" => [1.0 2.0],
