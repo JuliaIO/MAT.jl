@@ -43,7 +43,8 @@ result = {
 		"a" => 1.0,
 		"b" => [1.0 2.0],
 		"c" => [1.0 2.0 3.0]
-	}
+	},
+	"s2" => [{ "a" => 1 } { "a" => 2 }]
 }
 @time mat = matread("tests/struct.mat")
 @assert result == mat
