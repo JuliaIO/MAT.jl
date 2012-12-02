@@ -120,18 +120,36 @@ function read_struct(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32}, i
 	field_length = read_element(f, swap_bytes, Int32)[1]
 	field_names = read_element(f, swap_bytes, Uint8)
 	n_fields = div(length(field_names), field_length)
-	data = Dict{String, Any}(n_fields)
-
 	if is_object
-		data["class"] = ascii(read_element(f, swap_bytes, Uint8))
+		class = ascii(read_element(f, swap_bytes, Uint8))
 	end
 
-	for i = 1:n_fields
-		sname = field_names[(i-1)*field_length+1:i*field_length]
-		index = findfirst(sname, 0)
-		sname = ascii(index == 0 ? sname : sname[1:index-1])
-		(ignored_name, data[sname]) = read_matrix(f, swap_bytes)
+	n_dimensions = prod(dimensions)
+	local data
+	if n_dimensions != 1
+		data = Array(Dict{ASCIIString, Any}, tuple(int(dimensions)...))
 	end
+
+	for i = 1:n_dimensions
+		struct = Dict{ASCIIString, Any}(n_fields+1)
+		if n_dimensions == 1
+			data = struct
+		else
+			data[i] = struct
+		end
+
+		if is_object
+			struct["class"] = class
+		end
+
+		for i = 1:n_fields
+			sname = field_names[(i-1)*field_length+1:i*field_length]
+			index = findfirst(sname, 0)
+			sname = ascii(index == 0 ? sname : sname[1:index-1])
+			(ignored_name, struct[sname]) = read_matrix(f, swap_bytes)
+		end
+	end
+
 	data
 end
 
