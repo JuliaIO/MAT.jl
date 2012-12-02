@@ -17,7 +17,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 load("UTF16")
 
-module MATv5
+module MAT
 using Base, UTF16
 
 export matread
@@ -116,10 +116,10 @@ function read_cell(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32})
 end
 
 function read_struct(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32}, is_object::Bool)
-	field_length = read_element(f, swap_bytes, Int32)
+	field_length = read_element(f, swap_bytes, Int32)[1]
 	field_names = read_element(f, swap_bytes, Uint8)
 	n_fields = div(length(field_names), field_length)
-	data = Dict{ASCIIString, Any}(n_fields)
+	data = Dict{String, Any}(n_fields)
 
 	if is_object
 		data["class"] = ascii(read_element(f, swap_bytes, Uint8))
@@ -128,9 +128,7 @@ function read_struct(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32}, i
 	for i = 1:n_fields
 		sname = field_names[(i-1)*field_length+1:i*field_length]
 		index = findfirst(sname, 0)
-		if index != 0
-			sname = sname[1:index-1]
-		end
+		sname = ascii(index == 0 ? sname : sname[1:index-1])
 		(ignored_name, data[sname]) = read_matrix(f, swap_bytes)
 	end
 	data
@@ -184,9 +182,10 @@ function read_matrix(f::IOStream, swap_bytes::Bool)
 	elseif class == mxCHAR_CLASS && (length(dimensions) <= 2 || all(dimensions[3:end] .== 2))
 		data = read_string(f, swap_bytes, dimensions)
 	else
-		data = read_data(f, swap_bytes, CONVERT_TYPES[class], dimensions)
+		convert_type = CONVERT_TYPES[class]
+		data = read_data(f, swap_bytes, convert_type, dimensions)
 		if (flags[1] & 0x0A00) != 0
-			data += im*read_data(f, swap_bytes, CONVERT_TYPES[class], dimensions)
+			data += im*read_data(f, swap_bytes, convert_type, dimensions)
 		end
 	end
 
