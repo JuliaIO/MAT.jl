@@ -251,12 +251,8 @@ function matread(file::ASCIIString)
 		error("Unsupported MATLAB file version")
 	end
 
-	seek_end(f)
-	eof = position(f)
-	seek(f, 128)
-
 	vars = Dict{ASCIIString, Any}()
-	while position(f) != eof
+	while !eof(f)
 		(name, data) = read_matrix(f, swap_bytes)
 		vars[name] = data
 	end
