@@ -274,6 +274,7 @@ end
 # Read a variable from a MAT file
 function read(matfile::Matlabv5File, varname::ASCIIString)
 	if matfile.varnames == nothing
+		seek(matfile.ios, 128)
 		matfile.varnames = varnames = Dict{ASCIIString, FileOffset}()
 		while !eof(matfile.ios)
 			offset = position(matfile.ios)
