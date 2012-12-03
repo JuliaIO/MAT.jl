@@ -13,7 +13,7 @@ result = {
 	"single" => float32(1),
 	"double" => float64(1)
 }
-@time mat = matread("test/simple.mat")
+@time mat = read(matopen("test/simple.mat"))
 @assert result == mat
 for (k, v) in result
 	if(typeof(mat[k]) != typeof(v))
@@ -24,7 +24,7 @@ end
 result = {
 	"imaginary" => [1 -1 1+im 1-im -1+im -1-im im]
 }
-@time mat = matread("test/complex.mat")
+@time mat = read(matopen("test/complex.mat"))
 @assert result == mat
 
 result = {
@@ -33,9 +33,9 @@ result = {
 	"concatenated_strings" => ["this is a string", "this is another string"],
 	"cell_strings" => ["this is a string" "this is another string"]
 }
-@time mat = matread("test/string.mat")
+@time mat = read(matopen("test/string.mat"))
 @assert result == mat
-@time mat = matread("test/string_unicode.mat")
+@time mat = read(matopen("test/string_unicode.mat"))
 @assert result == mat
 
 result = {
@@ -46,13 +46,13 @@ result = {
 	"empty" => zeros(0, 0),
 	"string" => "string"
 }
-@time mat = matread("test/array.mat")
+@time mat = read(matopen("test/array.mat"))
 @assert result == mat
 
 result = {
 	"cell" => {1 2.01 "string" {"string1" "string2"}}
 }
-@time mat = matread("test/cell.mat")
+@time mat = read(matopen("test/cell.mat"))
 @assert result == mat
 
 result = {
@@ -63,7 +63,7 @@ result = {
 	},
 	"s2" => [{ "a" => 1 } { "a" => 2 }]
 }
-@time mat = matread("test/struct.mat")
+@time mat = read(matopen("test/struct.mat"))
 @assert result == mat
 
 result = {
@@ -71,5 +71,19 @@ result = {
 	"struct" => { "my"=>"struct" },
 	"cell" => {"my" "cell"}
 }
-@time mat = matread("test/compressed.mat")
+@time mat = read(matopen("test/compressed.mat"))
 @assert result == mat
+
+matfile = matopen("test/partial.mat")
+@time var1 = read(matfile, "var1")
+@assert var1[28, 33] == 5
+@time var2 = read(matfile, "var2")
+@assert var2[27, 90] == 10
+close(matfile)
+
+matfile = matopen("test/partial_compressed.mat")
+@time var1 = read(matfile, "var1")
+@assert var1[28, 33] == 5
+@time var2 = read(matfile, "var2")
+@assert var2[27, 90] == 10
+close(matfile)

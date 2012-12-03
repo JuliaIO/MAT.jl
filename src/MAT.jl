@@ -20,8 +20,14 @@ load("zlib")
 
 module MAT
 using Base, UTF16, Zlib
+import Base.read, Base.close
+export matopen, read, close
 
-export matread
+type Matlabv5File
+	ios::IOStream
+	swap_bytes::Bool
+	varnames::Union(Nothing, Dict{ASCIIString, FileOffset})
+end
 
 const miINT8 = 1
 const miUINT8 = 2
@@ -53,7 +59,6 @@ const mxINT32_CLASS = 12
 const mxUINT32_CLASS = 13
 const mxINT64_CLASS = 14
 const mxUINT64_CLASS = 15
-
 const READ_TYPES = Type[Int8, Uint8, Int16, Uint16, Int32, Uint32, Float32, None, Float64,
 	None, None, Int64, Uint64]
 const CONVERT_TYPES = Type[None, None, None, None, None, Float64, Float32, Int8, Uint8,
@@ -228,13 +233,14 @@ function read_matrix(f::IOStream, swap_bytes::Bool)
 	return (name, data)
 end
 
-function matread(file::ASCIIString)
-	f = open(file, "r")
-	header = read(f, Uint8, 116)
-	skip(f, 8)
-	version = read(f, Uint16)
+# Open MAT file for reading
+function matopen(filename::String)
+	ios = open(filename, "r")
+	header = read(ios, Uint8, 116)
+	skip(ios, 8)
+	version = read(ios, Uint16)
+	endian_indicator = read(ios, Uint16)
 
-	endian_indicator = read(f, Uint16)
 	local swap_bytes
 	if endian_indicator == 0x4D49
 		swap_bytes = false
@@ -251,13 +257,79 @@ function matread(file::ASCIIString)
 		error("Unsupported MATLAB file version")
 	end
 
+	return Matlabv5File(ios, swap_bytes, nothing)
+end
+
+# Read whole MAT file
+function read(matfile::Matlabv5File)
+	seek(matfile.ios, 128)
 	vars = Dict{ASCIIString, Any}()
-	while !eof(f)
-		(name, data) = read_matrix(f, swap_bytes)
+	while !eof(matfile.ios)
+		(name, data) = read_matrix(matfile.ios, matfile.swap_bytes)
 		vars[name] = data
 	end
-	
-	close(f)
 	vars
 end
+
+# Read a variable from a MAT file
+function read(matfile::Matlabv5File, varname::ASCIIString)
+	if matfile.varnames == nothing
+		matfile.varnames = varnames = Dict{ASCIIString, FileOffset}()
+		while !eof(matfile.ios)
+			offset = position(matfile.ios)
+			(dtype, nbytes, hbytes) = read_header(matfile.ios, matfile.swap_bytes)
+			if dtype == miCOMPRESSED
+				# Read 1K or less of data
+				read_bytes = min(nbytes, 1024)
+				source = read(matfile.ios, Uint8, read_bytes)
+				skip(matfile.ios, nbytes-read_bytes)
+
+				# Uncompress to 1K byte buffer
+				dest = zeros(Uint8, 1024)
+				dest_buf_size = Int[1024]
+
+				ret = ccall(dlsym(Zlib._zlib, :uncompress), Int32, (Ptr{Uint}, Ptr{Uint}, Ptr{Uint}, Uint),
+					dest, dest_buf_size, source, length(source))
+
+				# Zlib may complain because the buffer is small or the data are incomplete
+				if ret != Z_OK && ret != Z_BUF_ERROR && ret != Z_DATA_ERROR
+					throw(ZError(ret))
+				end
+
+				dest_buf_size = dest_buf_size[1]
+
+				# Create memio from uncompressed buffer
+				f = memio(dest_buf_size)
+				write(f, sub(dest, 1:dest_buf_size))
+				seek(f, 0)
+
+				# Read header
+				read_header(f, matfile.swap_bytes)
+			elseif dtype == miMATRIX
+				f = matfile.ios
+			else
+				error("Unexpected data type")
+			end
+
+			read_element(f, matfile.swap_bytes, Uint32)
+			read_element(f, matfile.swap_bytes, Int32)
+			varnames[ascii(read_element(f, matfile.swap_bytes, Uint8))] = offset
+
+			if dtype == miCOMPRESSED
+				# Close memio
+				close(f)
+			else
+				# Seek past
+				seek(f, offset+nbytes+hbytes)
+			end
+		end
+	end
+
+	seek(matfile.ios, matfile.varnames[varname])
+	(name, data) = read_matrix(matfile.ios, matfile.swap_bytes)
+	data
+end
+
+# Close MAT file
+close(matfile::Matlabv5File) = close(matfile.ios)
 end
