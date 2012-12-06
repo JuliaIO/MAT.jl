@@ -3,7 +3,8 @@ using MAT
 
 function check(filename, result)
 	matfile = matopen(filename)
-	if read(matfile) != result
+	mat = read(matfile)
+	if mat != result
 			error("Data mismatch reading $filename")
 		close(matfile)
 		return false
@@ -77,7 +78,7 @@ for format in ["v6", "v7", "v7.3"]
 			"b" => [1.0 2.0],
 			"c" => [1.0 2.0 3.0]
 		},
-		"s2" => [{ "a" => 1 } { "a" => 2 }]
+		"s2" => { "a" => [1.0 2.0] }
 	}
 	check("$tests/struct.mat", result)
 

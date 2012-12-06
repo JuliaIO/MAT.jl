@@ -73,7 +73,7 @@ const CONVERT_TYPES = Type[None, None, None, None, None, Float64, Float32, Int8,
 read_bswap{T}(f::IOStream, swap_bytes::Bool, ::Type{T}) = 
     swap_bytes ? bswap(read(f, T)) : read(f, T)
 read_bswap{T}(f::IOStream, swap_bytes::Bool, ::Type{T}, dim::Union(Int, (Int...))) = 
-    swap_bytes ? [bswap(x) for x=read(f, T, dim)] : read(f, T, dim)
+    swap_bytes ? [bswap(x) for x in read(f, T, dim)] : read(f, T, dim)
 
 skip_padding(f::IOStream, nbytes::Int64, hbytes::Int) = if nbytes % hbytes != 0
     skip(f, hbytes-(nbytes % hbytes))
@@ -135,29 +135,35 @@ function read_struct(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32}, i
         class = ascii(read_element(f, swap_bytes, Uint8))
     end
 
+
+    # Get field names as strings
+    field_name_strings = Array(String, n_fields)
     n_el = prod(dimensions)
-    local data
-    if n_el != 1
-        data = Array(Dict{ASCIIString, Any}, tuple(int(dimensions)...))
+    for i = 1:n_fields
+        sname = field_names[(i-1)*field_length+1:i*field_length]
+        index = findfirst(sname, 0)
+        field_name_strings[i] = ascii(index == 0 ? sname : sname[1:index-1])
     end
 
-    for i = 1:n_el
-        struct = Dict{ASCIIString, Any}(n_fields+1)
-        if n_el == 1
-            data = struct
-        else
-            data[i] = struct
-        end
+    data = Dict{ASCIIString, Any}(n_fields+1)
+    if is_object
+        data["class"] = class
+    end
 
-        if is_object
-            struct["class"] = class
+    if n_el == 1
+        # Read a single struct into a dict
+        for field_name in field_name_strings
+            data[field_name] = read_matrix(f, swap_bytes)[2]
         end
-
-        for i = 1:n_fields
-            sname = field_names[(i-1)*field_length+1:i*field_length]
-            index = findfirst(sname, 0)
-            sname = ascii(index == 0 ? sname : sname[1:index-1])
-            (ignored_name, struct[sname]) = read_matrix(f, swap_bytes)
+    else
+        # Read multiple structs into a dict of arrays
+        for field_name in field_name_strings
+            data[field_name] = cell(dimensions...)
+        end
+        for i = 1:n_el
+            for field_name in field_name_strings
+                data[field_name][i] = read_matrix(f, swap_bytes)[2]
+            end
         end
     end
 
