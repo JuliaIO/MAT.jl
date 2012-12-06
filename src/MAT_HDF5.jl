@@ -26,9 +26,10 @@
 ## Reading and writing MATLAB .mat files ##
 ###########################################
 
-require("hdf5.jl")
+load("hdf5")
+load("UTF16")
 module MAT_HDF5
-using HDF5
+using HDF5, UTF16
 # Attempt to execute "using MAT", but don't error if it doesn't work
 try
     eval(expr(:using, Any[:MAT]))
@@ -147,7 +148,8 @@ function read(dset::HDF5Dataset{MatlabHDF5File})
         end
         return out
     end
-    read(plain(dset), T)
+    d = read(plain(dset), T)
+    numel(d) == 1 ? d[1] : d
 end
 
 # reading a struct or struct array
@@ -174,7 +176,6 @@ function read(f::MatlabHDF5File)
     vars = vars[!(vars .== "#refs#")]  # delete "#refs#"
     vals = Array(Any, length(vars))
     for i = 1:length(vars)
-        println("...reading ", vars[i])
         vals[i] = read(f, vars[i])
     end
     Dict(vars, vals)
@@ -338,8 +339,14 @@ function read(obj::HDF5Object{PlainHDF5File}, ::Type{MatlabString})
     end
     if ndims(data) == 1
         return CharString(data)
+    elseif ndims(data) == 2
+        datap = Array(String, size(data, 1))
+        for i = 1:length(datap)
+            datap[i] = rstrip(CharString(squeeze(data[i, :])))
+        end
+        return datap
     else
-        return Char(data)
+        return data
     end
 end
 function read(obj::HDF5Object{PlainHDF5File}, ::Type{Bool})
