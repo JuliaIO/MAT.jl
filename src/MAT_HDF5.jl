@@ -122,9 +122,10 @@ end
 ### Matlab file format specification ###
 
 const name_type_attr_matlab = "MATLAB_class"
+const empty_attr_matlab = "MATLAB_empty"
 
 function read(dset::HDF5Dataset{MatlabHDF5File})
-    if exists(dset, "MATLAB_empty")
+    if exists(dset, empty_attr_matlab)
         # Empty arrays encode the dimensions as the dataset
         dims = int(read(plain(dset)))
         mattype = a_read(dset, name_type_attr_matlab)
@@ -194,12 +195,19 @@ for (fsym, dsym) in
                 error("Type ", T, " is not (yet) supported")
             end
             # Everything in Matlab is an array
+            empty = false
             if !isa(data, Array)
                 data = [data]
+            elseif isempty(data)
+                empty = true
+                data = [size(data)...]
             end
             # Create the dataset
             dset, dtype = d_create(plain(parent), name, data)
             try
+                if empty
+                    a_write(dset, empty_attr_matlab, uint8(1))
+                end
                 # Write the attribute
                 a_write(dset, name_type_attr_matlab, typename)
                 # Write the data
