@@ -204,14 +204,34 @@ for (fsym, dsym) in
                 a_write(dset, name_type_attr_matlab, typename)
                 # Write the data
                 writearray(dset, dtype.id, data)
-            catch err
+            finally
                 close(dset)
                 close(dtype)
-                throw(err)
             end
-            close(dset)
-            close(dtype)
         end
+    end
+end
+
+# Write a string
+function write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, str::String)
+    # Here we assume no UTF-16
+    data = zeros(Uint16, strlen(str))
+    i = 1
+    for c in str
+        data[i] = c
+        i += 1
+    end
+
+    # Create the dataset
+    dset, dtype = d_create(plain(parent), name, data)
+    try
+        # Write the attribute
+        a_write(dset, name_type_attr_matlab, "char")
+        # Write the data
+        writearray(dset, dtype.id, data)
+    finally
+        close(dset)
+        close(dtype)
     end
 end
 
@@ -225,7 +245,7 @@ function write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name
     else
         g = parent[pathrefs]
     end
-#    try
+    try
         # If needed, create the "empty" item
         if !exists(g, "a/MATLAB_empty")
             if exists(g, "a")
@@ -234,17 +254,14 @@ function write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name
             pg = plain(g)
             edata = zeros(Uint64, 2)
             eset, etype = d_create(pg, "a", edata)
-#              try
+            try
                 writearray(eset, etype.id, edata)
                 a_write(eset, name_type_attr_matlab, "canonical empty")
                 a_write(eset, "MATLAB_empty", uint8(0))
-#              catch err
-#                  close(etype)
-#                  close(eset)
-#                  throw(err)
-#              end
-            close(etype)
-            close(eset)
+            finally
+                close(etype)
+                close(eset)
+            end
         end
         # Write the items to the reference group
         refs = HDF5ReferenceObjArray(size(data)...)
@@ -257,23 +274,18 @@ function write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name
             refs[i] = (tmp, pathrefs*"/"*itemname)
             close(tmp)
         end
-#      catch err
-#          close(g)
-#          throw(err)
-#      end
-    close(g)
+    finally
+        close(g)
+    end
     # Write the references as the chosen variable
     cset, ctype = d_create(plain(parent), name, refs)
-#          try
+    try
         writearray(cset, ctype.id, refs.r)
         a_write(cset, name_type_attr_matlab, "cell")
-#          catch err
-#              close(ctype)
-#              close(cset)
-#              throw(err)
-#          end
-    close(ctype)
-    close(cset)
+    finally
+        close(ctype)
+        close(cset)
+    end
 end
 
 # write a compositekind as a struct
@@ -326,7 +338,7 @@ const type2str_matlab = {
     Int64   => "int64",
     Uint64  => "uint64",
     Float32 => "single",
-    Float64 => "double",
+    Float64 => "double"
 }
 
 
