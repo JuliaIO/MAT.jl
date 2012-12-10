@@ -244,7 +244,7 @@ function write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::B
 end
 
 # Write cell arrays
-function write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Array{T})
+function write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Array{T}, l::Int)
     pathrefs = "/#refs#"
     local g
     local refs
@@ -273,10 +273,17 @@ function write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name
         end
         # Write the items to the reference group
         refs = HDF5ReferenceObjArray(size(data)...)
-        l = length(g)-1
+        if l == -1
+            l = length(g)-1
+        end
         for i = 1:length(data)
             itemname = string(l+i)
-            write(g, itemname, data[i])
+            if isa(data[i], Array)
+                # Need to pass level so that we don't create items with the same names
+                write(g, itemname, data[i], l+length(data))
+            else
+                write(g, itemname, data[i])
+            end
             # Extract references
             tmp = g[itemname]
             refs[i] = (tmp, pathrefs*"/"*itemname)
@@ -295,6 +302,7 @@ function write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name
         close(cset)
     end
 end
+write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Array) = write(parent, name, data, -1)
 
 # write a compositekind as a struct
 function write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s)
