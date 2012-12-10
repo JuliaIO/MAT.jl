@@ -318,12 +318,16 @@ function write_dict(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), na
     end
     a_write(gplain, "MATLAB_fields", HDF5Vlen(ASCIIString[keys(dict)...]))
 end
-write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, dict::Dict) =
-    all([isa(x, String) && match(r"^[a-zA-Z][a-zA-Z0-9_]*$", x) != nothing && length(x) < 64 for x in keys(dict)]) ?
-    write_dict(parent, name, dict) : write(parent, name, s)
 
 # write a compositekind as a struct
 function write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s)
+    # Check if this is a dict with keys that will fit in a struct
+    if isa(s, Dict) && all([isa(x, String) && match(r"^[a-zA-Z][a-zA-Z0-9_]*$", x) != nothing &&
+            length(x) < 64 for x in keys(s)])
+        write_dict(parent, name, s)
+        return
+    end
+
     T = typeof(s)
     if !isa(T, CompositeKind)
         error("This is the write function for CompositeKind, but the input doesn't fit")
