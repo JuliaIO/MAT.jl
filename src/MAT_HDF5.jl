@@ -304,6 +304,21 @@ function write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name
 end
 write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Array) = write(parent, name, data, -1)
 
+# Write Dicts as structs
+function write_dict(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, dict::Dict)
+    g = g_create(parent, name)
+    gplain = plain(g)
+    a_write(gplain, name_type_attr_matlab, "struct")
+    n_fields = length(dict)
+    for (k, v) in dict
+        write(g, k, v)
+    end
+    a_write(gplain, "MATLAB_fields", HDF5Vlen(ASCIIString[keys(dict)...]))
+end
+write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, dict::Dict) =
+    all([isa(x, String) && match(r"^[a-zA-Z][a-zA-Z0-9_]*$", x) != nothing && length(x) < 64 for x in keys(dict)]) ?
+    write_dict(parent, name, dict) : write(parent, name, s)
+
 # write a compositekind as a struct
 function write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s)
     T = typeof(s)
