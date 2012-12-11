@@ -27,14 +27,8 @@
 ###########################################
 
 load("hdf5")
-load("UTF16")
 module MAT_HDF5
-using HDF5, UTF16
-# Attempt to execute "using MAT", but don't error if it doesn't work
-try
-    eval(expr(:using, Any[:MAT]))
-catch
-end
+using HDF5
 # Add methods to...
 import HDF5.close, HDF5.read, HDF5.write
 
@@ -331,43 +325,46 @@ function write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name
 end
 write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Array) = write(parent, name, data, -1)
 
-# Write Dicts as structs
-function write_dict(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, dict::Dict)
+# Check that keys are valid for a struct, and convert them to an array of ASCIIStrings
+function check_struct_keys(k::Vector)
+    asckeys = Array(ASCIIString, length(k))
+    for i = 1:length(k)
+        key = k[i]
+        if !isa(key, String)
+            error("Only Dicts with string keys may be saved as MATLAB structs")
+        elseif match(r"^[a-zA-Z][a-zA-Z0-9_]*$", key) == nothing 
+            error("Invalid key \"$key\" for MATLAB struct: keys must start with a letter and contain only alphanumeric characters and underscore")
+        elseif length(key) > 63
+            error("Invalid key \"$key\" for MATLAB struct: keys must be less than 64 characters")
+        end
+        asckeys[i] = convert(ASCIIString, key)
+    end
+    asckeys
+end
+
+# Write a struct from arrays of keys and values
+function write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, k::Vector{ASCIIString}, v::Vector)
     g = g_create(parent, name)
     gplain = plain(g)
     a_write(gplain, name_type_attr_matlab, "struct")
-    n_fields = length(dict)
-    for (k, v) in dict
-        write(g, k, v)
+    for i = 1:length(k)
+        write(g, k[i], v[i])
     end
-    a_write(gplain, "MATLAB_fields", HDF5Vlen(ASCIIString[keys(dict)...]))
+    a_write(gplain, "MATLAB_fields", HDF5Vlen(k))
 end
 
-# write a compositekind as a struct
-function write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s)
-    # Check if this is a dict with keys that will fit in a struct
-    if isa(s, Dict) && all([isa(x, String) && match(r"^[a-zA-Z][a-zA-Z0-9_]*$", x) != nothing &&
-            length(x) < 64 for x in keys(s)])
-        write_dict(parent, name, s)
-        return
-    end
+# Write Associative as a struct
+write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s::Associative) =
+    write(parent, name, check_struct_keys(keys(s)), values(s))
 
+# Write generic CompositeKind as a struct
+function write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s)
     T = typeof(s)
     if !isa(T, CompositeKind)
         error("This is the write function for CompositeKind, but the input doesn't fit")
     end
-    g = g_create(parent, name)
-    gplain = plain(g)
-    a_write(gplain, name_type_attr_matlab, "struct")
-    n_fields = length(T.names)
-    fn = Array(ASCIIString, 0)
-    for n in T.names
-        push(fn, string(n))
-        write(g, fn[end], getfield(s, n))
-    end
-    a_write(gplain, "MATLAB_fields", HDF5Vlen(fn))
+    write(parent, name, check_struct_keys([string(x) for x in T.names]), [getfield(s, x) for x in T.names])
 end
-
 
 ## Type conversion operations ##
 

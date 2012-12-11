@@ -56,3 +56,32 @@ test_write({
 	},
 	"s2" => { "a" => [1.0 2.0] }
 })
+
+try
+	test_write({ "1invalidkey" => "starts with a number" })
+	error("Writing invalid key did not fail")
+catch
+end
+
+try
+	test_write({ "another invalid key" => "invalid characters" })
+	error("Writing invalid key did not fail")
+catch
+end
+
+try
+	test_write({ "yetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkey" => "too long" })
+	error("Writing invalid key did not fail")
+catch
+end
+
+type TestCompositeKind
+	field1::String
+end
+fid = matopen("/tmp/matwrite.mat", "w")
+write(fid, "test", TestCompositeKind("test value"))
+close(fid)
+fid = matopen("/tmp/matwrite.mat", "r")
+result = read(fid, "test")
+close(fid)
+@assert result == { "field1" => "test value" }
