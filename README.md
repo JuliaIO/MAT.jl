@@ -47,4 +47,4 @@ close(file)
 
 ## Credits
 
-The MAT_HDF5 module, which provides read/write support for MATLAB v7.3 files, was written primarily by @timholy. The MAT_v5 module, which provides read support for MATLAB v5/v6/v7 files, was written primarily by @simonster.
+The MAT_HDF5 module, which provides read/write support for MATLAB v7.3 files, was written primarily by [Tim Holy](https://github.com/timholy/). The MAT_v5 module, which provides read support for MATLAB v5/v6/v7 files, was written primarily by [Simon Kornblith](https://github.com/simonster/).
