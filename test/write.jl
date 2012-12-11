@@ -3,13 +3,22 @@ using MAT
 
 function test_write(data)
 	fid = matopen("/tmp/matwrite.mat", "w")
-	for (k, v) in data
-		write(fid, k, v)
+	try
+		for (k, v) in data
+			write(fid, k, v)
+		end
+	finally
+		close(fid)
 	end
-	close(fid)
+
 	fid = matopen("/tmp/matwrite.mat", "r")
-	result = read(fid)
-	close(fid)
+	local result
+	try
+		result = read(fid)
+	finally
+		close(fid)
+	end
+
 	if result != data
 		error("Data mismatch")
 	end
