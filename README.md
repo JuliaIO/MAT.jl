@@ -35,7 +35,7 @@ close(file)
 To read all variables from a MAT file as a Dict:
 
 ```julia
-vars = matwrite("matfile.mat")
+vars = matread("matfile.mat")
 ```
 
 To write a Dict to a MAT file, using its keys as variable names:
