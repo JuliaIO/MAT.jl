@@ -22,11 +22,10 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-load("UTF16")
 load("zlib")
 
 module MAT_v5
-using Zlib, UTF16
+using Zlib
 import Base.close, Base.read, Base.write
 
 type Matlabv5File
@@ -188,15 +187,15 @@ function read_string(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32})
         end
     elseif dtype <= 4 || dtype == 17
         # Technically, if dtype == 3 or dtype == 4, this is ISO-8859-1 and not Unicode.
-        # However, the first 256 Unicode code points are derived from ISO-8859-1, so UTF-16
+        # However, the first 256 Unicode code points are derived from ISO-8859-1, so UCS-2
         # is a superset of 2-byte ISO-8859-1.
         chars = read_bswap(f, swap_bytes, Uint16, div(nbytes, 2))
         if dimensions[1] == 1
-            data = UTF16String(chars)
+            data = CharString(chars)
         else
-            data = Array(UTF16String, dimensions[1])
+            data = Array(String, dimensions[1])
             for i = 1:dimensions[1]
-                data[i] = rstrip(UTF16String(chars[i:dimensions[1]:end]))
+                data[i] = rstrip(CharString(chars[i:dimensions[1]:end]))
             end
         end
     else
