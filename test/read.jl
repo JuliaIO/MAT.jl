@@ -47,7 +47,7 @@ for format in ["v6", "v7", "v7.3"]
 	result = {
 		"imaginary" => [1 -1 1+im 1-im -1+im -1-im im]
 	}
-	#check("$tests/complex.mat", result)
+	check("$tests/complex.mat", result)
 
 	result = {
 		"simple_string" => "the quick brown fox",

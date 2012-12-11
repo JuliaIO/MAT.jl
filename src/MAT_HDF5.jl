@@ -133,11 +133,35 @@ function read(dset::HDF5Dataset{MatlabHDF5File})
     end
     # Read the MATLAB class
     mattype = "cell"
+    local T
     if exists(dset, name_type_attr_matlab)
         mattype = a_read(dset, name_type_attr_matlab)
         # Convert to Julia type
         T = str2type_matlab[mattype]
     end
+    # Check for a COMPOUND data set, and if so handle complex numbers specially
+    dtype = datatype(dset)
+    class_id = HDF5.h5t_get_class(dtype.id)
+    if class_id == HDF5.H5T_COMPOUND
+        if !check_datatype_complex(dtype)
+            close(dtype)
+            error("Unrecognized compound data type when reading ", name(dset))
+        end
+        close(dtype)
+        T = abstr_eltype(T)
+        if !(T == Float32 || T == Float64)
+            error("For complex numbers, only Float32 and Float64 supported")
+            # only Complex64 and Complex128 are defined as BitsKinds
+        end
+        memtype = build_datatype_complex(T)
+        sz = size(dset)
+        buf = Array(Uint8, 2*sizeof(T), sz...)
+        HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, buf)
+        C = (T == Float32) ? Complex64 : Complex128
+        d = reinterpret(C, buf, sz)
+        return numel(d) == 1 ? d[1] : d
+    end
+    close(dtype)
     # Read the dataset
     if mattype == "cell"
         # Represented as an array of refs
@@ -403,5 +427,27 @@ function read(obj::HDF5Object{PlainHDF5File}, ::Type{Bool})
     tf = read(obj, Uint8)
     tf > 0
 end
+
+## Utilities for handling complex numbers
+function build_datatype_complex(T::Type)
+    memtype_id = HDF5.h5t_create(HDF5.H5T_COMPOUND, 2*sizeof(T))
+    HDF5.h5t_insert(memtype_id, "real", 0, HDF5.hdf5_type_id(T))
+    HDF5.h5t_insert(memtype_id, "imag", sizeof(T), HDF5.hdf5_type_id(T))
+    HDF5Datatype(memtype_id)
+end
+
+function check_datatype_complex(dtype::HDF5Datatype)
+    n = HDF5.h5t_get_nmembers(dtype.id)
+    if n != 2
+        return false
+    end
+    if HDF5.h5t_get_member_name(dtype.id, 0) != "real" ||
+       HDF5.h5t_get_member_name(dtype.id, 1) != "imag"
+        return false
+    end
+    true
+end
+
+abstr_eltype{T}(::Type{Array{T}}) = T
 
 end
