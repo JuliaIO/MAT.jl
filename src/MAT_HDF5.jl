@@ -118,6 +118,8 @@ end
 const name_type_attr_matlab = "MATLAB_class"
 const empty_attr_matlab = "MATLAB_empty"
 
+### Reading
+
 function read(dset::HDF5Dataset{MatlabHDF5File})
     if exists(dset, empty_attr_matlab)
         # Empty arrays encode the dimensions as the dataset
@@ -200,11 +202,18 @@ function read(f::MatlabHDF5File)
     Dict(vars, vals)
 end
 
-for (fsym, dsym) in
-    ((:(write{T<:HDF5BitsKind}), :T),
-     (:(write{T<:HDF5BitsKind}), :(Array{T})))
+### Writing
+
+# Check whether a varname is valid for MATLAB
+check_valid_varname(s::String) = if match(r"^[a-zA-Z][a-zA-Z0-9_]*$", s) == nothing 
+    error("Invalid variable name or key \"$s\": variable names must start with a letter and contain only alphanumeric characters and underscore")
+elseif length(s) > 63
+    error("Invalid variable name or key \"$s\": variable names must be less than 64 characters")
+end
+
+for dsym in (:T, :(Array{T}))
     @eval begin
-        function ($fsym)(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::$dsym)
+        function m_write{T<:HDF5BitsKind}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::$dsym)
             local typename
             # Determine the Matlab type
             if has(type2str_matlab, T)
@@ -239,7 +248,7 @@ for (fsym, dsym) in
 end
 
 # Write a string
-function write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, str::String)
+function m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, str::String)
     # Here we assume no UTF-16
     data = zeros(Uint16, strlen(str))
     i = 1
@@ -262,7 +271,7 @@ function write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::B
 end
 
 # Write cell arrays
-function write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Array{T}, l::Int)
+function m_write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Array{T}, l::Int)
     pathrefs = "/#refs#"
     local g
     local refs
@@ -301,9 +310,9 @@ function write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name
             itemname = string(l+i)
             if isa(data[i], Array)
                 # Need to pass level so that we don't create items with the same names
-                write(g, itemname, data[i], l+length(data))
+                m_write(g, itemname, data[i], l+length(data))
             else
-                write(g, itemname, data[i])
+                m_write(g, itemname, data[i])
             end
             # Extract references
             tmp = g[itemname]
@@ -323,7 +332,7 @@ function write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name
         close(cset)
     end
 end
-write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Array) = write(parent, name, data, -1)
+m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Array) = m_write(parent, name, data, -1)
 
 # Check that keys are valid for a struct, and convert them to an array of ASCIIStrings
 function check_struct_keys(k::Vector)
@@ -332,38 +341,41 @@ function check_struct_keys(k::Vector)
         key = k[i]
         if !isa(key, String)
             error("Only Dicts with string keys may be saved as MATLAB structs")
-        elseif match(r"^[a-zA-Z][a-zA-Z0-9_]*$", key) == nothing 
-            error("Invalid key \"$key\" for MATLAB struct: keys must start with a letter and contain only alphanumeric characters and underscore")
-        elseif length(key) > 63
-            error("Invalid key \"$key\" for MATLAB struct: keys must be less than 64 characters")
         end
+        check_valid_varname(key)
         asckeys[i] = convert(ASCIIString, key)
     end
     asckeys
 end
 
 # Write a struct from arrays of keys and values
-function write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, k::Vector{ASCIIString}, v::Vector)
+function m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, k::Vector{ASCIIString}, v::Vector)
     g = g_create(parent, name)
     gplain = plain(g)
     a_write(gplain, name_type_attr_matlab, "struct")
     for i = 1:length(k)
-        write(g, k[i], v[i])
+        m_write(g, k[i], v[i])
     end
     a_write(gplain, "MATLAB_fields", HDF5Vlen(k))
 end
 
 # Write Associative as a struct
-write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s::Associative) =
-    write(parent, name, check_struct_keys(keys(s)), values(s))
+m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s::Associative) =
+    m_write(parent, name, check_struct_keys(keys(s)), values(s))
 
 # Write generic CompositeKind as a struct
-function write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s)
+function m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s)
     T = typeof(s)
     if !isa(T, CompositeKind)
         error("This is the write function for CompositeKind, but the input doesn't fit")
     end
-    write(parent, name, check_struct_keys([string(x) for x in T.names]), [getfield(s, x) for x in T.names])
+    m_write(parent, name, check_struct_keys([string(x) for x in T.names]), [getfield(s, x) for x in T.names])
+end
+
+# Check whether a variable name is valid, then write it
+function write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, thing)
+    check_valid_varname(name)
+    m_write(parent, name, thing)
 end
 
 ## Type conversion operations ##

@@ -94,3 +94,13 @@ fid = matopen("/tmp/matwrite.mat", "r")
 result = read(fid, "test")
 close(fid)
 @assert result == { "field1" => "test value" }
+
+
+fid = matopen("/tmp/matwrite.mat", "w")
+try
+	write(fid, "1invalidvarname", "1invalidvarvalue")
+	error("Writing invalid varname did not fail")
+catch
+finally
+	close(fid)
+end
