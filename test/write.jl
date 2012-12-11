@@ -2,14 +2,7 @@ load("src/MAT")
 using MAT
 
 function test_write(data)
-	fid = matopen("/tmp/matwrite.mat", "w")
-	try
-		for (k, v) in data
-			write(fid, k, v)
-		end
-	finally
-		close(fid)
-	end
+	matwrite("/tmp/matwrite.mat", data)
 
 	fid = matopen("/tmp/matwrite.mat", "r")
 	local result

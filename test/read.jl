@@ -2,13 +2,13 @@ load("src/MAT")
 using MAT
 
 function check(filename, result)
-	matfile = matopen(filename)
-	mat = read(matfile)
+	mat = matread(filename)
 	if mat != result
 			error("Data mismatch reading $filename")
 		close(matfile)
 		return false
 	end
+	matfile = matopen(filename)
 	for (k, v) in result
 		if read(matfile, k) != v
 			close(matfile)

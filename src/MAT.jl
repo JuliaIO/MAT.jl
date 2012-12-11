@@ -28,8 +28,9 @@ module MAT
 using MAT_HDF5, MAT_v5
 import Base.read, Base.write
 
-export matopen
+export matopen, matread, matwrite
 
+# Open a MATLAB file
 function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool)
     # When creating new files, create as HDF5 by default
     fs = filesize(filename)
@@ -64,4 +65,34 @@ function matopen(fname::String, mode::String)
 end
 
 matopen(fname::String) = matopen(fname, "r")
+
+# Read all variables from a MATLAB file
+function matread(filename::String)
+    file = matopen(filename)
+    local vars
+    try
+        vars = read(file)
+    finally
+        close(file)
+    end
+    vars
+end
+
+# Write a dict to a MATLAB file
+function matwrite{S, T}(filename::String, dict::Dict{S, T})
+    file = matopen(filename, "w")
+    try
+        for (k, v) in dict
+            local kstring
+            try
+                kstring = ascii(k)
+            catch x
+                error("matwrite requires a Dict with ASCII keys")
+            end
+            write(file, kstring, v)
+        end
+    finally
+        close(file)
+    end
+end
 end

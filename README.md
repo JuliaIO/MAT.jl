@@ -16,14 +16,6 @@ include("MAT.jl")
 using MAT
 ```
 
-To read all variables from a MAT file:
-
-```julia
-file = matopen("matfile.mat")
-read(file)
-close(file)
-```
-
 To read a single variable from a MAT file:
 
 ```julia
@@ -38,6 +30,21 @@ To write a variable to a MAT file:
 file = matopen("matfile.mat", "w")
 write(file, "varname", variable)
 close(file)
+```
+
+To read all variables from a MAT file as a Dict:
+
+```julia
+vars = matwrite("matfile.mat")
+```
+
+To write a Dict to a MAT file, using its keys as variable names:
+
+```julia
+matwrite(file, {
+	"myvar1" => 0
+	"myvar2" => 1
+})
 ```
 
 ## Caveats
