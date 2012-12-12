@@ -26,7 +26,7 @@
 ## Reading and writing MATLAB .mat files ##
 ###########################################
 
-load("hdf5")
+load("HDF5")
 module MAT_HDF5
 using HDF5
 # Add methods to...
