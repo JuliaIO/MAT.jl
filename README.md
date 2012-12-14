@@ -1,18 +1,22 @@
 # Support for reading and writing MATLAB files in Julia.
 
-## Requirements
+## Installation
 
-Until julia_hdf5 and MAT.jl are available as packages:
+Within Julia, use the package manager:
+```julia
+load("pkg.jl")
+Pkg.init()     # if you've never installed a package before
+Pkg.add("MAT")
+```
 
-* MAT.jl must be cloned to a directory named "MAT" that resides somewhere in the load path.
-* The "src" directory of [julia_hdf5](https://github.com/timholy/julia_hdf5/) must be in the load path.
+See also the requirements for the [HDF5](https://github.com/timholy/HDF5.jl/) module, used for "v7.3" files and for writing \*.mat files.
 
 ## Quick start
 
 To load the module:
 
 ```julia
-include("MAT.jl")
+load("MAT")
 using MAT
 ```
 
