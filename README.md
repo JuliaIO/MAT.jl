@@ -4,7 +4,7 @@
 
 Within Julia, use the package manager:
 ```julia
-load("pkg.jl")
+require("pkg.jl")
 Pkg.init()     # if you've never installed a package before
 Pkg.add("MAT")
 ```
@@ -16,7 +16,7 @@ See also the requirements for the [HDF5](https://github.com/timholy/HDF5.jl/) mo
 To load the module:
 
 ```julia
-load("MAT")
+require("MAT")
 using MAT
 ```
 
