@@ -304,7 +304,7 @@ function read(matfile::Matlabv5File, varname::ASCIIString)
                 dest = zeros(Uint8, 1024)
                 dest_buf_size = Int[1024]
 
-                ret = ccall(dlsym(Zlib._zlib, :uncompress), Int32, (Ptr{Uint}, Ptr{Uint}, Ptr{Uint}, Uint),
+                ret = ccall((:uncompress, "libz"), Int32, (Ptr{Uint}, Ptr{Uint}, Ptr{Uint}, Uint),
                     dest, dest_buf_size, source, length(source))
 
                 # Zlib may complain because the buffer is small or the data are incomplete
