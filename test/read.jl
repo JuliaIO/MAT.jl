@@ -82,6 +82,11 @@ for format in ["v6", "v7", "v7.3"]
 	}
 	check("$tests/struct.mat", result)
 
+	result = {
+		"logical" => 0x00
+	}
+	check("$tests/logical.mat", result)
+
 	matfile = matopen("$tests/partial.mat")
 	var1 = read(matfile, "var1")
 	@assert var1[28, 33] == 5

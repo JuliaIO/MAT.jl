@@ -236,7 +236,7 @@ function read_matrix(f::IOStream, swap_bytes::Bool)
     else
         convert_type = CONVERT_TYPES[class]
         data = read_data(f, swap_bytes, convert_type, dimensions)
-        if (flags[1] & 0x0A00) != 0
+        if (flags[1] & 0x0800) != 0 # complex
             data += im*read_data(f, swap_bytes, convert_type, dimensions)
         end
     end
