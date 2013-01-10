@@ -86,6 +86,11 @@ for format in ["v6", "v7", "v7.3"]
 		"logical" => 0x00
 	}
 	check("$tests/logical.mat", result)
+	
+	result = {
+		"empty_cells" => {zeros(0, 0) "test" zeros(0, 0)}
+	}
+	check("$tests/empty_cells.mat", result)
 
 	matfile = matopen("$tests/partial.mat")
 	var1 = read(matfile, "var1")

@@ -217,6 +217,15 @@ function read_matrix(f::IOStream, swap_bytes::Bool)
         return output
     elseif dtype != miMATRIX
         error("Unexpected data type")
+    elseif nbytes == 0
+        # If one creates a cell array using
+        #     y = cell(m, n)
+        # then MATLAB will save the empty cells as zero-byte matrices. If one creates a
+        # empty cells using
+        #     a = {[], [], []}
+        # then MATLAB does not save the empty cells as zero-byte matrices. To avoid
+        # surprises, we produce an empty array in both cases.
+        return ("", Array(None, 0, 0))
     end
 
     flags = read_element(f, swap_bytes, Uint32)
