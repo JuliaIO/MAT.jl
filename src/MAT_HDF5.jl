@@ -364,6 +364,15 @@ end
 m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s::Associative) =
     m_write(parent, name, check_struct_keys(keys(s)), values(s))
 
+# Write an array of complex numbers
+function m_write{C<:Complex}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ASCIIString, A::Array{C})
+    T = realtype(C)
+    memtype = build_datatype_complex(T)
+    stype = dataspace(A)
+    obj_id = HDF5.h5d_create(parent.id, name, memtype.id, stype.id)
+    writearray(HDF5Dataset(obj_id, file(parent)), memtype.id, reinterpret(T, A, tuple(2, size(A)...)))
+end
+
 # Write generic CompositeKind as a struct
 function m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s)
     T = typeof(s)
@@ -459,5 +468,9 @@ function check_datatype_complex(dtype::HDF5Datatype)
 end
 
 abstr_eltype{T}(::Type{Array{T}}) = T
+
+realtype(::Type{Complex64}) = Float32
+realtype(::Type{Complex128}) = Float64
+realtype{T}(::Type{Complex{T}}) = T
 
 end
