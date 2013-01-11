@@ -31,6 +31,7 @@ test_write({
 })
 
 test_write({ "imaginary" => [1.0 -1.0 1.0+1.0im 1.0-1.0im -1.0+1.0im -1.0-1.0im 1.0im] })
+test_write({ "imaginary_scalar" => 1.0im })
 
 test_write({
 	"simple_string" => "the quick brown fox",
