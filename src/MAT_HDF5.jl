@@ -212,40 +212,62 @@ elseif length(s) > 63
     error("Invalid variable name or key \"$s\": variable names must be less than 64 characters")
 end
 
-for dsym in (:T, :(Array{T}))
-    @eval begin
-        function m_write{T<:HDF5BitsKind}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::$dsym)
-            local typename
-            # Determine the Matlab type
-            if has(type2str_matlab, T)
-                typename = type2str_matlab[T]
-            else
-                error("Type ", T, " is not (yet) supported")
-            end
-            # Everything in Matlab is an array
-            empty = false
-            if !isa(data, Array)
-                data = [data]
-            elseif isempty(data)
-                empty = true
-                data = [size(data)...]
-            end
-            # Create the dataset
-            dset, dtype = d_create(plain(parent), name, data)
-            try
-                if empty
-                    a_write(dset, empty_attr_matlab, uint8(1))
-                end
-                # Write the attribute
-                a_write(dset, name_type_attr_matlab, typename)
-                # Write the data
-                writearray(dset, dtype.id, data)
-            finally
-                close(dset)
-                close(dtype)
-            end
+toarray(x::Array) = x
+toarray(x) = [x]
+
+# Writes an array given a dataset and datatype, and then closes them
+function m_writearray{T <: HDF5BitsKind}(dset::HDF5Dataset, dtype::HDF5Datatype, name::ByteString, data::Array{T})
+    try
+        # Determine the Matlab type
+        if !has(type2str_matlab, T)
+            error("Type ", T, " is not (yet) supported")
         end
+        typename = type2str_matlab[T]
+
+        # Write the attribute
+        a_write(dset, name_type_attr_matlab, typename)
+        # Write the data
+        writearray(dset, dtype.id, data)
+    finally
+        close(dset)
+        close(dtype)
     end
+end
+
+# Writes an empty scalar or array
+function m_writeempty(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Array)
+    adata = [size(data)...]
+    dset, dtype = d_create(plain(parent), name, adata)
+    a_write(dset, empty_attr_matlab, uint8(1))
+    m_writearray(dset, dtype, name, adata)
+end
+
+# Write a scalar or array
+function m_write{T<:HDF5BitsKind}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Union(T, Array{T}))
+    if isempty(data)
+        m_writeempty(parent, name, data)
+        return
+    end
+    adata = toarray(data)
+
+    dset, dtype = d_create(plain(parent), name, adata)
+    m_writearray(dset, dtype, name, adata)
+end
+
+# Write a complex scalar or array
+function m_write{C<:Complex}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Union(C, Array{C}))
+    if isempty(data)
+        m_writeempty(parent, name, data)
+        return
+    end
+    adata = toarray(data)
+
+    T = realtype(C)
+    dtype = build_datatype_complex(T)
+    stype = dataspace(adata)
+    obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id)
+    dset = HDF5Dataset(obj_id, plain(file(parent)))
+    m_writearray(dset, dtype, name, reinterpret(T, adata, tuple(2, size(adata)...)))
 end
 
 # Write a string
@@ -363,15 +385,6 @@ end
 # Write Associative as a struct
 m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s::Associative) =
     m_write(parent, name, check_struct_keys(keys(s)), values(s))
-
-# Write an array of complex numbers
-function m_write{C<:Complex}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ASCIIString, A::Array{C})
-    T = realtype(C)
-    memtype = build_datatype_complex(T)
-    stype = dataspace(A)
-    obj_id = HDF5.h5d_create(parent.id, name, memtype.id, stype.id)
-    writearray(HDF5Dataset(obj_id, file(parent)), memtype.id, reinterpret(T, A, tuple(2, size(A)...)))
-end
 
 # Write generic CompositeKind as a struct
 function m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s)
