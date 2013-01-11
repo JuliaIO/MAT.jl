@@ -30,6 +30,8 @@ test_write({
 	"double" => float64(1)
 })
 
+test_write({ "imaginary" => [1 -1 1+im 1-im -1+im -1-im im] })
+
 test_write({
 	"simple_string" => "the quick brown fox",
 	"accented_string" => "thé qüîck browñ fòx",
