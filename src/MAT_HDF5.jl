@@ -156,7 +156,7 @@ function read(dset::HDF5Dataset{MatlabHDF5File})
         HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, buf)
         C = (T == Float32) ? Complex64 : Complex128
         d = reinterpret(C, buf, sz)
-        return numel(d) == 1 ? d[1] : d
+        return length(d) == 1 ? d[1] : d
     end
     close(dtype)
     # Read the dataset
@@ -165,13 +165,13 @@ function read(dset::HDF5Dataset{MatlabHDF5File})
         refs = read(plain(dset), Array{HDF5ReferenceObj})
         out = Array(Any, size(refs))
         f = file(dset)
-        for i = 1:numel(refs)
+        for i = 1:length(refs)
             out[i] = read(f[refs[i]])
         end
         return out
     end
     d = read(plain(dset), T)
-    numel(d) == 1 ? d[1] : d
+    length(d) == 1 ? d[1] : d
 end
 
 # reading a struct or struct array

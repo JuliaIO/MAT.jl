@@ -1,4 +1,4 @@
-load("src/MAT")
+require("MAT")
 using MAT
 
 function test_write(data)

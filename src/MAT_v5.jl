@@ -120,7 +120,7 @@ end
 
 function read_cell(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32})
     data = cell(int(dimensions)...)
-    for i = 1:numel(data)
+    for i = 1:length(data)
         (ignored_name, data[i]) = read_matrix(f, swap_bytes)
     end
     data
