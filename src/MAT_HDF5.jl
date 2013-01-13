@@ -119,6 +119,27 @@ const name_type_attr_matlab = "MATLAB_class"
 const empty_attr_matlab = "MATLAB_empty"
 
 ### Reading
+function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset{MatlabHDF5File}, T::Type)
+    if !check_datatype_complex(dtype)
+        close(dtype)
+        error("Unrecognized compound data type when reading ", name(dset))
+    end
+    T = abstr_eltype(T)
+    memtype = build_datatype_complex(T)
+    sz = size(dset)
+    st = sizeof(T)
+    buf = Array(Uint8, 2*st, sz...)
+    HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, buf)
+
+    if T == Float32
+        d = reinterpret(Complex64, buf, sz)
+    elseif T == Float64
+        d = reinterpret(Complex128, buf, sz)
+    else
+        d = reinterpret(T, slicedim(buf, 1, 1:st), sz) + im*reinterpret(T, slicedim(buf, 1, st+1:2*st), sz)
+    end
+    length(d) == 1 ? d[1] : d
+end
 
 function read(dset::HDF5Dataset{MatlabHDF5File})
     if exists(dset, empty_attr_matlab)
@@ -128,40 +149,11 @@ function read(dset::HDF5Dataset{MatlabHDF5File})
         T = mattype == "canonical empty" ? None : str2type_matlab[mattype]
         return Array(T, dims...)
     end
-    # Read the MATLAB class
-    mattype = "cell"
-    local T
-    if exists(dset, name_type_attr_matlab)
-        mattype = a_read(dset, name_type_attr_matlab)
-        # Convert to Julia type
-        T = str2type_matlab[mattype]
-    end
-    # Check for a COMPOUND data set, and if so handle complex numbers specially
-    dtype = datatype(dset)
-    class_id = HDF5.h5t_get_class(dtype.id)
-    if class_id == HDF5.H5T_COMPOUND
-        if !check_datatype_complex(dtype)
-            close(dtype)
-            error("Unrecognized compound data type when reading ", name(dset))
-        end
-        close(dtype)
-        T = abstr_eltype(T)
-        if !(T == Float32 || T == Float64)
-            error("For complex numbers, only Float32 and Float64 supported")
-            # only Complex64 and Complex128 are defined as BitsKinds
-        end
-        memtype = build_datatype_complex(T)
-        sz = size(dset)
-        buf = Array(Uint8, 2*sizeof(T), sz...)
-        HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, buf)
-        C = (T == Float32) ? Complex64 : Complex128
-        d = reinterpret(C, buf, sz)
-        return length(d) == 1 ? d[1] : d
-    end
-    close(dtype)
-    # Read the dataset
+
+    mattype = exists(dset, name_type_attr_matlab) ? a_read(dset, name_type_attr_matlab) : "cell"
+
     if mattype == "cell"
-        # Represented as an array of refs
+        # Cell arrays, represented as an array of refs
         refs = read(plain(dset), Array{HDF5ReferenceObj})
         out = Array(Any, size(refs))
         f = file(dset)
@@ -170,7 +162,17 @@ function read(dset::HDF5Dataset{MatlabHDF5File})
         end
         return out
     end
-    d = read(plain(dset), T)
+
+    # Regular arrays of values
+    # Convert to Julia type
+    T = str2type_matlab[mattype]
+
+    # Check for a COMPOUND data set, and if so handle complex numbers specially
+    dtype = datatype(dset)
+    class_id = HDF5.h5t_get_class(dtype.id)
+    d = class_id == HDF5.H5T_COMPOUND ? read_complex(dtype, dset, T) : read(plain(dset), T)
+    
+    close(dtype)
     length(d) == 1 ? d[1] : d
 end
 
@@ -267,7 +269,8 @@ function m_write{C<:Complex}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5F
     stype = dataspace(adata)
     obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id)
     dset = HDF5Dataset(obj_id, plain(file(parent)))
-    m_writearray(dset, dtype, name, reinterpret(T, adata, tuple(2, size(adata)...)))
+    arr = isa(C, BitsKind) ? reinterpret(T, adata, tuple(2, size(adata)...)) : [real(adata), imag(adata)]
+    m_writearray(dset, dtype, name, arr)
 end
 
 # Write a string
@@ -485,5 +488,6 @@ abstr_eltype{T}(::Type{Array{T}}) = T
 realtype(::Type{Complex64}) = Float32
 realtype(::Type{Complex128}) = Float64
 realtype{T}(::Type{Complex{T}}) = T
+realtype{T}(::Type{ComplexPair{T}}) = T
 
 end

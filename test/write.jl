@@ -30,8 +30,11 @@ test_write({
 	"double" => float64(1)
 })
 
-test_write({ "imaginary" => [1.0 -1.0 1.0+1.0im 1.0-1.0im -1.0+1.0im -1.0-1.0im 1.0im] })
-test_write({ "imaginary_scalar" => 1.0im })
+test_write({
+	"Complex128" => [1.0 -1.0 1.0+1.0im 1.0-1.0im -1.0+1.0im -1.0-1.0im 1.0im],
+	"ComplexPair" => [1 2-3im 4+5im]
+})
+test_write({ "Complex128" => 1.0im, "ComplexPair" => 2-3im })
 
 test_write({
 	"simple_string" => "the quick brown fox",
