@@ -4,19 +4,17 @@
 
 Within Julia, use the package manager:
 ```julia
-require("pkg.jl")
 Pkg.init()     # if you've never installed a package before
 Pkg.add("MAT")
 ```
 
 See also the requirements for the [HDF5](https://github.com/timholy/HDF5.jl/) module, used for "v7.3" files and for writing \*.mat files.
 
-## Quick start
+## Usage
 
 To load the module:
 
 ```julia
-require("MAT")
 using MAT
 ```
 
