@@ -1,4 +1,3 @@
-require("MAT")
 using MAT
 
 function check(filename, result)
