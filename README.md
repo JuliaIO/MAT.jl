@@ -4,7 +4,6 @@
 
 Within Julia, use the package manager:
 ```julia
-Pkg.init()     # if you've never installed a package before
 Pkg.add("MAT")
 ```
 
