@@ -275,7 +275,7 @@ end
 # Write a string
 function m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, str::String)
     # Here we assume no UTF-16
-    data = zeros(Uint16, strlen(str))
+    data = zeros(Uint16, length(str))
     i = 1
     for c in str
         data[i] = c
