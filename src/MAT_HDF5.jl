@@ -450,7 +450,7 @@ function read(obj::HDF5Object{PlainHDF5File}, ::Type{MatlabString})
     elseif ndims(data) == 2
         datap = Array(String, size(data, 1))
         for i = 1:length(datap)
-            datap[i] = rstrip(CharString(squeeze(data[i, :])))
+            datap[i] = rstrip(CharString(reshape(data[i, :], size(data,2))))
         end
         return datap
     else
