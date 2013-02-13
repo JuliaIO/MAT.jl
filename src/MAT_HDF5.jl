@@ -57,17 +57,18 @@ type MatlabHDF5File <: HDF5File
     filename::String
     toclose::Bool
     writeheader::Bool
+    refcounter::Int
 
-    function MatlabHDF5File(id, filename, toclose::Bool, writeheader::Bool)
-        f = new(id, filename, toclose, writeheader)
+    function MatlabHDF5File(id, filename, toclose::Bool, writeheader::Bool, refcounter::Int)
+        f = new(id, filename, toclose, writeheader, refcounter)
         if toclose
             finalizer(f, close)
         end
         f
     end
 end
-MatlabHDF5File(id, filename, toclose) = MatlabHDF5File(id, filename, toclose, false)
-MatlabHDF5File(id, filename) = MatlabHDF5File(id, filename, true, false)
+MatlabHDF5File(id, filename, toclose) = MatlabHDF5File(id, filename, toclose, false, 0)
+MatlabHDF5File(id, filename) = MatlabHDF5File(id, filename, true, false, 0)
 function close(f::MatlabHDF5File)
     if f.toclose
         h5f_close(f.id)
@@ -109,7 +110,14 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
         writeheader = false
     end
     close(pa)
-    MatlabHDF5File(f, filename, true, writeheader)
+    fid = MatlabHDF5File(f, filename, true, writeheader, 0)
+    pathrefs = "/#refs#"
+    if has(fid, pathrefs)
+        g = fid[pathrefs]
+        fid.refcounter = length(g)-1
+        close(g)
+    end
+    fid
 end
 
 ### Matlab file format specification ###
@@ -296,14 +304,15 @@ function m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name:
 end
 
 # Write cell arrays
-function m_write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Array{T}, l::Int)
+function m_write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Array{T})
     pathrefs = "/#refs#"
+    fid = file(parent)
     local g
     local refs
-    if !exists(parent, pathrefs)
-        g = g_create(file(parent), pathrefs)
+    if !exists(fid, pathrefs)
+        g = g_create(fid, pathrefs)
     else
-        g = parent[pathrefs]
+        g = fid[pathrefs]
     end
     try
         # If needed, create the "empty" item
@@ -328,17 +337,10 @@ function m_write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), na
         end
         # Write the items to the reference group
         refs = HDF5ReferenceObjArray(size(data)...)
-        if l == -1
-            l = length(g)-1
-        end
         for i = 1:length(data)
-            itemname = string(l+i)
-            if isa(data[i], Array)
-                # Need to pass level so that we don't create items with the same names
-                m_write(g, itemname, data[i], l+length(data))
-            else
-                m_write(g, itemname, data[i])
-            end
+            fid.refcounter += 1
+            itemname = string(fid.refcounter)
+            m_write(g, itemname, data[i])
             # Extract references
             tmp = g[itemname]
             refs[i] = (tmp, pathrefs*"/"*itemname)
@@ -357,7 +359,6 @@ function m_write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), na
         close(cset)
     end
 end
-m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Array) = m_write(parent, name, data, -1)
 
 # Check that keys are valid for a struct, and convert them to an array of ASCIIStrings
 function check_struct_keys(k::Vector)
