@@ -144,7 +144,9 @@ function read_struct(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32}, i
         field_name_strings[i] = ascii(index == 0 ? sname : sname[1:index-1])
     end
 
-    data = Dict{ASCIIString, Any}(n_fields+1)
+    #data = Dict{ASCIIString, Any}(n_fields+1)
+    data = Dict{ASCIIString, Any}()
+    sizehint(data, n_fields+1)
     if is_object
         data["class"] = class
     end
