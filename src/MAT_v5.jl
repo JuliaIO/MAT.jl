@@ -92,7 +92,7 @@ end
 
 function read_element{T}(f::IOStream, swap_bytes::Bool, ::Type{T})
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
-    data = read_bswap(f, swap_bytes, T, div(nbytes, sizeof(T)))
+    data = read_bswap(f, swap_bytes, T, int(div(nbytes, sizeof(T))))
     skip_padding(f, nbytes, hbytes)
     data
 end
@@ -191,7 +191,7 @@ function read_string(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32})
         # Technically, if dtype == 3 or dtype == 4, this is ISO-8859-1 and not Unicode.
         # However, the first 256 Unicode code points are derived from ISO-8859-1, so UCS-2
         # is a superset of 2-byte ISO-8859-1.
-        chars = read_bswap(f, swap_bytes, Uint16, div(nbytes, 2))
+        chars = read_bswap(f, swap_bytes, Uint16, int(div(nbytes, 2)))
         if dimensions[1] == 1
             data = CharString(chars)
         else
