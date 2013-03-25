@@ -276,7 +276,7 @@ function m_write{C<:Complex}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5F
     stype = dataspace(adata)
     obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id)
     dset = HDF5Dataset(obj_id, plain(file(parent)))
-    arr = isa(C, BitsKind) ? reinterpret(T, adata, tuple(2, size(adata)...)) : [real(adata), imag(adata)]
+    arr = isbits(C) ? reinterpret(T, adata, tuple(2, size(adata)...)) : [real(adata), imag(adata)]
     m_writearray(dset, dtype, name, arr)
 end
 
@@ -391,10 +391,10 @@ m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteStri
 
 # Write generic CompositeKind as a struct
 function m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s)
-    T = typeof(s)
-    if !isa(T, CompositeKind)
+    if isbits(s)
         error("This is the write function for CompositeKind, but the input doesn't fit")
     end
+    T = typeof(s)
     m_write(parent, name, check_struct_keys([string(x) for x in T.names]), [getfield(s, x) for x in T.names])
 end
 
