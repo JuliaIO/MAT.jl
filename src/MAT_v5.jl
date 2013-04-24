@@ -22,8 +22,6 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-require("zlib")
-
 module MAT_v5
 using Zlib
 import Base.close, Base.read, Base.write
@@ -210,7 +208,7 @@ end
 function read_matrix(f::IOStream, swap_bytes::Bool)
     (dtype, nbytes) = read_header(f, swap_bytes)
     if dtype == miCOMPRESSED
-        bytes = uncompress(read(f, Uint8, nbytes))
+        bytes = decompress(read(f, Uint8, nbytes))
         mi = memio(length(bytes))
         write(mi, bytes)
         seek(mi, 0)
@@ -319,7 +317,7 @@ function read(matfile::Matlabv5File, varname::ASCIIString)
                     dest, dest_buf_size, source, length(source))
 
                 # Zlib may complain because the buffer is small or the data are incomplete
-                if ret != Z_OK && ret != Z_BUF_ERROR && ret != Z_DATA_ERROR
+                if ret != Zlib.Z_OK && ret != Zlib.Z_BUF_ERROR && ret != Zlib.Z_DATA_ERROR
                     throw(ZError(ret))
                 end
 
