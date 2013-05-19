@@ -387,7 +387,7 @@ end
 
 # Write Associative as a struct
 m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s::Associative) =
-    m_write(parent, name, check_struct_keys(keys(s)), values(s))
+    m_write(parent, name, check_struct_keys(collect(keys(s))), collect(values(s)))
 
 # Write generic CompositeKind as a struct
 function m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s)
