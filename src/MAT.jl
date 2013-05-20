@@ -24,11 +24,12 @@
 
 require("MAT/src/MAT_HDF5")
 require("MAT/src/MAT_v5")
+require("MAT/src/MAT_macros)"
 module MAT
 using MAT_HDF5, MAT_v5
 import Base.read, Base.write
 
-export matopen, matread, matwrite
+export matopen, matread, matwrite, save, load
 
 # Open a MATLAB file
 function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool)
