@@ -24,10 +24,10 @@
 
 require("MAT/src/MAT_HDF5")
 require("MAT/src/MAT_v5")
-require("MAT/src/MAT_macros")
+
 module MAT
 using MAT_HDF5, MAT_v5
-import Base.read, Base.write, MAT_macros.@save, MAT_macros.@load
+import Base.read, Base.write
 
 export matopen, matread, matwrite
 export @save, @load
@@ -97,4 +97,38 @@ function matwrite{S, T}(filename::String, dict::Dict{S, T})
         close(file)
     end
 end
+
+macro save(filename, vars...)    
+    filename=ensure_mat(filename)
+    esc(quote
+        let d=Dict{String,Any}()
+            for var in $(vars)
+                d[string(var)] = eval(var)
+            end
+            MAT.matwrite($(filename), d)
+        end
+    end)
+end
+
+
+macro load(filename)        
+    filename=ensure_mat(filename)    
+    esc(quote
+        let k, v
+            for (k,v) in MAT.matread($(filename))
+                eval(:($(symbol(k))=$(v)))
+            end
+        end
+    end)
+end
+
+
+function ensure_mat(filename)
+    filename=string(filename)
+    if !ismatch(r"\.mat$", filename)
+        filename=string(filename,".mat")
+    end
+    filename
+end
+
 end
