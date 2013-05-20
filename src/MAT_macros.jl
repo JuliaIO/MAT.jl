@@ -21,6 +21,10 @@
 # LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 
+module MAT_macros
+
+export @save, @load
+
 macro save(filename, vars...)    
     filename=string(filename)
     if !ismatch(r"\.mat$", filename)
@@ -53,4 +57,6 @@ function ensure_mat(filename)
         filename=string(filename,".mat")
     end
     filename
+end
+
 end
