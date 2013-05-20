@@ -40,8 +40,10 @@ end
 macro load(filename)        
     filename=ensure_mat(filename)    
     esc(quote
-        for (k,v) in MAT.matread($(filename))
-            eval(:($(symbol(k))=$(v)))
+        let k, v
+            for (k,v) in MAT.matread($(filename))
+                eval(:($(symbol(k))=$(v)))
+            end
         end
     end)
 end
