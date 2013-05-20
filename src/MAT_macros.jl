@@ -26,11 +26,7 @@ module MAT_macros
 export @save, @load
 
 macro save(filename, vars...)    
-    filename=string(filename)
-    if !ismatch(r"\.mat$", filename)
-        filename=string(filename,".mat")
-    end
-    
+    filename=ensure_mat(filename)
     quote
         d=Dict{String,Any}()
         for var in $(vars)
