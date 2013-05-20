@@ -27,13 +27,14 @@ export @save, @load
 
 macro save(filename, vars...)    
     filename=ensure_mat(filename)
-    quote
-        d=Dict{String,Any}()
-        for var in $(vars)
-            d[string(var)] = eval(var)
+    esc(quote
+        let d=Dict{String,Any}()
+            for var in $(vars)
+                d[string(var)] = eval(var)
+            end
+            MAT.matwrite($(filename), d)
         end
-        MAT.matwrite($(filename), d)
-    end
+    end)
 end
 
 
