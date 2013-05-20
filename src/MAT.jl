@@ -24,7 +24,7 @@
 
 require("MAT/src/MAT_HDF5")
 require("MAT/src/MAT_v5")
-require("MAT/src/MAT_macros)"
+require("MAT/src/MAT_macros")
 module MAT
 using MAT_HDF5, MAT_v5
 import Base.read, Base.write
