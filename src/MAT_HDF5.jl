@@ -228,7 +228,7 @@ toarray(x) = [x]
 function m_writearray{T <: HDF5BitsKind}(dset::HDF5Dataset, dtype::HDF5Datatype, name::ByteString, data::Array{T})
     try
         # Determine the Matlab type
-        if !has(type2str_matlab, T)
+        if !haskey(type2str_matlab, T)
             error("Type ", T, " is not (yet) supported")
         end
         typename = type2str_matlab[T]
