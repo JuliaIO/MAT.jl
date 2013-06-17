@@ -124,6 +124,7 @@ end
 
 const name_type_attr_matlab = "MATLAB_class"
 const empty_attr_matlab = "MATLAB_empty"
+const sparse_attr_matlab = "MATLAB_sparse"
 
 ### Reading
 function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset{MatlabHDF5File}, T::Type)
@@ -187,7 +188,27 @@ end
 function read(g::HDF5Group{MatlabHDF5File})
     mattype = a_read(g, name_type_attr_matlab)
     if mattype != "struct"
-        error("Cannot read from a non-struct group")
+        # Check if this is a sparse matrix.
+        fn = names(g)
+        if exists(attrs(g), sparse_attr_matlab)
+            
+            # This is a sparse matrix.
+            # ir is the row indices, jc is the column boundaries.
+            # We add one to account for the zero-based (MATLAB) to one-based (Julia) transition
+            jc = read(plain(g["jc"]),HDF5.hdf5_to_julia(g["jc"])) + 1
+            if fn == ["data", "ir", "jc"]
+                # This matrix is not empty.
+                ir = read(plain(g["ir"]),HDF5.hdf5_to_julia(g["ir"])) + 1
+                data = read(plain(g["data"]),HDF5.hdf5_to_julia(g["data"]))
+            else
+                # This matrix is empty.
+                ir = HDF5.hdf5_to_julia_eltype(HDF5.datatype(g["jc"]))[]
+                data = str2eltype_matlab[mattype][]
+            end
+            return SparseMatrixCSC(HDF5.a_read(g, "MATLAB_sparse"), length(jc) -1, jc, ir, data)
+        else
+            error("Cannot read from a non-struct group, type was $mattype")
+        end
     end
     if exists(g, "MATLAB_fields")
         fn = a_read(g, "MATLAB_fields")
@@ -425,6 +446,22 @@ const str2type_matlab = {
     "logical" => Bool,
 }
 # These operate on the element type rather than the whole type
+const str2eltype_matlab = {
+    "canonical empty" => nothing,
+    "int8"    => Int8,
+    "uint8"   => Uint8,
+    "int16"   => Int16,
+    "uint16"  => Uint16,
+    "int32"   => Int32,
+    "uint32"  => Uint32,
+    "int64"   => Int64,
+    "uint64"  => Uint64,
+    "single"  => Float32,
+    "double"  => Float64,
+    "cell"    => Any,
+    "char"    => MatlabString,
+    "logical" => Bool,
+}
 const type2str_matlab = {
     Int8    => "int8",
     Uint8   => "uint8",
