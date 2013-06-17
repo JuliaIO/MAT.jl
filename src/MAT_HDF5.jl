@@ -124,6 +124,7 @@ end
 
 const name_type_attr_matlab = "MATLAB_class"
 const empty_attr_matlab = "MATLAB_empty"
+const sparse_attr_matlab = "MATLAB_sparse"
 
 ### Reading
 function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset{MatlabHDF5File}, T::Type)
@@ -187,7 +188,19 @@ end
 function read(g::HDF5Group{MatlabHDF5File})
     mattype = a_read(g, name_type_attr_matlab)
     if mattype != "struct"
-        error("Cannot read from a non-struct group")
+        # Check if this is a sparse matrix.
+        fn = names(g)
+        if fn == ["data", "ir", "jc"] && contains(names(attrs(g)), sparse_attr_matlab)
+            # Let's say this is a sparse matrix.
+            # ir is the row indices, jc is the column boundaries.
+            # We add one to account for the zero-based (MATLAB) to one-based (Julia) transition
+            ir = read(plain(g["ir"]),HDF5.hdf5_to_julia(g["ir"])) + 1
+            jc = read(plain(g["jc"]),HDF5.hdf5_to_julia(g["jc"])) + 1
+            data = read(plain(g["data"]),HDF5.hdf5_to_julia(g["data"]))
+            return SparseMatrixCSC(max(ir), length(jc) -1, jc, ir, data)
+        else
+            error("Cannot read from a non-struct group, type was $mattype")
+        end
     end
     if exists(g, "MATLAB_fields")
         fn = a_read(g, "MATLAB_fields")
