@@ -108,3 +108,8 @@ result = {
 	"S" => sparse(eye(20))
 }
 check("test/v7.3/sparse.mat", result)
+
+result = {
+	"S" => SparseMatrixCSC(20,20, ones(Uint, 21), Uint[], Float64[])
+}
+check("test/v7.3/sparse_empty.mat", result)
