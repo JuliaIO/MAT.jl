@@ -1,7 +1,7 @@
 # MAT.jl
 # Tools for reading MATLAB v5 files in Julia
 #
-# Copyright (C) 2012   Timothy E. Holy and Simon Kornblith
+# Copyright (C) 2012   Timothy E. Holy and Simon Kornblith and Jon Malmaud
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -24,11 +24,13 @@
 
 require("MAT/src/MAT_HDF5")
 require("MAT/src/MAT_v5")
+
 module MAT
 using MAT_HDF5, MAT_v5
 import Base.read, Base.write
 
 export matopen, matread, matwrite
+export @save, @load
 
 # Open a MATLAB file
 function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool)
@@ -95,4 +97,38 @@ function matwrite{S, T}(filename::String, dict::Dict{S, T})
         close(file)
     end
 end
+
+macro save(filename, vars...)    
+    filename=ensure_mat(filename)
+    esc(quote
+        let d=Dict{String,Any}()
+            for var in $(vars)
+                d[string(var)] = eval(var)
+            end
+            MAT.matwrite($(filename), d)
+        end
+    end)
+end
+
+
+macro load(filename)        
+    filename=ensure_mat(filename)    
+    esc(quote
+        let k, v
+            for (k,v) in MAT.matread($(filename))
+                eval(:($(symbol(k))=$(v)))
+            end
+        end
+    end)
+end
+
+
+function ensure_mat(filename)
+    filename=string(filename)
+    if !ismatch(r"\.mat$", filename)
+        filename=string(filename,".mat")
+    end
+    filename
+end
+
 end
