@@ -22,8 +22,8 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-require("MAT/src/MAT_HDF5")
-require("MAT/src/MAT_v5")
+include("MAT_HDF5.jl")
+include("MAT_v5.jl")
 module MAT
 using MAT_HDF5, MAT_v5
 import Base.read, Base.write
