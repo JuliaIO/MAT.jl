@@ -67,16 +67,16 @@ const READ_TYPES = Type[Int8, Uint8, Int16, Uint16, Int32, Uint32, Float32, None
 const CONVERT_TYPES = Type[None, None, None, None, None, Float64, Float32, Int8, Uint8,
     Int16, Uint16, Int32, Uint32, Int64, Uint64]
 
-read_bswap{T}(f::IOStream, swap_bytes::Bool, ::Type{T}) = 
+read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}) = 
     swap_bytes ? bswap(read(f, T)) : read(f, T)
-read_bswap{T}(f::IOStream, swap_bytes::Bool, ::Type{T}, dim::Union(Int, (Int...))) = 
+read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union(Int, (Int...))) = 
     swap_bytes ? [bswap(x) for x in read(f, T, dim)] : read(f, T, dim)
 
-skip_padding(f::IOStream, nbytes::Int64, hbytes::Int) = if nbytes % hbytes != 0
+skip_padding(f::IO, nbytes::Int64, hbytes::Int) = if nbytes % hbytes != 0
     skip(f, hbytes-(nbytes % hbytes))
 end
 
-function read_header(f::IOStream, swap_bytes::Bool)
+function read_header(f::IO, swap_bytes::Bool)
     dtype = read_bswap(f, swap_bytes, Uint32)
 
     if (dtype & 0xFFFF0000) != 0
@@ -88,14 +88,14 @@ function read_header(f::IOStream, swap_bytes::Bool)
     end
 end
 
-function read_element{T}(f::IOStream, swap_bytes::Bool, ::Type{T})
+function read_element{T}(f::IO, swap_bytes::Bool, ::Type{T})
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     data = read_bswap(f, swap_bytes, T, int(div(nbytes, sizeof(T))))
     skip_padding(f, nbytes, hbytes)
     data
 end
 
-function read_data{T}(f::IOStream, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int32})
+function read_data{T}(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int32})
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     read_type = READ_TYPES[dtype]
 
@@ -116,7 +116,7 @@ function read_data{T}(f::IOStream, swap_bytes::Bool, ::Type{T}, dimensions::Vect
     data
 end
 
-function read_cell(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32})
+function read_cell(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
     data = cell(int(dimensions)...)
     for i = 1:length(data)
         (ignored_name, data[i]) = read_matrix(f, swap_bytes)
@@ -124,7 +124,7 @@ function read_cell(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32})
     data
 end
 
-function read_struct(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32}, is_object::Bool)
+function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_object::Bool)
     field_length = read_element(f, swap_bytes, Int32)[1]
     field_names = read_element(f, swap_bytes, Uint8)
     n_fields = div(length(field_names), field_length)
@@ -169,7 +169,7 @@ function read_struct(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32}, i
     data
 end
 
-function read_string(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32})
+function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     if dtype <= 2 || dtype == 16
         # If dtype <= 2, this may give an error on non-ASCII characters, since the string
@@ -205,11 +205,11 @@ function read_string(f::IOStream, swap_bytes::Bool, dimensions::Vector{Int32})
     data
 end
 
-function read_matrix(f::IOStream, swap_bytes::Bool)
+function read_matrix(f::IO, swap_bytes::Bool)
     (dtype, nbytes) = read_header(f, swap_bytes)
     if dtype == miCOMPRESSED
         bytes = decompress(read(f, Uint8, nbytes))
-        mi = memio(length(bytes))
+        mi = IOBuffer(length(bytes))
         write(mi, bytes)
         seek(mi, 0)
         output = read_matrix(mi, swap_bytes)
@@ -323,8 +323,8 @@ function read(matfile::Matlabv5File, varname::ASCIIString)
 
                 dest_buf_size = dest_buf_size[1]
 
-                # Create memio from uncompressed buffer
-                f = memio(dest_buf_size)
+                # Create IOBuffer from uncompressed buffer
+                f = IOBuffer(dest_buf_size)
                 write(f, sub(dest, 1:dest_buf_size))
                 seek(f, 0)
 
@@ -341,7 +341,7 @@ function read(matfile::Matlabv5File, varname::ASCIIString)
             varnames[ascii(read_element(f, matfile.swap_bytes, Uint8))] = offset
 
             if dtype == miCOMPRESSED
-                # Close memio
+                # Close IOBuffer
                 close(f)
             else
                 # Seek past
