@@ -195,11 +195,11 @@ function read(g::HDF5Group{MatlabHDF5File})
             # This is a sparse matrix.
             # ir is the row indices, jc is the column boundaries.
             # We add one to account for the zero-based (MATLAB) to one-based (Julia) transition
-            jc = read(plain(g["jc"]),HDF5.hdf5_to_julia(g["jc"])) + 1
+            jc = read(plain(g["jc"])) + 1
             if fn == ["data", "ir", "jc"]
                 # This matrix is not empty.
-                ir = read(plain(g["ir"]),HDF5.hdf5_to_julia(g["ir"])) + 1
-                data = read(plain(g["data"]),HDF5.hdf5_to_julia(g["data"]))
+                ir = read(plain(g["ir"])) + 1
+                data = read(plain(g["data"]))
             else
                 # This matrix is empty.
                 ir = HDF5.hdf5_to_julia_eltype(HDF5.datatype(g["jc"]))[]
