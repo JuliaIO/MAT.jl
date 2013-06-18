@@ -209,9 +209,7 @@ function read_matrix(f::IO, swap_bytes::Bool)
     (dtype, nbytes) = read_header(f, swap_bytes)
     if dtype == miCOMPRESSED
         bytes = decompress(read(f, Uint8, nbytes))
-        mi = IOBuffer(length(bytes))
-        write(mi, bytes)
-        seek(mi, 0)
+        mi = IOBuffer(bytes)
         output = read_matrix(mi, swap_bytes)
         close(mi)
         return output
@@ -321,12 +319,8 @@ function read(matfile::Matlabv5File, varname::ASCIIString)
                     throw(ZError(ret))
                 end
 
-                dest_buf_size = dest_buf_size[1]
-
                 # Create IOBuffer from uncompressed buffer
-                f = IOBuffer(dest_buf_size)
-                write(f, sub(dest, 1:dest_buf_size))
-                seek(f, 0)
+                f = IOBuffer(dest)
 
                 # Read header
                 read_header(f, matfile.swap_bytes)
