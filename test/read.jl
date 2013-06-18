@@ -91,10 +91,25 @@ for format in ["v6", "v7", "v7.3"]
 	}
 	check("$tests/empty_cells.mat", result)
 
+
+
 	matfile = matopen("$tests/partial.mat")
 	var1 = read(matfile, "var1")
 	@assert var1[28, 33] == 5
 	var2 = read(matfile, "var2")
 	@assert var2[27, 90] == 10
 	close(matfile)
+
 end
+
+# This test only for v7.3
+
+result = {
+	"S" => sparse(eye(20))
+}
+check("test/v7.3/sparse.mat", result)
+
+result = {
+	"S" => SparseMatrixCSC(20,20, ones(Uint, 21), Uint[], Float64[])
+}
+check("test/v7.3/sparse_empty.mat", result)
