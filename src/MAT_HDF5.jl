@@ -35,7 +35,6 @@ import HDF5.close, HDF5.read, HDF5.write
 # Types
 Hid = HDF5.Hid
 HDF5ReferenceObj = HDF5.HDF5ReferenceObj
-HDF5ReferenceObjArray = HDF5.HDF5ReferenceObjArray
 HDF5BitsKind = HDF5.HDF5BitsKind
 # Constants
 H5F_ACC_RDONLY = HDF5.H5F_ACC_RDONLY
@@ -357,14 +356,14 @@ function m_write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), na
             close(a)
         end
         # Write the items to the reference group
-        refs = HDF5ReferenceObjArray(size(data)...)
+        refs = Array(HDF5ReferenceObj, size(data)...)
         for i = 1:length(data)
             fid.refcounter += 1
             itemname = string(fid.refcounter)
             m_write(g, itemname, data[i])
             # Extract references
             tmp = g[itemname]
-            refs[i] = (tmp, pathrefs*"/"*itemname)
+            refs[i] = HDF5ReferenceObj(tmp, pathrefs*"/"*itemname)
             close(tmp)
         end
     finally
@@ -373,7 +372,7 @@ function m_write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), na
     # Write the references as the chosen variable
     cset, ctype = d_create(plain(parent), name, refs)
     try
-        writearray(cset, ctype.id, refs.r)
+        writearray(cset, ctype.id, refs)
         a_write(cset, name_type_attr_matlab, "cell")
     finally
         close(ctype)
