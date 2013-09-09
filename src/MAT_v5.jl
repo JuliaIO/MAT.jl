@@ -191,11 +191,11 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         # is a superset of 2-byte ISO-8859-1.
         chars = read_bswap(f, swap_bytes, Uint16, int(div(nbytes, 2)))
         if dimensions[1] == 1
-            data = CharString(chars)
+            data = bytestring(CharString(chars))
         else
             data = Array(String, dimensions[1])
             for i = 1:dimensions[1]
-                data[i] = rstrip(CharString(chars[i:dimensions[1]:end]))
+                data[i] = rstrip(bytestring(CharString(chars[i:dimensions[1]:end])))
             end
         end
     else
@@ -243,8 +243,10 @@ function read_matrix(f::IO, swap_bytes::Bool)
     else
         convert_type = CONVERT_TYPES[class]
         data = read_data(f, swap_bytes, convert_type, dimensions)
-        if (flags[1] & 0x0800) != 0 # complex
+        if (flags[1] & (1 << 11)) != 0 # complex
             data += im*read_data(f, swap_bytes, convert_type, dimensions)
+        elseif (flags[1] & (1 << 9)) != 0 # logical
+            data = data != 0
         end
     end
 

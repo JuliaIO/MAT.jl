@@ -44,7 +44,7 @@ for format in ["v6", "v7", "v7.3"]
 	end
 
 	result = {
-		"imaginary" => [1 -1 1+im 1-im -1+im -1-im im]
+		"imaginary" => Complex128[1 -1 1+im 1-im -1+im -1-im im]
 	}
 	check("$tests/complex.mat", result)
 
@@ -67,7 +67,7 @@ for format in ["v6", "v7", "v7.3"]
 	check("$tests/array.mat", result)
 
 	result = {
-		"cell" => {1 2.01 "string" {"string1" "string2"}}
+		"cell" => {1.0 2.01 "string" {"string1" "string2"}}
 	}
 	check("$tests/cell.mat", result)
 
@@ -82,7 +82,7 @@ for format in ["v6", "v7", "v7.3"]
 	check("$tests/struct.mat", result)
 
 	result = {
-		"logical" => 0x00
+		"logical" => false
 	}
 	check("$tests/logical.mat", result)
 	
