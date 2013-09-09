@@ -29,7 +29,7 @@
 module MAT_HDF5
 using HDF5
 # Add methods to...
-import HDF5.close, HDF5.read, HDF5.write
+import HDF5: close, names, read, write
 
 # Debugging: comment this block out if you un-modulize hdf5.jl
 # Types
@@ -51,26 +51,24 @@ h5f_open   = HDF5.h5f_open
 writearray = HDF5.writearray
 hdf5_to_julia = HDF5.hdf5_to_julia
 
-type MatlabHDF5File <: HDF5File
-    id::Hid
-    filename::String
+type MatlabHDF5File
+    plain::HDF5File
     toclose::Bool
     writeheader::Bool
     refcounter::Int
 
-    function MatlabHDF5File(id, filename, toclose::Bool, writeheader::Bool, refcounter::Int)
-        f = new(id, filename, toclose, writeheader, refcounter)
+    function MatlabHDF5File(plain, toclose::Bool=true, writeheader::Bool=false, refcounter::Int=0)
+        f = new(plain, toclose, writeheader, refcounter)
         if toclose
             finalizer(f, close)
         end
         f
     end
 end
-MatlabHDF5File(id, filename, toclose) = MatlabHDF5File(id, filename, toclose, false, 0)
-MatlabHDF5File(id, filename) = MatlabHDF5File(id, filename, true, false, 0)
+
 function close(f::MatlabHDF5File)
     if f.toclose
-        h5f_close(f.id)
+        close(f.plain)
         if f.writeheader
             magic = zeros(Uint8, 512)
             const identifier = "MATLAB 7.3 MAT-file" # minimal but sufficient
@@ -78,7 +76,7 @@ function close(f::MatlabHDF5File)
             magic[126] = 0x02
             magic[127] = 0x49
             magic[128] = 0x4d
-            rawfid = open(f.filename, "r+")
+            rawfid = open(f.plain.filename, "r+")
             write(rawfid, magic)
             close(rawfid)
         end
@@ -109,10 +107,10 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
         writeheader = false
     end
     close(pa)
-    fid = MatlabHDF5File(f, filename, true, writeheader, 0)
+    fid = MatlabHDF5File(HDF5File(f, filename), true, writeheader, 0)
     pathrefs = "/#refs#"
-    if has(fid, pathrefs)
-        g = fid[pathrefs]
+    if exists(fid.plain, pathrefs)
+        g = fid.plain[pathrefs]
         fid.refcounter = length(g)-1
         close(g)
     end
@@ -126,12 +124,11 @@ const empty_attr_matlab = "MATLAB_empty"
 const sparse_attr_matlab = "MATLAB_sparse"
 
 ### Reading
-function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset{MatlabHDF5File}, T::Type)
+function read_complex{T}(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{Array{T}})
     if !check_datatype_complex(dtype)
         close(dtype)
         error("Unrecognized compound data type when reading ", name(dset))
     end
-    T = abstr_eltype(T)
     memtype = build_datatype_complex(T)
     sz = size(dset)
     st = sizeof(T)
@@ -148,10 +145,10 @@ function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset{MatlabHDF5File}, T:
     length(d) == 1 ? d[1] : d
 end
 
-function read(dset::HDF5Dataset{MatlabHDF5File})
+function m_read(dset::HDF5Dataset)
     if exists(dset, empty_attr_matlab)
         # Empty arrays encode the dimensions as the dataset
-        dims = int(read(plain(dset)))
+        dims = int(read(dset))
         mattype = a_read(dset, name_type_attr_matlab)
         T = mattype == "canonical empty" ? None : str2type_matlab[mattype]
         return Array(T, dims...)
@@ -161,11 +158,16 @@ function read(dset::HDF5Dataset{MatlabHDF5File})
 
     if mattype == "cell"
         # Cell arrays, represented as an array of refs
-        refs = read(plain(dset), Array{HDF5ReferenceObj})
+        refs = read(dset, Array{HDF5ReferenceObj})
         out = Array(Any, size(refs))
         f = file(dset)
         for i = 1:length(refs)
-            out[i] = read(f[refs[i]])
+            dset = f[refs[i]]
+            try
+                out[i] = m_read(dset)
+            finally
+                close(dset)
+            end
         end
         return out
     end
@@ -177,14 +179,14 @@ function read(dset::HDF5Dataset{MatlabHDF5File})
     # Check for a COMPOUND data set, and if so handle complex numbers specially
     dtype = datatype(dset)
     class_id = HDF5.h5t_get_class(dtype.id)
-    d = class_id == HDF5.H5T_COMPOUND ? read_complex(dtype, dset, T) : read(plain(dset), T)
+    d = class_id == HDF5.H5T_COMPOUND ? read_complex(dtype, dset, T) : read(dset, T)
     
     close(dtype)
     length(d) == 1 ? d[1] : d
 end
 
 # reading a struct or struct array
-function read(g::HDF5Group{MatlabHDF5File})
+function m_read(g::HDF5Group)
     mattype = a_read(g, name_type_attr_matlab)
     if mattype != "struct"
         # Check if this is a sparse matrix.
@@ -194,11 +196,11 @@ function read(g::HDF5Group{MatlabHDF5File})
             # This is a sparse matrix.
             # ir is the row indices, jc is the column boundaries.
             # We add one to account for the zero-based (MATLAB) to one-based (Julia) transition
-            jc = read(plain(g["jc"])) + 1
+            jc = read(g, "jc") + 1
             if fn == ["data", "ir", "jc"]
                 # This matrix is not empty.
-                ir = read(plain(g["ir"])) + 1
-                data = read(plain(g["data"]))
+                ir = read(g, "ir") + 1
+                data = read(g, "data")
             else
                 # This matrix is empty.
                 ir = HDF5.hdf5_to_julia_eltype(HDF5.datatype(g["jc"]))[]
@@ -216,10 +218,28 @@ function read(g::HDF5Group{MatlabHDF5File})
     end
     s = Dict{ASCIIString, Any}()
     for i = 1:length(fn)
-        s[fn[i]] = read(g, fn[i])
+        dset = g[fn[i]]
+        try
+            s[fn[i]] = m_read(dset)
+        finally
+            close(dset)
+        end
     end
     s
 end
+
+function read(f::MatlabHDF5File, name::ASCIIString)
+    local val
+    obj = f.plain[name]
+    try
+        val = m_read(obj)
+    finally
+        close(obj)
+    end
+    val
+end
+
+names(f::MatlabHDF5File) = names(f.plain)
 
 # read every variable in the file
 function read(f::MatlabHDF5File)
@@ -264,44 +284,43 @@ function m_writearray{T <: HDF5BitsKind}(dset::HDF5Dataset, dtype::HDF5Datatype,
 end
 
 # Writes an empty scalar or array
-function m_writeempty(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Array)
+function m_writeempty(parent::Union(HDF5File, HDF5Group), name::ByteString, data::Array)
     adata = [size(data)...]
-    dset, dtype = d_create(plain(parent), name, adata)
+    dset, dtype = d_create(parent, name, adata)
     a_write(dset, empty_attr_matlab, uint8(1))
     m_writearray(dset, dtype, name, adata)
 end
 
 # Write a scalar or array
-function m_write{T<:HDF5BitsKind}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Union(T, Array{T}))
+function m_write{T<:HDF5BitsKind}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, data::Union(T, Array{T}))
     if isempty(data)
         m_writeempty(parent, name, data)
         return
     end
     adata = toarray(data)
 
-    dset, dtype = d_create(plain(parent), name, adata)
+    dset, dtype = d_create(parent, name, adata)
     m_writearray(dset, dtype, name, adata)
 end
 
 # Write a complex scalar or array
-function m_write{C<:Complex}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Union(C, Array{C}))
+function m_write{T}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, data::Union(Complex{T}, Array{Complex{T}}))
     if isempty(data)
         m_writeempty(parent, name, data)
         return
     end
     adata = toarray(data)
 
-    T = realtype(C)
     dtype = build_datatype_complex(T)
     stype = dataspace(adata)
     obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id)
-    dset = HDF5Dataset(obj_id, plain(file(parent)))
-    arr = isbits(C) ? reinterpret(T, adata, tuple(2, size(adata)...)) : [real(adata), imag(adata)]
+    dset = HDF5Dataset(obj_id, file(parent))
+    arr = isbits(T) ? reinterpret(T, adata, tuple(2, size(adata)...)) : [real(adata), imag(adata)]
     m_writearray(dset, dtype, name, arr)
 end
 
 # Write a string
-function m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, str::String)
+function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, str::String)
     # Here we assume no UTF-16
     data = zeros(Uint16, length(str))
     i = 1
@@ -311,7 +330,7 @@ function m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name:
     end
 
     # Create the dataset
-    dset, dtype = d_create(plain(parent), name, data)
+    dset, dtype = d_create(parent, name, data)
     try
         # Write the attribute
         a_write(dset, name_type_attr_matlab, "char")
@@ -324,7 +343,7 @@ function m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name:
 end
 
 # Write cell arrays
-function m_write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, data::Array{T})
+function m_write{T}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, data::Array{T})
     pathrefs = "/#refs#"
     fid = file(parent)
     local g
@@ -337,9 +356,8 @@ function m_write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), na
     try
         # If needed, create the "empty" item
         if !exists(g, "a")
-            pg = plain(g)
             edata = zeros(Uint64, 2)
-            eset, etype = d_create(pg, "a", edata)
+            eset, etype = d_create(g, "a", edata)
             try
                 writearray(eset, etype.id, edata)
                 a_write(eset, name_type_attr_matlab, "canonical empty")
@@ -358,9 +376,9 @@ function m_write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), na
         # Write the items to the reference group
         refs = Array(HDF5ReferenceObj, size(data)...)
         for i = 1:length(data)
-            fid.refcounter += 1
-            itemname = string(fid.refcounter)
-            m_write(g, itemname, data[i])
+            mfile.refcounter += 1
+            itemname = string(mfile.refcounter)
+            m_write(mfile, g, itemname, data[i])
             # Extract references
             tmp = g[itemname]
             refs[i] = HDF5ReferenceObj(tmp, pathrefs*"/"*itemname)
@@ -370,7 +388,7 @@ function m_write{T}(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), na
         close(g)
     end
     # Write the references as the chosen variable
-    cset, ctype = d_create(plain(parent), name, refs)
+    cset, ctype = d_create(parent, name, refs)
     try
         writearray(cset, ctype.id, refs)
         a_write(cset, name_type_attr_matlab, "cell")
@@ -395,33 +413,32 @@ function check_struct_keys(k::Vector)
 end
 
 # Write a struct from arrays of keys and values
-function m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, k::Vector{ASCIIString}, v::Vector)
+function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, k::Vector{ASCIIString}, v::Vector)
     g = g_create(parent, name)
-    gplain = plain(g)
-    a_write(gplain, name_type_attr_matlab, "struct")
+    a_write(g, name_type_attr_matlab, "struct")
     for i = 1:length(k)
-        m_write(g, k[i], v[i])
+        m_write(mfile, g, k[i], v[i])
     end
-    a_write(gplain, "MATLAB_fields", HDF5Vlen(k))
+    a_write(g, "MATLAB_fields", HDF5Vlen(k))
 end
 
 # Write Associative as a struct
-m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s::Associative) =
-    m_write(parent, name, check_struct_keys(collect(keys(s))), collect(values(s)))
+m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, s::Associative) =
+    m_write(mfile, parent, name, check_struct_keys(collect(keys(s))), collect(values(s)))
 
 # Write generic CompositeKind as a struct
-function m_write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, s)
+function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, s)
     if isbits(s)
         error("This is the write function for CompositeKind, but the input doesn't fit")
     end
     T = typeof(s)
-    m_write(parent, name, check_struct_keys([string(x) for x in T.names]), [getfield(s, x) for x in T.names])
+    m_write(mfile, parent, name, check_struct_keys([string(x) for x in T.names]), [getfield(s, x) for x in T.names])
 end
 
 # Check whether a variable name is valid, then write it
-function write(parent::Union(MatlabHDF5File, HDF5Group{MatlabHDF5File}), name::ByteString, thing)
+function write(parent::MatlabHDF5File, name::ByteString, thing)
     check_valid_varname(name)
-    m_write(parent, name, thing)
+    m_write(parent, parent.plain, name, thing)
 end
 
 ## Type conversion operations ##
@@ -475,7 +492,7 @@ const type2str_matlab = {
 }
 
 
-function read(obj::HDF5Object{PlainHDF5File}, ::Type{MatlabString})
+function read(obj::HDF5Object, ::Type{MatlabString})
     T = hdf5_to_julia(obj)
     data = read(obj, T)
     if size(data, 1) == 1
@@ -483,18 +500,18 @@ function read(obj::HDF5Object{PlainHDF5File}, ::Type{MatlabString})
         data = reshape(data, sz[2:end])
     end
     if ndims(data) == 1
-        return CharString(data)
+        return bytestring(CharString(data))
     elseif ndims(data) == 2
         datap = Array(String, size(data, 1))
         for i = 1:length(datap)
-            datap[i] = rstrip(CharString(reshape(data[i, :], size(data,2))))
+            datap[i] = rstrip(bytestring(CharString(reshape(data[i, :], size(data,2)))))
         end
         return datap
     else
         return data
     end
 end
-function read(obj::HDF5Object{PlainHDF5File}, ::Type{Bool})
+function read(obj::HDF5Object, ::Type{Bool})
     tf = read(obj, Uint8)
     tf > 0
 end
@@ -518,12 +535,5 @@ function check_datatype_complex(dtype::HDF5Datatype)
     end
     true
 end
-
-abstr_eltype{T}(::Type{Array{T}}) = T
-
-realtype(::Type{Complex64}) = Float32
-realtype(::Type{Complex128}) = Float64
-realtype{T}(::Type{Complex{T}}) = T
-realtype{T}(::Type{ComplexPair{T}}) = T
 
 end
