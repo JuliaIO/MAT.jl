@@ -12,7 +12,7 @@ before_install:
     - git config --global user.name "Travis User"
     - git config --global user.email "travis@example.net"
 script:
-    - julia -e 'versioninfo(); Pkg.init()'
+    - julia -e 'versioninfo(); Pkg.init(); Pkg.add("Zlib")'
     - git clone https://github.com/timholy/HDF5.jl.git ~/.julia/HDF5
     - mkdir -p ~/.julia/MAT
     - cp -R ./* ~/.julia/MAT/
