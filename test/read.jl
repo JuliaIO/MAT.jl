@@ -1,4 +1,4 @@
-using MAT
+using MAT, Base.Test
 
 function check(filename, result)
 	mat = matread(filename)
@@ -9,17 +9,19 @@ function check(filename, result)
 	end
 	matfile = matopen(filename)
 	for (k, v) in result
+		@test exists(matfile, k)
 		if read(matfile, k) != v
 			close(matfile)
 			error("Data mismatch reading $k from $filename")
 		end
 	end
+	@test Set(names(matfile)...) == Set(keys(result)...)
 	close(matfile)
 	return true
 end
 
 for format in ["v6", "v7", "v7.3"]
-	tests = "test/"*format
+	cd(joinpath(dirname(@__FILE__), format))
 
 	result = {
 		"int8" => int8(1),
@@ -33,8 +35,8 @@ for format in ["v6", "v7", "v7.3"]
 		"single" => float32(1),
 		"double" => float64(1)
 	}
-	check("$tests/simple.mat", result)
-	matfile = matopen("$tests/simple.mat")
+	check("simple.mat", result)
+	matfile = matopen("simple.mat")
 	mat = read(matfile)
 	close(matfile)
 	for (k, v) in result
@@ -46,7 +48,7 @@ for format in ["v6", "v7", "v7.3"]
 	result = {
 		"imaginary" => Complex128[1 -1 1+im 1-im -1+im -1-im im]
 	}
-	check("$tests/complex.mat", result)
+	check("complex.mat", result)
 
 	result = {
 		"simple_string" => "the quick brown fox",
@@ -54,7 +56,7 @@ for format in ["v6", "v7", "v7.3"]
 		"concatenated_strings" => ["this is a string", "this is another string"],
 		"cell_strings" => ["this is a string" "this is another string"]
 	}
-	check("$tests/string.mat", result)
+	check("string.mat", result)
 
 	result = {
 		"a1x2" => [1.0 2.0],
@@ -64,12 +66,12 @@ for format in ["v6", "v7", "v7.3"]
 		"empty" => zeros(0, 0),
 		"string" => "string"
 	}
-	check("$tests/array.mat", result)
+	check("array.mat", result)
 
 	result = {
 		"cell" => {1.0 2.01 "string" {"string1" "string2"}}
 	}
-	check("$tests/cell.mat", result)
+	check("cell.mat", result)
 
 	result = {
 		"s" => {
@@ -79,21 +81,21 @@ for format in ["v6", "v7", "v7.3"]
 		},
 		"s2" => { "a" => [1.0 2.0] }
 	}
-	check("$tests/struct.mat", result)
+	check("struct.mat", result)
 
 	result = {
 		"logical" => false
 	}
-	check("$tests/logical.mat", result)
+	check("logical.mat", result)
 	
 	result = {
 		"empty_cells" => {zeros(0, 0) "test" zeros(0, 0)}
 	}
-	check("$tests/empty_cells.mat", result)
+	check("empty_cells.mat", result)
 
 
 
-	matfile = matopen("$tests/partial.mat")
+	matfile = matopen("partial.mat")
 	var1 = read(matfile, "var1")
 	@assert var1[28, 33] == 5
 	var2 = read(matfile, "var2")
@@ -107,9 +109,9 @@ end
 result = {
 	"S" => sparse(eye(20))
 }
-check("test/v7.3/sparse.mat", result)
+check(joinpath(dirname(@__FILE__), "v7.3", "sparse.mat"), result)
 
 result = {
 	"S" => SparseMatrixCSC(20,20, ones(Uint, 21), Uint[], Float64[])
 }
-check("test/v7.3/sparse_empty.mat", result)
+check(joinpath(dirname(@__FILE__), "v7.3", "sparse_empty.mat"), result)

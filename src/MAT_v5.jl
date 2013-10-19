@@ -23,13 +23,16 @@
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 module MAT_v5
-using Zlib
-import Base.close, Base.read, Base.write
+using Zlib, HDF5
+import Base: read, write, close
+import HDF5: names, exists
 
-type Matlabv5File
+type Matlabv5File <: HDF5.DataFile
     ios::IOStream
     swap_bytes::Bool
-    varnames::Union(Nothing, Dict{ASCIIString, FileOffset})
+    varnames::Dict{ASCIIString, FileOffset}
+
+    Matlabv5File(ios, swap_bytes) = new(ios, swap_bytes)
 end
 
 const miINT8 = 1
@@ -281,7 +284,7 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
         error("Unsupported MATLAB file version")
     end
 
-    return Matlabv5File(ios, swap_bytes, nothing)
+    return Matlabv5File(ios, swap_bytes)
 end
 
 # Read whole MAT file
@@ -295,9 +298,9 @@ function read(matfile::Matlabv5File)
     vars
 end
 
-# Read a variable from a MAT file
-function read(matfile::Matlabv5File, varname::ASCIIString)
-    if matfile.varnames == nothing
+# Read only variable names from an HDF5 file
+function getvarnames(matfile::Matlabv5File)
+    if !isdefined(matfile, :varnames)
         seek(matfile.ios, 128)
         matfile.varnames = varnames = Dict{ASCIIString, FileOffset}()
         while !eof(matfile.ios)
@@ -345,8 +348,21 @@ function read(matfile::Matlabv5File, varname::ASCIIString)
             end
         end
     end
+    matfile.varnames
+end
 
-    seek(matfile.ios, matfile.varnames[varname])
+exists(matfile::Matlabv5File, varname::ASCIIString) =
+    haskey(getvarnames(matfile), varname)
+names(matfile::Matlabv5File) =
+    keys(getvarnames(matfile))
+
+# Read a variable from a MAT file
+function read(matfile::Matlabv5File, varname::ASCIIString)
+    varnames = getvarnames(matfile)
+    if !haskey(varnames, varname)
+        error("no variable $varname in file")
+    end
+    seek(matfile.ios, varnames[varname])
     (name, data) = read_matrix(matfile.ios, matfile.swap_bytes)
     data
 end

@@ -1,9 +1,11 @@
 using MAT
 
-function test_write(data)
-	matwrite("/tmp/matwrite.mat", data)
+tmpfile = string(tempname, ".mat")
 
-	fid = matopen("/tmp/matwrite.mat", "r")
+function test_write(data)
+	matwrite(tmpfile, data)
+
+	fid = matopen(tmpfile, "r")
 	local result
 	try
 		result = read(fid)
@@ -85,16 +87,16 @@ end
 type TestCompositeKind
 	field1::String
 end
-fid = matopen("/tmp/matwrite.mat", "w")
+fid = matopen(tmpfile, "w")
 write(fid, "test", TestCompositeKind("test value"))
 close(fid)
-fid = matopen("/tmp/matwrite.mat", "r")
+fid = matopen(tmpfile, "r")
 result = read(fid, "test")
 close(fid)
 @assert result == { "field1" => "test value" }
 
 
-fid = matopen("/tmp/matwrite.mat", "w")
+fid = matopen(tmpfile, "w")
 try
 	write(fid, "1invalidvarname", "1invalidvarvalue")
 	error("Writing invalid varname did not fail")
