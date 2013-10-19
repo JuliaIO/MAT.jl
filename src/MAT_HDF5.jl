@@ -28,30 +28,10 @@
 
 module MAT_HDF5
 using HDF5
-# Add methods to...
-import HDF5: close, names, read, write
+import Base: read, write, close
+import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
 
-# Debugging: comment this block out if you un-modulize hdf5.jl
-# Types
-Hid = HDF5.Hid
-HDF5ReferenceObj = HDF5.HDF5ReferenceObj
-HDF5BitsKind = HDF5.HDF5BitsKind
-# Constants
-H5F_ACC_RDONLY = HDF5.H5F_ACC_RDONLY
-H5F_ACC_RDWR = HDF5.H5F_ACC_RDWR
-H5F_ACC_TRUNC = HDF5.H5F_ACC_TRUNC
-H5F_CLOSE_STRONG = HDF5.H5F_CLOSE_STRONG
-H5P_DEFAULT = HDF5.H5P_DEFAULT
-H5P_FILE_ACCESS = HDF5.H5P_FILE_ACCESS
-H5P_FILE_CREATE = HDF5.H5P_FILE_CREATE
-# Functions
-h5f_close  = HDF5.h5f_close
-h5f_create = HDF5.h5f_create
-h5f_open   = HDF5.h5f_open
-writearray = HDF5.writearray
-hdf5_to_julia = HDF5.hdf5_to_julia
-
-type MatlabHDF5File
+type MatlabHDF5File <: HDF5.DataFile
     plain::HDF5File
     toclose::Bool
     writeheader::Bool
@@ -93,17 +73,17 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
     if !cr && !isfile(filename)
         error("File ", filename, " cannot be found")
     end
-    pa = p_create(H5P_FILE_ACCESS)
-    pa["fclose_degree"] = H5F_CLOSE_STRONG
+    pa = p_create(HDF5.H5P_FILE_ACCESS)
+    pa["fclose_degree"] = HDF5.H5F_CLOSE_STRONG
     if cr && (tr || !isfile(filename))
         # We're truncating, so we don't have to check the format of an existing file
         # Set the user block to 512 bytes, to save room for the header
-        p = p_create(H5P_FILE_CREATE)
+        p = p_create(HDF5.H5P_FILE_CREATE)
         p["userblock"] = 512
-        f = h5f_create(filename, H5F_ACC_TRUNC, p.id, pa.id)
+        f = HDF5.h5f_create(filename, HDF5.H5F_ACC_TRUNC, p.id, pa.id)
         writeheader = true
     else
-        f = h5f_open(filename, wr ? H5F_ACC_RDWR : H5F_ACC_RDONLY, pa.id)
+        f = HDF5.h5f_open(filename, wr ? HDF5.H5F_ACC_RDWR : HDF5.H5F_ACC_RDONLY, pa.id)
         writeheader = false
     end
     close(pa)
@@ -239,18 +219,8 @@ function read(f::MatlabHDF5File, name::ASCIIString)
     val
 end
 
-names(f::MatlabHDF5File) = names(f.plain)
-
-# read every variable in the file
-function read(f::MatlabHDF5File)
-    vars = names(f)
-    vars = vars[!(vars .== "#refs#")]  # delete "#refs#"
-    vals = Array(Any, length(vars))
-    for i = 1:length(vars)
-        vals[i] = read(f, vars[i])
-    end
-    Dict(vars, vals)
-end
+names(f::MatlabHDF5File) = filter!(x->x != "#refs#", names(f.plain))
+exists(p::MatlabHDF5File, path::ASCIIString) = exists(p.plain, path)
 
 ### Writing
 
@@ -276,7 +246,7 @@ function m_writearray{T <: HDF5BitsKind}(dset::HDF5Dataset, dtype::HDF5Datatype,
         # Write the attribute
         a_write(dset, name_type_attr_matlab, typename)
         # Write the data
-        writearray(dset, dtype.id, data)
+        HDF5.writearray(dset, dtype.id, data)
     finally
         close(dset)
         close(dtype)
@@ -335,7 +305,7 @@ function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name
         # Write the attribute
         a_write(dset, name_type_attr_matlab, "char")
         # Write the data
-        writearray(dset, dtype.id, data)
+        HDF5.writearray(dset, dtype.id, data)
     finally
         close(dset)
         close(dtype)
@@ -359,7 +329,7 @@ function m_write{T}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), n
             edata = zeros(Uint64, 2)
             eset, etype = d_create(g, "a", edata)
             try
-                writearray(eset, etype.id, edata)
+                HDF5.writearray(eset, etype.id, edata)
                 a_write(eset, name_type_attr_matlab, "canonical empty")
                 a_write(eset, "MATLAB_empty", uint8(0))
             finally
@@ -390,7 +360,7 @@ function m_write{T}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), n
     # Write the references as the chosen variable
     cset, ctype = d_create(parent, name, refs)
     try
-        writearray(cset, ctype.id, refs)
+        HDF5.writearray(cset, ctype.id, refs)
         a_write(cset, name_type_attr_matlab, "cell")
     finally
         close(ctype)
@@ -493,7 +463,7 @@ const type2str_matlab = {
 
 
 function read(obj::HDF5Object, ::Type{MatlabString})
-    T = hdf5_to_julia(obj)
+    T = HDF5.hdf5_to_julia(obj)
     data = read(obj, T)
     if size(data, 1) == 1
         sz = size(data)

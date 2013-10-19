@@ -25,10 +25,9 @@
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")
 module MAT
-using MAT_HDF5, MAT_v5
-import Base.read, Base.write
+using HDF5, MAT_HDF5, MAT_v5
 
-export matopen, matread, matwrite
+export matopen, matread, matwrite, names, exists, @read, @write
 
 # Open a MATLAB file
 function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool)
