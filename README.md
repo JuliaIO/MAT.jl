@@ -1,5 +1,7 @@
 # Support for reading and writing MATLAB files in Julia.
 
+[![Build Status](https://travis-ci.org/simonster/MAT.jl.png?branch=master)](https://travis-ci.org/simonster/MAT.jl)
+
 ## Installation
 
 Within Julia, use the package manager:
