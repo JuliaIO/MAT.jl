@@ -13,7 +13,7 @@ function test_write(data)
 		close(fid)
 	end
 
-	if result != data
+	if !isequal(result, data)
 		error("Data mismatch")
 	end
 end

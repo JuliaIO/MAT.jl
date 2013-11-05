@@ -2,7 +2,7 @@ using MAT, Base.Test
 
 function check(filename, result)
 	mat = matread(filename)
-	if mat != result
+	if !isequal(mat, result)
 		error("Data mismatch reading $filename")
 		close(matfile)
 		return false
@@ -10,7 +10,7 @@ function check(filename, result)
 	matfile = matopen(filename)
 	for (k, v) in result
 		@test exists(matfile, k)
-		if read(matfile, k) != v
+		if !isequal(read(matfile, k), v)
 			close(matfile)
 			error("Data mismatch reading $k from $filename")
 		end
