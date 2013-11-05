@@ -233,60 +233,73 @@ end
 
 toarray(x::Array) = x
 toarray(x) = [x]
+toarray(x::Union(Bool, Array{Bool})) = toarray(uint8(x))
 
-# Writes an array given a dataset and datatype, and then closes them
-function m_writearray{T <: HDF5BitsKind}(dset::HDF5Dataset, dtype::HDF5Datatype, name::ByteString, data::Array{T})
-    try
-        # Determine the Matlab type
-        if !haskey(type2str_matlab, T)
-            error("Type ", T, " is not (yet) supported")
-        end
-        typename = type2str_matlab[T]
-
-        # Write the attribute
-        a_write(dset, name_type_attr_matlab, typename)
-        # Write the data
-        HDF5.writearray(dset, dtype.id, data)
-    finally
-        close(dset)
-        close(dtype)
+# Write the MATLAB type string for dset
+m_writetypeattr{T<:DataType}(dset, ::Type{Complex{T}}) = m_writetypeattr(dset, T)
+function m_writetypeattr(dset, T)
+    if !haskey(type2str_matlab, T)
+        error("Type ", T, " is not (yet) supported")
     end
+    typename = type2str_matlab[T]
+
+    # Write the attribute
+    a_write(dset, name_type_attr_matlab, typename)
 end
 
 # Writes an empty scalar or array
 function m_writeempty(parent::Union(HDF5File, HDF5Group), name::ByteString, data::Array)
     adata = [size(data)...]
     dset, dtype = d_create(parent, name, adata)
-    a_write(dset, empty_attr_matlab, uint8(1))
-    m_writearray(dset, dtype, name, adata)
+    try
+        a_write(dset, empty_attr_matlab, uint8(1))
+        m_writetypeattr(dset, eltype(data))
+        HDF5.writearray(dset, dtype.id, adata)
+    finally
+        close(dset)
+        close(dtype)
+    end
 end
 
 # Write a scalar or array
-function m_write{T<:HDF5BitsKind}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, data::Union(T, Array{T}))
+function m_write{T<:Union(HDF5BitsKind,Bool)}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, data::Union(T, Array{T}))
     if isempty(data)
         m_writeempty(parent, name, data)
         return
     end
     adata = toarray(data)
-
     dset, dtype = d_create(parent, name, adata)
-    m_writearray(dset, dtype, name, adata)
+    try
+        m_writetypeattr(dset, T)
+        HDF5.writearray(dset, dtype.id, adata)
+    finally
+        close(dset)
+        close(dtype)
+    end
 end
 
 # Write a complex scalar or array
-function m_write{T}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, data::Union(Complex{T}, Array{Complex{T}}))
+function m_write{T<:Union(HDF5BitsKind,Bool)}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, data::Union(Complex{T}, Array{Complex{T}}))
     if isempty(data)
         m_writeempty(parent, name, data)
         return
     end
     adata = toarray(data)
-
     dtype = build_datatype_complex(T)
-    stype = dataspace(adata)
-    obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id)
-    dset = HDF5Dataset(obj_id, file(parent))
-    arr = isbits(T) ? reinterpret(T, adata, tuple(2, size(adata)...)) : [real(adata), imag(adata)]
-    m_writearray(dset, dtype, name, arr)
+    try
+        stype = dataspace(adata)
+        obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id)
+        dset = HDF5Dataset(obj_id, file(parent))
+        try
+            m_writetypeattr(dset, T)
+            arr = reinterpret(T, adata, tuple(2, size(adata)...))
+            HDF5.writearray(dset, dtype.id, arr)
+        finally
+            close(dset)
+        end
+    finally
+        close(dtype)
+    end
 end
 
 # Write a string
@@ -415,7 +428,7 @@ end
 
 type MatlabString; end
 
-const str2type_matlab = {
+const str2type_matlab = [
     "canonical empty" => nothing,
     "int8"    => Array{Int8},
     "uint8"   => Array{Uint8},
@@ -430,9 +443,9 @@ const str2type_matlab = {
     "cell"    => Array{Any},
     "char"    => MatlabString,
     "logical" => Bool,
-}
+]
 # These operate on the element type rather than the whole type
-const str2eltype_matlab = {
+const str2eltype_matlab = [
     "canonical empty" => nothing,
     "int8"    => Int8,
     "uint8"   => Uint8,
@@ -447,8 +460,8 @@ const str2eltype_matlab = {
     "cell"    => Any,
     "char"    => MatlabString,
     "logical" => Bool,
-}
-const type2str_matlab = {
+]
+const type2str_matlab = [
     Int8    => "int8",
     Uint8   => "uint8",
     Int16   => "int16",
@@ -458,8 +471,9 @@ const type2str_matlab = {
     Int64   => "int64",
     Uint64  => "uint64",
     Float32 => "single",
-    Float64 => "double"
-}
+    Float64 => "double",
+    Bool    => "logical"
+]
 
 
 function read(obj::HDF5Object, ::Type{MatlabString})

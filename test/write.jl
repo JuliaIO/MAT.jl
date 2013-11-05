@@ -28,7 +28,8 @@ test_write({
 	"int64" => int64(1),
 	"uint64" => uint64(1),
 	"single" => float32(1),
-	"double" => float64(1)
+	"double" => float64(1),
+	"logical" => true
 })
 
 test_write({

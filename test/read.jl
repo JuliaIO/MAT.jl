@@ -3,7 +3,7 @@ using MAT, Base.Test
 function check(filename, result)
 	mat = matread(filename)
 	if mat != result
-			error("Data mismatch reading $filename")
+		error("Data mismatch reading $filename")
 		close(matfile)
 		return false
 	end
@@ -33,7 +33,8 @@ for format in ["v6", "v7", "v7.3"]
 		"int64" => int64(1),
 		"uint64" => uint64(1),
 		"single" => float32(1),
-		"double" => float64(1)
+		"double" => float64(1),
+		"logical" => true
 	}
 	check("simple.mat", result)
 	matfile = matopen("simple.mat")
