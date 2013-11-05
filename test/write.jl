@@ -67,23 +67,9 @@ test_write({
 	"s2" => { "a" => [1.0 2.0] }
 })
 
-try
-	test_write({ "1invalidkey" => "starts with a number" })
-	error("Writing invalid key did not fail")
-catch
-end
-
-try
-	test_write({ "another invalid key" => "invalid characters" })
-	error("Writing invalid key did not fail")
-catch
-end
-
-try
-	test_write({ "yetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkey" => "too long" })
-	error("Writing invalid key did not fail")
-catch
-end
+@test_throws test_write({ "1invalidkey" => "starts with a number" })
+@test_throws test_write({ "another invalid key" => "invalid characters" })
+@test_throws test_write({ "yetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkey" => "too long" })
 
 type TestCompositeKind
 	field1::String
@@ -98,10 +84,5 @@ close(fid)
 
 
 fid = matopen(tmpfile, "w")
-try
-	write(fid, "1invalidvarname", "1invalidvarvalue")
-	error("Writing invalid varname did not fail")
-catch
-finally
-	close(fid)
-end
+@test_throws write(fid, "1invalidvarname", "1invalidvarvalue")
+close(fid)
