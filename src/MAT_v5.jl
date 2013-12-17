@@ -68,10 +68,12 @@ const mxINT32_CLASS = 12
 const mxUINT32_CLASS = 13
 const mxINT64_CLASS = 14
 const mxUINT64_CLASS = 15
+const mxFUNCTION_CLASS = 16 # undocumented
+const mxOPAQUE_CLASS = 17   # undocumented
 const READ_TYPES = Type[Int8, Uint8, Int16, Uint16, Int32, Uint32, Float32, None, Float64,
-    None, None, Int64, Uint64]
+    None, None, Int64, Uint64, Uint8, Uint8]
 const CONVERT_TYPES = Type[None, None, None, None, None, Float64, Float32, Int8, Uint8,
-    Int16, Uint16, Int32, Uint32, Int64, Uint64]
+    Int16, Uint16, Int32, Uint32, Int64, Uint64, None, None]
 
 read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}) = 
     swap_bytes ? bswap(read(f, T)) : read(f, T)
@@ -288,10 +290,11 @@ function read_matrix(f::IO, swap_bytes::Bool)
     end
 
     flags = read_element(f, swap_bytes, Uint32)
-    dimensions = read_element(f, swap_bytes, Int32)
+    class = flags[1] & 0xFF
+    # Opaque objects are dimensionless
+    dimensions = (class == mxOPAQUE_CLASS) ? Int32[] : read_element(f, swap_bytes, Int32)
     name = ascii(read_element(f, swap_bytes, Uint8))
 
-    class = flags[1] & 0xFF
     local data
     if class == mxCELL_CLASS
         data = read_cell(f, swap_bytes, dimensions)
@@ -301,6 +304,11 @@ function read_matrix(f::IO, swap_bytes::Bool)
         data = read_sparse(f, swap_bytes, dimensions, flags)
     elseif class == mxCHAR_CLASS && length(dimensions) <= 2
         data = read_string(f, swap_bytes, dimensions)
+    elseif class == mxOPAQUE_CLASS
+        # Two strings followed by an unnamed matrix
+        data = {ascii(read_element(f, swap_bytes, Uint8)),
+                ascii(read_element(f, swap_bytes, Uint8)),
+                read_matrix(f, swap_bytes)[2]}
     else
         convert_type = CONVERT_TYPES[class]
         data = read_data(f, swap_bytes, convert_type, dimensions)
