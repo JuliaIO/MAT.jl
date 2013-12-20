@@ -2,6 +2,8 @@
 
 [![Build Status](https://travis-ci.org/simonster/MAT.jl.png?branch=master)](https://travis-ci.org/simonster/MAT.jl)
 
+This library can read MATLAB `.mat` files, both in the older v5/v6/v7 format, as well as the newer v7.3 format.
+
 ## Installation
 
 Within Julia, use the package manager:
