@@ -35,6 +35,7 @@ type Matlabv5File <: HDF5.DataFile
     swap_bytes::Bool
     subsys_offset::Uint64
     varnames::Dict{ASCIIString, FileOffset}
+    subsystem::Dict{ASCIIString, Any}
 
     Matlabv5File(ios, swap_bytes, subsys_offset) = new(ios, swap_bytes, subsys_offset)
 end
@@ -69,8 +70,8 @@ const mxINT32_CLASS = 12
 const mxUINT32_CLASS = 13
 const mxINT64_CLASS = 14
 const mxUINT64_CLASS = 15
-const mxFUNCTION_CLASS = 16 # undocumented
-const mxOPAQUE_CLASS = 17   # undocumented
+const mxFUNCTION_CLASS = 16 # undocumented (function handles)
+const mxOPAQUE_CLASS = 17   # undocumented (classdef objects)
 const READ_TYPES = Type[Int8, Uint8, Int16, Uint16, Int32, Uint32, Float32, None, Float64,
     None, None, Int64, Uint64, Uint8, Uint8]
 const CONVERT_TYPES = Type[None, None, None, None, None, Float64, Float32, Int8, Uint8,
@@ -307,11 +308,12 @@ function read_matrix(f::IO, swap_bytes::Bool)
         data = read_sparse(f, swap_bytes, dimensions, flags)
     elseif class == mxCHAR_CLASS && length(dimensions) <= 2
         data = read_string(f, swap_bytes, dimensions)
+    elseif class == mxFUNCTION_CLASS
+        data = read_matrix(f,swap_bytes)[2]
     elseif class == mxOPAQUE_CLASS
-        # Two strings followed by an unnamed matrix
-        data = {ascii(read_element(f, swap_bytes, Uint8)),
-                ascii(read_element(f, swap_bytes, Uint8)),
-                read_matrix(f, swap_bytes)[2]}
+        data = {ascii(read_element(f, swap_bytes, Uint8)), # "MCOS"
+                ascii(read_element(f, swap_bytes, Uint8)), # Classname
+                read_matrix(f, swap_bytes)[2]} # Unnamed matrix w/ data
     else
         convert_type = CONVERT_TYPES[class]
         data = read_data(f, swap_bytes, convert_type, dimensions)
@@ -334,7 +336,7 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
     ios = open(filename, "r")
     header = read(ios, Uint8, 116)
     subsys_offset = read(ios, Uint64)
-    if subsys_offset == 0x2020202020202020
+    if subsys_offset == 0x2020_2020_2020_2020
         subsys_offset = zero(subsys_offset)
     end
     version = read(ios, Uint16)
@@ -356,7 +358,14 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
         error("Unsupported MATLAB file version")
     end
 
-    return Matlabv5File(ios, swap_bytes, subsys_offset)
+    matfile = Matlabv5File(ios, swap_bytes, subsys_offset)
+    
+    if subsys_offset > 0
+        seek(ios, subsys_offset)
+        matfile.subsystem = read_subsystem(ios, swap_bytes)
+    end
+    
+    matfile
 end
 
 is_subsystem_matfile(x::Any) = false;
@@ -368,30 +377,41 @@ function is_subsystem_matfile{N}(x::Array{Uint8,N})
     (x[1:4] == [0x00,0x01,0x49,0x4d] || x[1:4] == [0x01,0x00,0x4d,0x49])
 end
 
-# Read the subsystem data from a Uint8 array
-function add_subsystem_vars!{N}(data::Array{Uint8,N},vars)
-    # Construct subsystem file: a Matfile is stored within this matrix
-    buf = Array(Uint8,length(data)+SUBSYS_HEADER_PADDING)
-    buf[SUBSYS_HEADER_PADDING+1:end] = data[:]
-    s = IOBuffer(buf)
-    # Check endianness and versioning
-    seek(s,SUBSYS_HEADER_PADDING+2)
-    swap_bytes = read(s,Uint16) == 0x494D
-    seek(s,SUBSYS_HEADER_PADDING)
-    @assert read_bswap(s,swap_bytes,Uint16) == 0x0100 "Unsupported MATLAB subsystem file version"
-    # Read everything contained in it with a phony Matlabv5File
-    svars = read(Matlabv5File(s,swap_bytes,0))
-    for (k,v) in svars
-        # There are sometimes nested subsystems, but without a subsys offset!?
-        if is_subsystem_matfile(v)
-            add_subsystem_vars!(v,svars)
-            delete!(svars,k)
+function read_subsystem(f::IO, swap_bytes::Bool)
+    name, data = read_matrix(f,swap_bytes)
+    @assert isempty(name) && is_subsystem_matfile(data) "invalid subsystem"
+    @assert eof(f) "unread data at end of subsystem"
+    
+    read_subsystem_matfile(data);
+end
+
+function read_subsystem_matfile{N}(data::Array{Uint8,N})
+    # A Matfile is stored within this matrix's data
+    f = IOBuffer(data[:])
+    # Check endianness and versioning.
+    seek(f,2)
+    endian_flag = read(f,Uint16)
+    swap_bytes = endian_flag == 0x494D
+    @assert swap_bytes || endian_flag == 0x4D49 "unknown endian flags in subsystem"
+    seek(f,0)
+    @assert read_bswap(f,swap_bytes,Uint16) == 0x0100 "unsupported MATLAB file version in subsystem"
+    seek(f,8)
+    
+    svars = Dict{ASCIIString,Any}()
+    i=0;
+    while !eof(f)
+        name,data = read_matrix(f,swap_bytes)
+        
+        if isempty(name) && is_subsystem_matfile(data)
+            # There are sometimes nested subsystems?
+            data = read_subsystem_matfile(data)
         end
+        name = isempty(name) ? "_i$(i+=1)" : name;
+        svars[name] = data
     end
-    for (k,v) in svars
-        vars[string("_sub_",k)] = v
-    end
-    vars
+    close(f)
+    
+    svars
 end
 
 # Read whole MAT file
@@ -403,12 +423,6 @@ function read(matfile::Matlabv5File)
         (name, data) = read_matrix(matfile.ios, matfile.swap_bytes)
         name = isempty(name) ? "_i$(i+=1)" : name;
         vars[name] = data
-    end
-
-    if !eof(matfile.ios) && matfile.subsys_offset > 0
-        seek(matfile.ios,matfile.subsys_offset)
-        _, data = read_matrix(matfile.ios,matfile.swap_bytes)
-        add_subsystem_vars!(data,vars)
     end
 
     vars
