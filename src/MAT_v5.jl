@@ -33,11 +33,22 @@ import HDF5: names, exists
 type Matlabv5File <: HDF5.DataFile
     ios::IO
     swap_bytes::Bool
-    subsys_offset::Uint64
+    subsys_offset::FileOffset
     varnames::Dict{ASCIIString, FileOffset}
     subsystem::Dict{ASCIIString, Any}
 
     Matlabv5File(ios, swap_bytes, subsys_offset) = new(ios, swap_bytes, subsys_offset)
+    # TODO: is there a better way to copy and replace the IO? Needed for uncompressed buffers
+    function Matlabv5File(matfile::Matlabv5File, f::IO)
+        v = new(f, matfile.swap_bytes, 0)
+        if isdefined(matfile, :varnames)
+            v.varnames = matfile.varnames
+        end
+        if isdefined(matfile, :subsystem) 
+            v.subsystem = matfile.subsystem
+        end
+        v
+    end
 end
 
 const miINT8 = 1
@@ -79,9 +90,9 @@ const CONVERT_TYPES = Type[None, None, None, None, None, Float64, Float32, Int8,
 
 const SUBSYS_HEADER_PADDING = 120
 
-read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}) = 
+read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}) =
     swap_bytes ? bswap(read(f, T)) : read(f, T)
-read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union(Int, (Int...))) = 
+read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union(Int, (Int...))) =
     swap_bytes ? [bswap(x) for x in read(f, T, dim)] : read(f, T, dim)
 
 skip_padding(f::IO, nbytes::Int64, hbytes::Int) = if nbytes % hbytes != 0
@@ -139,15 +150,16 @@ function read_data{T}(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int
     read_array ? convert(Array{T}, data) : convert(T, data)
 end
 
-function read_cell(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
+function read_cell(matfile::Matlabv5File, dimensions::Vector{Int32})
     data = cell(int(dimensions)...)
     for i = 1:length(data)
-        (ignored_name, data[i]) = read_matrix(f, swap_bytes)
+        (ignored_name, data[i]) = read_matrix(matfile)
     end
     data
 end
 
-function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_object::Bool)
+function read_struct(matfile::Matlabv5File, dimensions::Vector{Int32}, is_object::Bool)
+    f, swap_bytes = matfile.ios, matfile.swap_bytes
     field_length = read_element(f, swap_bytes, Int32)[1]
     field_names = read_element(f, swap_bytes, Uint8)
     n_fields = div(length(field_names), field_length)
@@ -174,7 +186,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
     if n_el == 1
         # Read a single struct into a dict
         for field_name in field_name_strings
-            data[field_name] = read_matrix(f, swap_bytes)[2]
+            data[field_name] = read_matrix(matfile)[2]
         end
     else
         # Read multiple structs into a dict of arrays
@@ -183,7 +195,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
         end
         for i = 1:n_el
             for field_name in field_name_strings
-                data[field_name][i] = read_matrix(f, swap_bytes)[2]
+                data[field_name][i] = read_matrix(matfile)[2]
             end
         end
     end
@@ -198,7 +210,8 @@ function plusone!(A)
     A
 end
 
-function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::Vector{Uint32})
+function read_sparse(matfile::Matlabv5File, dimensions::Vector{Int32}, flags::Vector{Uint32})
+    f, swap_bytes = matfile.ios, matfile.swap_bytes
     local m::Int, n::Int
     if length(dimensions) == 2
         (m, n) = dimensions
@@ -229,7 +242,8 @@ function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::
     SparseMatrixCSC(m, n, jc, ir, pr)
 end
 
-function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
+function read_string(matfile::Matlabv5File, dimensions::Vector{Int32})
+    f, swap_bytes = matfile.ios, matfile.swap_bytes
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     if dtype <= 2 || dtype == 16
         # If dtype <= 2, this may give an error on non-ASCII characters, since the string
@@ -272,19 +286,20 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
 end
 
 # Read matrix data
-function read_matrix(f::IO, swap_bytes::Bool)
+function read_matrix(matfile::Matlabv5File)
+    f, swap_bytes = matfile.ios, matfile.swap_bytes
     (dtype, nbytes) = read_header(f, swap_bytes)
     if dtype == miCOMPRESSED
         bytes = decompress(read(f, Uint8, nbytes))
-        mi = IOBuffer(bytes)
-        output = read_matrix(mi, swap_bytes)
+        mi = Matlabv5File(matfile,IOBuffer(bytes))
+        output = read_matrix(mi)
         close(mi)
         return output
     elseif dtype != miMATRIX
         error("Unexpected data type")
     elseif nbytes == 0
         # If one creates a cell array using
-        #     y = cell(m, n)
+        #     y = cell(matfile, n)
         # then MATLAB will save the empty cells as zero-byte matrices. If one creates a
         # empty cells using
         #     a = {[], [], []}
@@ -301,19 +316,20 @@ function read_matrix(f::IO, swap_bytes::Bool)
 
     local data
     if class == mxCELL_CLASS
-        data = read_cell(f, swap_bytes, dimensions)
+        data = read_cell(matfile, dimensions)
     elseif class == mxSTRUCT_CLASS || class == mxOBJECT_CLASS
-        data = read_struct(f, swap_bytes, dimensions, class == mxOBJECT_CLASS)
+        data = read_struct(matfile, dimensions, class == mxOBJECT_CLASS)
     elseif class == mxSPARSE_CLASS
-        data = read_sparse(f, swap_bytes, dimensions, flags)
+        data = read_sparse(matfile, dimensions, flags)
     elseif class == mxCHAR_CLASS && length(dimensions) <= 2
-        data = read_string(f, swap_bytes, dimensions)
+        data = read_string(matfile, dimensions)
     elseif class == mxFUNCTION_CLASS
-        data = read_matrix(f,swap_bytes)[2]
+        # Unnamed submatrix with a struct of function implementation details
+        data = read_matrix(matfile)[2]
     elseif class == mxOPAQUE_CLASS
         data = {ascii(read_element(f, swap_bytes, Uint8)), # "MCOS"
                 ascii(read_element(f, swap_bytes, Uint8)), # Classname
-                read_matrix(f, swap_bytes)[2]} # Unnamed matrix w/ data
+                read_matrix(matfile)[2]} # Unnamed matrix w/ data
     else
         convert_type = CONVERT_TYPES[class]
         data = read_data(f, swap_bytes, convert_type, dimensions)
@@ -362,7 +378,7 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
     
     if subsys_offset > 0
         seek(ios, subsys_offset)
-        matfile.subsystem = read_subsystem(ios, swap_bytes)
+        matfile.subsystem = read_subsystem(matfile)
     end
     
     matfile
@@ -377,17 +393,17 @@ function is_subsystem_matfile{N}(x::Array{Uint8,N})
     (x[1:4] == [0x00,0x01,0x49,0x4d] || x[1:4] == [0x01,0x00,0x4d,0x49])
 end
 
-function read_subsystem(f::IO, swap_bytes::Bool)
-    name, data = read_matrix(f,swap_bytes)
+function read_subsystem(matfile::Matlabv5File)
+    name, data = read_matrix(matfile)
     @assert isempty(name) && is_subsystem_matfile(data) "invalid subsystem"
-    @assert eof(f) "unread data at end of subsystem"
+    @assert eof(matfile.ios) "unread data at end of subsystem"
     
     read_subsystem_matfile(data);
 end
 
 function read_subsystem_matfile{N}(data::Array{Uint8,N})
     # A Matfile is stored within this matrix's data
-    f = IOBuffer(data[:])
+    f = IOBuffer(vec(data))
     # Check endianness and versioning.
     seek(f,2)
     endian_flag = read(f,Uint16)
@@ -397,13 +413,14 @@ function read_subsystem_matfile{N}(data::Array{Uint8,N})
     @assert read_bswap(f,swap_bytes,Uint16) == 0x0100 "unsupported MATLAB file version in subsystem"
     seek(f,8)
     
+    matfile = Matlabv5File(f,swap_bytes,0);
     svars = Dict{ASCIIString,Any}()
     i=0;
-    while !eof(f)
-        name,data = read_matrix(f,swap_bytes)
+    while !eof(matfile.ios)
+        name,data = read_matrix(matfile)
         
         if isempty(name) && is_subsystem_matfile(data)
-            # There are sometimes nested subsystems?
+            # There are sometimes nested subsystems? Are they ever non-empty?
             data = read_subsystem_matfile(data)
         end
         name = isempty(name) ? "_i$(i+=1)" : name;
@@ -420,7 +437,7 @@ function read(matfile::Matlabv5File)
     vars = Dict{ASCIIString, Any}()
     i = 0;
     while !eof(matfile.ios) && (matfile.subsys_offset==0 || position(matfile.ios) < matfile.subsys_offset)
-        (name, data) = read_matrix(matfile.ios, matfile.swap_bytes)
+        (name, data) = read_matrix(matfile)
         name = isempty(name) ? "_i$(i+=1)" : name;
         vars[name] = data
     end
@@ -493,7 +510,7 @@ function read(matfile::Matlabv5File, varname::ASCIIString)
         error("no variable $varname in file")
     end
     seek(matfile.ios, varnames[varname])
-    (name, data) = read_matrix(matfile.ios, matfile.swap_bytes)
+    (name, data) = read_matrix(matfile)
     data
 end
 
