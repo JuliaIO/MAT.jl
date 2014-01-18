@@ -65,6 +65,15 @@ end
 
 matopen(fname::String) = matopen(fname, "r")
 
+function matopen(f::Function, args...)
+    fid = matopen(args...)
+    try
+        f(fid)
+    finally
+        close(fid)
+    end
+end
+
 # Read all variables from a MATLAB file
 function matread(filename::String)
     file = matopen(filename)
