@@ -285,6 +285,29 @@ function read_string(matfile::Matlabv5File, dimensions::Vector{Int32})
     data
 end
 
+function read_opaque(matfile::Matlabv5File)
+    f, swap_bytes = matfile.ios, matfile.swap_bytes
+    # This is undocumented. There are two strings followed by an array
+    # The first string is always (?) MCOS: "Matlab Common/Class Object System"
+    class_system = ascii(read_element(f, swap_bytes, Uint8))
+    class_system == "MCOS" || error("unknown opaque class system: ", class_system)
+    # The second string is the object's class name
+    class_name = ascii(read_element(f, swap_bytes, Uint8))
+
+    if class_name == "FileWrapper__"
+        # This is the subsystem implementation
+        data = read_matrix(matfile)[2]
+    else
+        # This is an unnamed array of uint8s: indexes into the subsystem
+        idxs = vec(read_matrix(matfile)[2])
+        idxs[1] == 0xdd00_0000 || error("unknown opaque sentinal value: ", idxs[1])
+
+        data = idxs
+    end
+
+    return (class_name, data)
+end
+
 # Read matrix data
 function read_matrix(matfile::Matlabv5File)
     f, swap_bytes = matfile.ios, matfile.swap_bytes
@@ -327,9 +350,7 @@ function read_matrix(matfile::Matlabv5File)
         # Unnamed submatrix with a struct of function implementation details
         data = read_matrix(matfile)[2]
     elseif class == mxOPAQUE_CLASS
-        data = {ascii(read_element(f, swap_bytes, Uint8)), # "MCOS"
-                ascii(read_element(f, swap_bytes, Uint8)), # Classname
-                read_matrix(matfile)[2]} # Unnamed matrix w/ data
+        data = read_opaque(matfile)
     else
         convert_type = CONVERT_TYPES[class]
         data = read_data(f, swap_bytes, convert_type, dimensions)
@@ -375,12 +396,12 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
     end
 
     matfile = Matlabv5File(ios, swap_bytes, subsys_offset)
-    
+
     if subsys_offset > 0
         seek(ios, subsys_offset)
         matfile.subsystem = read_subsystem(matfile)
     end
-    
+
     matfile
 end
 
@@ -394,10 +415,11 @@ function is_subsystem_matfile{N}(x::Array{Uint8,N})
 end
 
 function read_subsystem(matfile::Matlabv5File)
+    # Read the final, unnamed matrix hidden at the end of the file
     name, data = read_matrix(matfile)
     @assert isempty(name) && is_subsystem_matfile(data) "invalid subsystem"
     @assert eof(matfile.ios) "unread data at end of subsystem"
-    
+
     read_subsystem_matfile(data);
 end
 
@@ -412,13 +434,13 @@ function read_subsystem_matfile{N}(data::Array{Uint8,N})
     seek(f,0)
     @assert read_bswap(f,swap_bytes,Uint16) == 0x0100 "unsupported MATLAB file version in subsystem"
     seek(f,8)
-    
+
     matfile = Matlabv5File(f,swap_bytes,0);
     svars = Dict{ASCIIString,Any}()
     i=0;
     while !eof(matfile.ios)
         name,data = read_matrix(matfile)
-        
+
         if isempty(name) && is_subsystem_matfile(data)
             # There are sometimes nested subsystems? Are they ever non-empty?
             data = read_subsystem_matfile(data)
@@ -427,7 +449,7 @@ function read_subsystem_matfile{N}(data::Array{Uint8,N})
         svars[name] = data
     end
     close(f)
-    
+
     svars
 end
 
