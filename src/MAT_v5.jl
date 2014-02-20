@@ -30,25 +30,26 @@ using Zlib, HDF5
 import Base: read, write, close
 import HDF5: names, exists
 
-type Matlabv5File <: HDF5.DataFile
-    ios::IO
+type Matlabv5File{I<:IO} <: HDF5.DataFile
+    ios::I
     swap_bytes::Bool
     subsys_offset::FileOffset
     varnames::Dict{ASCIIString, FileOffset}
     subsystem::Dict{ASCIIString, Any}
 
-    Matlabv5File(ios, swap_bytes, subsys_offset) = new(ios, swap_bytes, subsys_offset)
-    # TODO: is there a better way to copy and replace the IO? Needed for uncompressed buffers
-    function Matlabv5File(matfile::Matlabv5File, f::IO)
-        v = new(f, matfile.swap_bytes, 0)
-        if isdefined(matfile, :varnames)
-            v.varnames = matfile.varnames
-        end
-        if isdefined(matfile, :subsystem) 
-            v.subsystem = matfile.subsystem
-        end
-        v
+    Matlabv5File(ios::I, swap_bytes::Bool, subsys_offset) = new(ios, swap_bytes, subsys_offset)
+end
+Matlabv5File{I<:IO}(ios::I, swap_bytes::Bool, subsys_offset) = Matlabv5File{I}(ios, swap_bytes, subsys_offset)
+# TODO: is there a better way to copy and replace the IO? Needed for uncompressed buffers
+function Matlabv5File(matfile::Matlabv5File, f::IO)
+    v = Matlabv5File(f, matfile.swap_bytes, 0)
+    if isdefined(matfile, :varnames)
+        v.varnames = matfile.varnames
     end
+    if isdefined(matfile, :subsystem)
+        v.subsystem = matfile.subsystem
+    end
+    v
 end
 
 const miINT8 = 1
