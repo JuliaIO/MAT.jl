@@ -7,13 +7,10 @@ before_install:
     - sudo add-apt-repository ppa:staticfloat/julia-deps -y
     - sudo add-apt-repository ppa:staticfloat/julianightlies -y
     - sudo apt-get update -qq -y
-    - sudo apt-get install julia -y
-    - sudo apt-get install hdf5-tools
+    - sudo apt-get install git julia hdf5-tools -y
     - git config --global user.name "Travis User"
     - git config --global user.email "travis@example.net"
+    - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
 script:
-    - julia -e 'versioninfo(); Pkg.init(); Pkg.add("Zlib")'
-    - git clone https://github.com/timholy/HDF5.jl.git ~/.julia/HDF5
-    - mkdir -p ~/.julia/MAT
-    - cp -R ./* ~/.julia/MAT/
-    - julia ~/.julia/MAT/test/runtests.jl
+    - julia -e 'versioninfo(); Pkg.init(); Pkg.clone("HDF5"); Pkg.clone(pwd())'
+    - julia test/runtests.jl
