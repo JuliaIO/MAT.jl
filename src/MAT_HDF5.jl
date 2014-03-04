@@ -172,21 +172,32 @@ function m_read(g::HDF5Group)
         # Check if this is a sparse matrix.
         fn = names(g)
         if exists(attrs(g), sparse_attr_matlab)
-            
             # This is a sparse matrix.
             # ir is the row indices, jc is the column boundaries.
             # We add one to account for the zero-based (MATLAB) to one-based (Julia) transition
             jc = read(g, "jc") + 1
-            if fn == ["data", "ir", "jc"]
+            if "data" in fn && "ir" in fn && "jc" in fn
                 # This matrix is not empty.
                 ir = read(g, "ir") + 1
-                data = read(g, "data")
+                dset = g["data"]
+                T = str2type_matlab[mattype]
+                try
+                    dtype = datatype(dset)
+                    class_id = HDF5.h5t_get_class(dtype.id)
+                    try
+                        data = class_id == HDF5.H5T_COMPOUND ? read_complex(dtype, dset, T) : read(dset, T)
+                    finally
+                        close(dtype)
+                    end
+                finally
+                    close(dset)
+                end
             else
                 # This matrix is empty.
                 ir = HDF5.hdf5_to_julia_eltype(HDF5.datatype(g["jc"]))[]
                 data = str2eltype_matlab[mattype][]
             end
-            return SparseMatrixCSC(HDF5.a_read(g, "MATLAB_sparse"), length(jc) -1, jc, ir, data)
+            return SparseMatrixCSC(int(HDF5.a_read(g, "MATLAB_sparse")), length(jc)-1, jc, ir, data)
         else
             error("Cannot read from a non-struct group, type was $mattype")
         end
@@ -442,7 +453,7 @@ const str2type_matlab = [
     "double"  => Array{Float64},
     "cell"    => Array{Any},
     "char"    => MatlabString,
-    "logical" => Bool,
+    "logical" => Array{Bool}
 ]
 # These operate on the element type rather than the whole type
 const str2eltype_matlab = [
@@ -459,7 +470,7 @@ const str2eltype_matlab = [
     "double"  => Float64,
     "cell"    => Any,
     "char"    => MatlabString,
-    "logical" => Bool,
+    "logical" => Bool
 ]
 const type2str_matlab = [
     Int8    => "int8",
@@ -498,6 +509,10 @@ end
 function read(obj::HDF5Object, ::Type{Bool})
     tf = read(obj, Uint8)
     tf > 0
+end
+function read(obj::HDF5Object, ::Type{Array{Bool}})
+    tf = read(obj, Array{Uint8})
+    reinterpret(Bool, tf)
 end
 
 ## Utilities for handling complex numbers

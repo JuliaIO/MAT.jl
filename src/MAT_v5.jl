@@ -22,6 +22,9 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+# MATLAB's file format documentation can be found at
+# http://www.mathworks.com/help/pdf_doc/matlab/matfile_format.pdf
+
 module MAT_v5
 using Zlib, HDF5
 import Base: read, write, close
@@ -79,6 +82,7 @@ skip_padding(f::IO, nbytes::Int64, hbytes::Int) = if nbytes % hbytes != 0
     skip(f, hbytes-(nbytes % hbytes))
 end
 
+# Read data type and number of bytes at the start of a data element
 function read_header(f::IO, swap_bytes::Bool)
     dtype = read_bswap(f, swap_bytes, Uint32)
 
@@ -91,6 +95,7 @@ function read_header(f::IO, swap_bytes::Bool)
     end
 end
 
+# Read data element as a vector of a given type
 function read_element{T}(f::IO, swap_bytes::Bool, ::Type{T})
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     data = read_bswap(f, swap_bytes, T, int(div(nbytes, sizeof(T))))
@@ -98,6 +103,18 @@ function read_element{T}(f::IO, swap_bytes::Bool, ::Type{T})
     data
 end
 
+# Read data element as encoded type
+function read_data(f::IO, swap_bytes::Bool)
+    (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
+    read_type = READ_TYPES[dtype]
+    data = read_bswap(f, swap_bytes, read_type, int(div(nbytes, sizeof(read_type))))
+    skip_padding(f, nbytes, hbytes)
+    data
+end
+
+# Read data element as encoded type with given dimensions, converting
+# to another type if necessary and collapsing one-element matrices to
+# scalars
 function read_data{T}(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int32})
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     read_type = READ_TYPES[dtype]
@@ -113,10 +130,7 @@ function read_data{T}(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int
     end
     skip_padding(f, nbytes, hbytes)
 
-    if read_type != T && T != None
-        data = read_array ? convert(Array{T}, data) : convert(T, data)
-    end
-    data
+    read_array ? convert(Array{T}, data) : convert(T, data)
 end
 
 function read_cell(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
@@ -145,7 +159,6 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
         field_name_strings[i] = ascii(index == 0 ? sname : sname[1:index-1])
     end
 
-    #data = Dict{ASCIIString, Any}(n_fields+1)
     data = Dict{ASCIIString, Any}()
     sizehint(data, n_fields+1)
     if is_object
@@ -170,6 +183,36 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
     end
 
     data
+end
+
+function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::Vector{Uint32})
+    if length(dimensions) == 2
+        (m, n) = dimensions
+    elseif length(dimensions) == 1
+        m = dimensions[1]
+        n = 1
+    elseif length(dimensions) == 0
+        m = 0
+        n = 0
+    else
+        error("invalid dimensions encountered for sparse array")
+    end
+
+    m = isempty(dimensions) ? 0 : dimensions[1]
+    n = length(dimensions) <= 1 ? 0 : dimensions[2]
+    ir = read_element(f, swap_bytes, Int32) + 1
+    jc = read_element(f, swap_bytes, Int32) + 1
+    if (flags[1] & (1 << 9)) != 0 # logical
+        # WTF. For some reason logical sparse matrices are tagged as doubles.
+        pr = read_element(f, swap_bytes, Bool)
+    else
+        pr = read_data(f, swap_bytes)
+        if (flags[1] & (1 << 11)) != 0 # complex
+            pr = complex(pr, read_data(f, swap_bytes))
+        end
+    end
+
+    SparseMatrixCSC(m, n, jc, ir, pr)
 end
 
 function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
@@ -208,6 +251,7 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
     data
 end
 
+# Read matrix data
 function read_matrix(f::IO, swap_bytes::Bool)
     (dtype, nbytes) = read_header(f, swap_bytes)
     if dtype == miCOMPRESSED
@@ -240,16 +284,16 @@ function read_matrix(f::IO, swap_bytes::Bool)
     elseif class == mxSTRUCT_CLASS || class == mxOBJECT_CLASS
         data = read_struct(f, swap_bytes, dimensions, class == mxOBJECT_CLASS)
     elseif class == mxSPARSE_CLASS
-        error("Sparse matrices not currently supported")
+        data = read_sparse(f, swap_bytes, dimensions, flags)
     elseif class == mxCHAR_CLASS && length(dimensions) <= 2
         data = read_string(f, swap_bytes, dimensions)
     else
         convert_type = CONVERT_TYPES[class]
         data = read_data(f, swap_bytes, convert_type, dimensions)
         if (flags[1] & (1 << 11)) != 0 # complex
-            data += im*read_data(f, swap_bytes, convert_type, dimensions)
+            data = complex(data, read_data(f, swap_bytes, convert_type, dimensions))
         elseif (flags[1] & (1 << 9)) != 0 # logical
-            data = data != 0
+            data = data .!= 0
         end
     end
 

@@ -1,22 +1,45 @@
 using MAT, Base.Test
 
 function check(filename, result)
-	mat = matread(filename)
-	if !isequal(mat, result)
-		error("Data mismatch reading $filename")
-		close(matfile)
-		return false
-	end
 	matfile = matopen(filename)
 	for (k, v) in result
 		@test exists(matfile, k)
-		if !isequal(read(matfile, k), v)
+		got = read(matfile, k)
+		if !isequal(got, v)
 			close(matfile)
-			error("Data mismatch reading $k from $filename")
+			error("""
+				Data mismatch reading $k from $filename
+
+				Got:
+
+				$(repr(got))
+
+				Expected:
+
+				$(repr(v))
+				""")
 		end
 	end
-	@test Set(names(matfile)...) == Set(keys(result)...)
+	@test union!(Set(), names(matfile)) == union!(Set(), keys(result))
 	close(matfile)
+
+	mat = matread(filename)
+	if !isequal(mat, result)
+		error("""
+			Data mismatch reading $filename
+
+			Got:
+
+			$(repr(mat))
+
+			Expected:
+
+			$(repr(result))
+			""")
+		close(matfile)
+		return false
+	end
+
 	return true
 end
 
@@ -94,7 +117,15 @@ for format in ["v6", "v7", "v7.3"]
 	}
 	check("empty_cells.mat", result)
 
-
+	result = {
+		"sparse_empty" => sparse(Array(Float64, 0, 0)),
+		"sparse_eye" => speye(20),
+		"sparse_logical" => SparseMatrixCSC{Bool,Int64}(5, 5, [1:6], [1:5], bitunpack(trues(5))),
+		"sparse_random" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]),
+		"sparse_complex" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]*(1. + 1.im)),
+		"sparse_zeros" => SparseMatrixCSC(20, 20, ones(Uint, 21), Uint[], Float64[])
+	}
+	check("sparse.mat", result)
 
 	matfile = matopen("partial.mat")
 	var1 = read(matfile, "var1")
@@ -104,15 +135,3 @@ for format in ["v6", "v7", "v7.3"]
 	close(matfile)
 
 end
-
-# This test only for v7.3
-
-result = {
-	"S" => sparse(eye(20))
-}
-check(joinpath(dirname(@__FILE__), "v7.3", "sparse.mat"), result)
-
-result = {
-	"S" => SparseMatrixCSC(20,20, ones(Uint, 21), Uint[], Float64[])
-}
-check(joinpath(dirname(@__FILE__), "v7.3", "sparse_empty.mat"), result)
