@@ -185,7 +185,15 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
     data
 end
 
+function plusone!(A)
+    for i = 1:length(A)
+        @inbounds A[i] += 1
+    end
+    A
+end
+
 function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::Vector{Uint32})
+    local m::Int, n::Int
     if length(dimensions) == 2
         (m, n) = dimensions
     elseif length(dimensions) == 1
@@ -200,8 +208,8 @@ function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::
 
     m = isempty(dimensions) ? 0 : dimensions[1]
     n = length(dimensions) <= 1 ? 0 : dimensions[2]
-    ir = read_element(f, swap_bytes, Int32) + 1
-    jc = read_element(f, swap_bytes, Int32) + 1
+    ir = plusone!(int(read_element(f, swap_bytes, Int32)))
+    jc = plusone!(int(read_element(f, swap_bytes, Int32)))
     if (flags[1] & (1 << 9)) != 0 # logical
         # WTF. For some reason logical sparse matrices are tagged as doubles.
         pr = read_element(f, swap_bytes, Bool)
@@ -224,11 +232,11 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         # happen in the wild.
         chars = read(f, Uint8, nbytes)
         if dimensions[1] == 1
-            data = utf8(chars)
+            data = bytestring(chars)
         else
-            data = Array(String, dimensions[1])
+            data = Array(ByteString, dimensions[1])
             for i = 1:dimensions[1]
-                data[i] = rstrip(utf8(chars[i:dimensions[1]:end]))
+                data[i] = rstrip(bytestring(chars[i:dimensions[1]:end]))
             end
         end
     elseif dtype <= 4 || dtype == 17
@@ -239,7 +247,7 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         if dimensions[1] == 1
             data = bytestring(CharString(chars))
         else
-            data = Array(String, dimensions[1])
+            data = Array(ByteString, dimensions[1])
             for i = 1:dimensions[1]
                 data[i] = rstrip(bytestring(CharString(chars[i:dimensions[1]:end])))
             end

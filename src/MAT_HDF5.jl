@@ -130,7 +130,7 @@ function m_read(dset::HDF5Dataset)
         # Empty arrays encode the dimensions as the dataset
         dims = int(read(dset))
         mattype = a_read(dset, name_type_attr_matlab)
-        T = mattype == "canonical empty" ? None : str2type_matlab[mattype]
+        T = mattype == "canonical empty" ? None : str2eltype_matlab[mattype]
         return Array(T, dims...)
     end
 
@@ -165,7 +165,14 @@ function m_read(dset::HDF5Dataset)
     length(d) == 1 ? d[1] : d
 end
 
-# reading a struct or struct array
+function plusone!(A)
+    for i = 1:length(A)
+        @inbounds A[i] += 1
+    end
+    A
+end
+
+# reading a struct, struct array, or sparse matrix
 function m_read(g::HDF5Group)
     mattype = a_read(g, name_type_attr_matlab)
     if mattype != "struct"
@@ -175,10 +182,10 @@ function m_read(g::HDF5Group)
             # This is a sparse matrix.
             # ir is the row indices, jc is the column boundaries.
             # We add one to account for the zero-based (MATLAB) to one-based (Julia) transition
-            jc = read(g, "jc") + 1
+            jc = plusone!(int(read(g, "jc")))
             if "data" in fn && "ir" in fn && "jc" in fn
                 # This matrix is not empty.
-                ir = read(g, "ir") + 1
+                ir = plusone!(int(read(g, "ir")))
                 dset = g["data"]
                 T = str2type_matlab[mattype]
                 try
@@ -194,7 +201,7 @@ function m_read(g::HDF5Group)
                 end
             else
                 # This matrix is empty.
-                ir = HDF5.hdf5_to_julia_eltype(HDF5.datatype(g["jc"]))[]
+                ir = Int[]
                 data = str2eltype_matlab[mattype][]
             end
             return SparseMatrixCSC(int(HDF5.a_read(g, "MATLAB_sparse")), length(jc)-1, jc, ir, data)
@@ -497,11 +504,7 @@ function read(obj::HDF5Object, ::Type{MatlabString})
     if ndims(data) == 1
         return bytestring(CharString(data))
     elseif ndims(data) == 2
-        datap = Array(String, size(data, 1))
-        for i = 1:length(datap)
-            datap[i] = rstrip(bytestring(CharString(reshape(data[i, :], size(data,2)))))
-        end
-        return datap
+        return datap = ByteString[rstrip(bytestring(CharString(reshape(data[i, :], size(data,2))))) for i = 1:size(data, 1)]
     else
         return data
     end

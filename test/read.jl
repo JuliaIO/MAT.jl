@@ -5,16 +5,16 @@ function check(filename, result)
 	for (k, v) in result
 		@test exists(matfile, k)
 		got = read(matfile, k)
-		if !isequal(got, v)
+		if !isequal(got, v) || typeof(got) != typeof(v)
 			close(matfile)
 			error("""
-				Data mismatch reading $k from $filename
+				Data mismatch reading $k from $filename ($format)
 
-				Got:
+				Got $(typeof(got)):
 
 				$(repr(got))
 
-				Expected:
+				Expected $(typeof(v)):
 
 				$(repr(v))
 				""")
@@ -26,7 +26,7 @@ function check(filename, result)
 	mat = matread(filename)
 	if !isequal(mat, result)
 		error("""
-			Data mismatch reading $filename
+			Data mismatch reading $filename ($format)
 
 			Got:
 
@@ -43,6 +43,7 @@ function check(filename, result)
 	return true
 end
 
+global format
 for format in ["v6", "v7", "v7.3"]
 	cd(joinpath(dirname(@__FILE__), format))
 
@@ -77,8 +78,8 @@ for format in ["v6", "v7", "v7.3"]
 	result = {
 		"simple_string" => "the quick brown fox",
 		"accented_string" => "thé qüîck browñ fòx",
-		"concatenated_strings" => ["this is a string", "this is another string"],
-		"cell_strings" => ["this is a string" "this is another string"]
+		"concatenated_strings" => ByteString["this is a string", "this is another string"],
+		"cell_strings" => {"this is a string" "this is another string"}
 	}
 	check("string.mat", result)
 
@@ -98,12 +99,12 @@ for format in ["v6", "v7", "v7.3"]
 	check("cell.mat", result)
 
 	result = {
-		"s" => {
+		"s" => (ASCIIString=>Any)[
 			"a" => 1.0,
 			"b" => [1.0 2.0],
 			"c" => [1.0 2.0 3.0]
-		},
-		"s2" => { "a" => [1.0 2.0] }
+		],
+		"s2" => (ASCIIString=>Any)[ "a" => {1.0 2.0} ]
 	}
 	check("struct.mat", result)
 
@@ -123,7 +124,7 @@ for format in ["v6", "v7", "v7.3"]
 		"sparse_logical" => SparseMatrixCSC{Bool,Int64}(5, 5, [1:6], [1:5], bitunpack(trues(5))),
 		"sparse_random" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]),
 		"sparse_complex" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]*(1. + 1.im)),
-		"sparse_zeros" => SparseMatrixCSC(20, 20, ones(Uint, 21), Uint[], Float64[])
+		"sparse_zeros" => SparseMatrixCSC(20, 20, ones(Int, 21), Int[], Float64[])
 	}
 	check("sparse.mat", result)
 
