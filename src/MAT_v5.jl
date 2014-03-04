@@ -301,7 +301,7 @@ function read_matrix(f::IO, swap_bytes::Bool)
         if (flags[1] & (1 << 11)) != 0 # complex
             data = complex(data, read_data(f, swap_bytes, convert_type, dimensions))
         elseif (flags[1] & (1 << 9)) != 0 # logical
-            data = data .!= 0
+            data = reinterpret(Bool, uint8(data))
         end
     end
 

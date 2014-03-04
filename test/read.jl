@@ -109,7 +109,12 @@ for format in ["v6", "v7", "v7.3"]
 	check("struct.mat", result)
 
 	result = {
-		"logical" => false
+		"logical" => false,
+		"logical_mat" => [
+			true false false
+			false true false
+			true false false
+		]
 	}
 	check("logical.mat", result)
 	
