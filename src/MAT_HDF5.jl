@@ -165,9 +165,9 @@ function m_read(dset::HDF5Dataset)
     length(d) == 1 ? d[1] : d
 end
 
-function plusone!(A)
+function add!(A, x)
     for i = 1:length(A)
-        @inbounds A[i] += 1
+        @inbounds A[i] += x
     end
     A
 end
@@ -182,10 +182,10 @@ function m_read(g::HDF5Group)
             # This is a sparse matrix.
             # ir is the row indices, jc is the column boundaries.
             # We add one to account for the zero-based (MATLAB) to one-based (Julia) transition
-            jc = plusone!(int(read(g, "jc")))
+            jc = add!(int(read(g, "jc")), 1)
             if "data" in fn && "ir" in fn && "jc" in fn
                 # This matrix is not empty.
-                ir = plusone!(int(read(g, "ir")))
+                ir = add!(int(read(g, "ir")), 1)
                 dset = g["data"]
                 T = str2type_matlab[mattype]
                 try
@@ -204,7 +204,7 @@ function m_read(g::HDF5Group)
                 ir = Int[]
                 data = str2eltype_matlab[mattype][]
             end
-            return SparseMatrixCSC(int(HDF5.a_read(g, "MATLAB_sparse")), length(jc)-1, jc, ir, data)
+            return SparseMatrixCSC(int(HDF5.a_read(g, sparse_attr_matlab)), length(jc)-1, jc, ir, data)
         else
             error("Cannot read from a non-struct group, type was $mattype")
         end
@@ -250,11 +250,12 @@ elseif length(s) > 63
 end
 
 toarray(x::Array) = x
+toarray(x::Array{Bool}) = reinterpret(Uint8, x)
+toarray(x::Bool) = [uint8(x)]
 toarray(x) = [x]
-toarray(x::Union(Bool, Array{Bool})) = toarray(uint8(x))
 
 # Write the MATLAB type string for dset
-m_writetypeattr{T<:DataType}(dset, ::Type{Complex{T}}) = m_writetypeattr(dset, T)
+m_writetypeattr{T}(dset, ::Type{Complex{T}}) = m_writetypeattr(dset, T)
 function m_writetypeattr(dset, T)
     if !haskey(type2str_matlab, T)
         error("Type ", T, " is not (yet) supported")
@@ -279,44 +280,65 @@ function m_writeempty(parent::Union(HDF5File, HDF5Group), name::ByteString, data
     end
 end
 
-# Write a scalar or array
-function m_write{T<:Union(HDF5BitsKind,Bool)}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, data::Union(T, Array{T}))
-    if isempty(data)
-        m_writeempty(parent, name, data)
-        return
-    end
-    adata = toarray(data)
+# Write an array to a dataset in a MATLAB file, returning the dataset
+function m_writearray{T<:Union(HDF5BitsKind,Bool)}(parent::Union(HDF5File, HDF5Group), name::ByteString, adata::Array{T})
     dset, dtype = d_create(parent, name, adata)
     try
-        m_writetypeattr(dset, T)
         HDF5.writearray(dset, dtype.id, adata)
-    finally
+        dset
+    catch e
         close(dset)
+        rethrow(e)
+    finally
         close(dtype)
     end
 end
-
-# Write a complex scalar or array
-function m_write{T<:Union(HDF5BitsKind,Bool)}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, data::Union(Complex{T}, Array{Complex{T}}))
-    if isempty(data)
-        m_writeempty(parent, name, data)
-        return
-    end
-    adata = toarray(data)
+function m_writearray{T<:Union(HDF5BitsKind,Bool)}(parent::Union(HDF5File, HDF5Group), name::ByteString, adata::Array{Complex{T}})
     dtype = build_datatype_complex(T)
     try
         stype = dataspace(adata)
         obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id)
         dset = HDF5Dataset(obj_id, file(parent))
         try
-            m_writetypeattr(dset, T)
             arr = reinterpret(T, adata, tuple(2, size(adata)...))
             HDF5.writearray(dset, dtype.id, arr)
-        finally
+        catch e
             close(dset)
+            rethrow(e)
         end
+        dset
     finally
         close(dtype)
+    end
+end
+
+# Write a scalar or array
+function m_write{T<:Union(HDF5BitsKind,Bool)}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, data::Union(T, Complex{T}, Array{T}, Array{Complex{T}}))
+    if isempty(data)
+        m_writeempty(parent, name, data)
+        return
+    end
+    dset = m_writearray(parent, name, toarray(data))
+    try
+        m_writetypeattr(dset, T)
+    finally
+        close(dset)
+    end
+end
+
+# Write sparse arrays
+function m_write{T}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, data::SparseMatrixCSC{T})
+    g = g_create(parent, name)
+    try
+        m_writetypeattr(g, T)
+        a_write(g, sparse_attr_matlab, uint64(size(data, 1)))
+        if !isempty(data.nzval)
+            close(m_writearray(g, "data", toarray(data.nzval)))
+            close(m_writearray(g, "ir", add!(isa(data.rowval, Vector{Uint64}) ? copy(data.rowval) : uint64(data.rowval), -1)))
+        end
+        close(m_writearray(g, "jc", add!(isa(data.colptr, Vector{Uint64}) ? copy(data.colptr) : uint64(data.colptr), -1)))
+    finally
+        close(g)
     end
 end
 

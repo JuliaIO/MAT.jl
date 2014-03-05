@@ -67,6 +67,15 @@ test_write({
 	"s2" => { "a" => [1.0 2.0] }
 })
 
+test_write({
+	"sparse_empty" => sparse(Array(Float64, 0, 0)),
+	"sparse_eye" => speye(20),
+	"sparse_logical" => SparseMatrixCSC{Bool,Int64}(5, 5, [1:6], [1:5], bitunpack(trues(5))),
+	"sparse_random" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]),
+	"sparse_complex" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]*(1. + 1.im)),
+	"sparse_zeros" => SparseMatrixCSC(20, 20, ones(Int, 21), Int[], Float64[])
+})
+
 @test_throws test_write({ "1invalidkey" => "starts with a number" })
 @test_throws test_write({ "another invalid key" => "invalid characters" })
 @test_throws test_write({ "yetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkey" => "too long" })
