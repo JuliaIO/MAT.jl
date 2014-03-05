@@ -102,6 +102,7 @@ end
 const name_type_attr_matlab = "MATLAB_class"
 const empty_attr_matlab = "MATLAB_empty"
 const sparse_attr_matlab = "MATLAB_sparse"
+const int_decode_attr_matlab = "MATLAB_int_decode"
 
 ### Reading
 function read_complex{T}(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{Array{T}})
@@ -264,6 +265,9 @@ function m_writetypeattr(dset, T)
 
     # Write the attribute
     a_write(dset, name_type_attr_matlab, typename)
+    if T == Bool
+        a_write(dset, int_decode_attr_matlab, int32(1))
+    end
 end
 
 # Writes an empty scalar or array
