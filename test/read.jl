@@ -79,7 +79,8 @@ for format in ["v6", "v7", "v7.3"]
 		"simple_string" => "the quick brown fox",
 		"accented_string" => "thé qüîck browñ fòx",
 		"concatenated_strings" => ByteString["this is a string", "this is another string"],
-		"cell_strings" => {"this is a string" "this is another string"}
+		"cell_strings" => {"this is a string" "this is another string"},
+		"empty_string" => ""
 	}
 	check("string.mat", result)
 

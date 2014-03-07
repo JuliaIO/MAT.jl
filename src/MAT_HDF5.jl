@@ -131,8 +131,12 @@ function m_read(dset::HDF5Dataset)
         # Empty arrays encode the dimensions as the dataset
         dims = int(read(dset))
         mattype = a_read(dset, name_type_attr_matlab)
-        T = mattype == "canonical empty" ? None : str2eltype_matlab[mattype]
-        return Array(T, dims...)
+        if mattype == "char"
+            return ""
+        else
+            T = mattype == "canonical empty" ? None : str2eltype_matlab[mattype]
+            return Array(T, dims...)
+        end
     end
 
     mattype = exists(dset, name_type_attr_matlab) ? a_read(dset, name_type_attr_matlab) : "cell"

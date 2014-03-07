@@ -231,7 +231,7 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         # a 2-byte encoding in v6 format, and saves UTF-8 in v7 format. Thus, this may never
         # happen in the wild.
         chars = read(f, Uint8, nbytes)
-        if dimensions[1] == 1
+        if dimensions[1] <= 1
             data = bytestring(chars)
         else
             data = Array(ByteString, dimensions[1])
@@ -244,7 +244,13 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         # However, the first 256 Unicode code points are derived from ISO-8859-1, so UCS-2
         # is a superset of 2-byte ISO-8859-1.
         chars = read_bswap(f, swap_bytes, Uint16, int(div(nbytes, 2)))
-        if dimensions[1] == 1
+        for i = 1:length(chars)
+            if chars[i] > 255
+                # Newer versions of MATLAB seem to write some mongrel UTF-8...
+                chars[i] = bytestring(reverse(reinterpret(Uint8, [chars[i]])))[1]
+            end
+        end
+        if dimensions[1] <= 1
             data = bytestring(CharString(chars))
         else
             data = Array(ByteString, dimensions[1])
