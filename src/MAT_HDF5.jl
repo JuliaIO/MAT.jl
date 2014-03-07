@@ -372,9 +372,8 @@ function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name
         # Write the data
         if isempty(str)
             a_write(dset, empty_attr_matlab, uint8(1))
-        else
-            HDF5.writearray(dset, dtype.id, data)
         end
+        HDF5.writearray(dset, dtype.id, data)
     finally
         close(dset)
         close(dtype)
