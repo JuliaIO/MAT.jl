@@ -42,7 +42,8 @@ test_write({
 	"simple_string" => "the quick brown fox",
 	"accented_string" => "thé qüîck browñ fòx",
 	"concatenated_strings" => ["this is a string", "this is another string"],
-	"cell_strings" => ["this is a string" "this is another string"]
+	"cell_strings" => ["this is a string" "this is another string"],
+	"empty_string" => ""
 })
 
 test_write({

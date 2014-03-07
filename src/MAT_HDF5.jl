@@ -353,11 +353,15 @@ end
 # Write a string
 function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, str::String)
     # Here we assume no UTF-16
-    data = zeros(Uint16, length(str))
-    i = 1
-    for c in str
-        data[i] = c
-        i += 1
+    if isempty(str)
+        data = Uint16[0]
+    else
+        data = zeros(Uint16, length(str))
+        i = 1
+        for c in str
+            data[i] = c
+            i += 1
+        end
     end
 
     # Create the dataset
@@ -366,7 +370,11 @@ function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name
         # Write the attribute
         a_write(dset, name_type_attr_matlab, "char")
         # Write the data
-        HDF5.writearray(dset, dtype.id, data)
+        if isempty(str)
+            a_write(dset, empty_attr_matlab, uint8(1))
+        else
+            HDF5.writearray(dset, dtype.id, data)
+        end
     finally
         close(dset)
         close(dtype)
