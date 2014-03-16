@@ -40,7 +40,7 @@ type Matlabv5File{I<:IO} <: HDF5.DataFile
     Matlabv5File(ios::I, swap_bytes::Bool, subsys_offset) = new(ios, swap_bytes, subsys_offset)
 end
 Matlabv5File{I<:IO}(ios::I, swap_bytes::Bool, subsys_offset) = Matlabv5File{I}(ios, swap_bytes, subsys_offset)
-# TODO: is there a better way to copy and replace the IO? Needed for uncompressed buffers
+# TODO: Remove if/when github.com/JuliaLang/julia/issues/5333 lands for mutables
 function Matlabv5File(matfile::Matlabv5File, f::IO)
     v = Matlabv5File(f, matfile.swap_bytes, 0)
     if isdefined(matfile, :varnames)
@@ -295,18 +295,20 @@ function read_opaque(matfile::Matlabv5File)
     # The second string is the object's class name
     class_name = ascii(read_element(f, swap_bytes, Uint8))
 
-    if class_name == "FileWrapper__"
-        # This is the subsystem implementation
-        data = read_matrix(matfile)[2]
-    else
-        # This is an unnamed array of uint8s: indexes into the subsystem
-        idxs = vec(read_matrix(matfile)[2])
-        idxs[1] == 0xdd00_0000 || error("unknown opaque sentinal value: ", idxs[1])
+    # The subsystem contains a FileWrapper__; an opaque object unlike all others
+    class_name == "FileWrapper__" && return read_matrix(matfile)[2]
 
-        data = idxs
-    end
+    # This is an unnamed array of uint8s: indexes into the subsystem
+    ids = vec(read_matrix(matfile)[2])
+    ids[1] == 0xdd00_0000 || error("unknown opaque sentinal value: ", idxs[1])
+    ids[2] == 2 && ids[3] == ids[4] == 1 || error("unexpected object id values")
+    object_id = ids[5]
+    class_id = ids[6]
 
-    return (class_name, data)
+    obj =  matfile.subsystem["_objects"][object_id]
+    obj["_class"] = matfile.subsystem["_classes"][class_id]
+
+    return obj
 end
 
 # Read matrix data
@@ -406,6 +408,7 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
     matfile
 end
 
+# Undocumented methods for reading the subsystem
 is_subsystem_matfile(x::Any) = false;
 function is_subsystem_matfile{N}(x::Array{Uint8,N})
     N > 2          && return false
@@ -421,7 +424,13 @@ function read_subsystem(matfile::Matlabv5File)
     @assert isempty(name) && is_subsystem_matfile(data) "invalid subsystem"
     @assert eof(matfile.ios) "unread data at end of subsystem"
 
-    read_subsystem_matfile(data);
+    sys = read_subsystem_matfile(data);
+
+    # Parse the FileWrapper__ object - might there be more than one?
+    mcos = sys["_i1"]["MCOS"]
+    sys["_classes"], sys["_objects"] = parse_filewrapper(mcos)
+
+    sys
 end
 
 function read_subsystem_matfile{N}(data::Array{Uint8,N})
@@ -452,6 +461,139 @@ function read_subsystem_matfile{N}(data::Array{Uint8,N})
     close(f)
 
     svars
+end
+
+# Returns a tuple of parsed (classes, objects)
+function parse_filewrapper(mcos::Array{Any})
+    # Parse the first element as an IOBuffer data stream
+    f = IOBuffer(vec(mcos[1]))
+    offsets,strs = parse_filewrapper_header(f)
+    classes = parse_filewrapper_classes(f,strs,offsets)
+    objects = parse_filewrapper_objects(f,strs,mcos,offsets)
+
+    (classes, objects)
+end
+
+function parse_filewrapper_header(f)
+    id = read(f,Uint32) # First element is a version number? Always 2?
+    id == 2 || error("unknown first field (version/id?): ", id)
+
+    n_strs = read(f,Uint32) # Second element is the number of strings
+    offsets = read(f,Uint32,6) # Followed by up to 6 section offsets
+
+    # And two unknown/reserved fields
+    all(read(f,Uint32,2) .== 0) || error("reserved header fields nonzero")
+
+    # The string data section: a stream of null-delimited strings
+    @assert position(f) == 0x28
+    strs = Array(ASCIIString,n_strs)
+    for i = 1:n_strs
+        strs[i] = readuntil(f, '\0')[1:end-1] # drop the trailing null byte
+    end
+
+    (offsets,strs)
+end
+
+function parse_filewrapper_classes(f,strs,offsets)
+    # Class information is a set of four Int32s per class, but the first four
+    # values always seem to be 0. Are they reserved? Or simply never used?
+    seek(f,offsets[1])
+    all(read(f,Int32,4) .== 0) || error("unknown header to class information")
+
+    n = div(offsets[2]-offsets[1],4*4) - 1
+    classes = Array((ASCIIString,ASCIIString),n)
+    for i=1:n
+        package_idx = read(f,Int32)
+        package = package_idx > 0 ? strs[package_idx] : ""
+        name_idx = read(f,Int32)
+        name = name_idx > 0 ? strs[name_idx] : ""
+        all(read(f,Uint32,2) .== 0) || error("discovered a nonzero class property for ",name)
+        classes[i] = (package, name)
+    end
+    @assert position(f) == offsets[2]
+
+    classes
+end
+
+function parse_filewrapper_objects(f,names,heap,offsets)
+    seek(f,offsets[2])
+    seg2_props = parse_filewrapper_props(f,names,heap,offsets[3])
+
+    seek(f,offsets[3])
+    # Again, first set of elements are all zero
+    all(read(f,Int32,6) .== 0) || error("unknown header to object information")
+
+    n = div(offsets[4]-position(f),6*4)
+    # 6 values per obj: class_idx, unknown, unknown, seg2_idx, seg4_idx, obj_id
+    object_info = Array(Int32,6,n)
+    read(f,object_info)
+    object_info = object_info.' # Transpose to column-major
+    @assert all(object_info[:,2:3] .== 0) "discovered a nonzero unknown object property"
+
+    @assert position(f) == offsets[4]
+    seg4_props = parse_filewrapper_props(f,names,heap,offsets[5])
+
+    objects = Array(Dict{ASCIIString,Any},n)
+    for i=1:n
+        class_idx = object_info[i,1]
+        seg2_idx, seg4_idx = object_info[i,4:5]
+        obj_id = object_info[i,6]
+
+        if seg2_idx > 0 && seg4_idx == 0
+            props = seg2_props[seg2_idx]
+        elseif seg4_idx > 0 && seg2_idx == 0
+            props = seg4_props[seg4_idx]
+        else
+            error("unable to find property for object with id ", obj_id)
+        end
+
+        # Merge it with the matfile defaults for this class
+        @assert obj_id <= n "obj_ids are assumed to be continuous"
+        objects[obj_id] = merge(heap[end][class_idx+1],props)
+    end
+    objects
+end
+
+function parse_filewrapper_props(f,names,heap,section_end)
+    props = Array(Dict{ASCIIString,Any},0)
+    position(f) >= section_end && return props
+
+    # Another first element that's always zero; reserved? or ignored?
+    all(read(f,Int32,2) .== 0) || error("unknown header to properties segment")
+
+    # We have to guess on the array size; 8 int32s would be 2 props per object
+    sizehint(props,iceil((section_end-position(f))/(8*4)))
+
+    while position(f) < section_end
+        # For each object, there is first an Int32 for the number of properties
+        nprops = read(f,Int32)
+        d = Dict{ASCIIString,Any}()
+        sizehint(d,nprops)
+        for i=1:nprops
+            # And then three Int32s for each property
+            name  = names[read(f,Int32)]
+            flag  = read(f,Int32) # A flag describing how the value is used
+            value = read(f,Int32)
+
+            if flag == 0  # The prop is stored in the names array
+                d[name] = names[value]
+            elseif flag == 1 # The prop is stored in the MCOS FileWrapper__ heap
+                d[name] = heap[value+3] # But… it's off by 3!? Crazy.
+            elseif flag == 2 # The prop is a boolean, and it's the value itself
+                @assert 0 <= value <= 1 "boolean flag has a value other than 0 or 1"
+                d[name] = bool(value)
+            else
+                error("unknown flag ",flag," for property ",name," with value ",value)
+            end
+        end
+        push!(props,d)
+
+        # Jump to the next 8-byte aligned offset
+        if position(f) % 8 != 0
+            seek(f,iceil(position(f)/8)*8)
+        end
+    end
+    props
 end
 
 # Read whole MAT file
