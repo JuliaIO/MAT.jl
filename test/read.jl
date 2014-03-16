@@ -140,5 +140,18 @@ for format in ["v6", "v7", "v7.3"]
 	var2 = read(matfile, "var2")
 	@assert var2[27, 90] == 10
 	close(matfile)
-
+    
+    if format != "v7.3"
+        # Class tests, not implemented for v7.3 yet
+        result = {
+            "s" => (ASCIIString=>Any)[
+                "char_field_1" => "char_field",
+                "array_field_2" => [0.0 1.0 2.0 3.0 4.0 5.0],
+                "cell_field_3" => {1.0  "one"  2.0  "two"},
+                "_class" => ("", "SimpleClass")
+            ]
+        }
+        check("simpleclass.mat", result)
+    end
+    
 end
