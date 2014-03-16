@@ -647,8 +647,8 @@ function getvarnames(matfile::Matlabv5File)
                 error("Unexpected data type")
             end
 
-            read_element(f, matfile.swap_bytes, Uint32)
-            read_element(f, matfile.swap_bytes, Int32)
+            class = read_element(f, matfile.swap_bytes, Uint32)[1] & 0xFF
+            (class != mxOPAQUE_CLASS) && read_element(f, matfile.swap_bytes, Int32)
             varnames[ascii(read_element(f, matfile.swap_bytes, Uint8))] = offset
 
             if dtype == miCOMPRESSED
