@@ -298,16 +298,35 @@ function read_opaque(matfile::Matlabv5File)
     # The subsystem contains a FileWrapper__; an opaque object unlike all others
     class_name == "FileWrapper__" && return read_matrix(matfile)[2]
 
-    # This is an unnamed array of uint8s: indexes into the subsystem
-    ids = vec(read_matrix(matfile)[2])
+    # This is an unnamed array of uint32s: indexes into the subsystem
+    ids = read_matrix(matfile)[2]
     ids[1] == 0xdd00_0000 || error("unknown opaque sentinal value: ", idxs[1])
-    ids[2] == 2 && ids[3] == ids[4] == 1 || error("unexpected object id values")
-    object_id = ids[5]
-    class_id = ids[6]
-
-    obj =  matfile.subsystem["_objects"][object_id]
+    ndims = ids[2]
+    dims = ids[3:2+ndims]
+    n_el = isempty(dims) ? 0 : prod(dims)
+    object_ids = ids[3+ndims:2+ndims+n_el]
+    class_id = ids[3+ndims+n_el]
+    @assert 3+ndims+n_el == length(ids) "unexpected data at end of opaque id"
+    
+    # Return like a struct or struct array
+    obj = Dict{ASCIIString,Any}()
     obj["_class"] = matfile.subsystem["_classes"][class_id]
-
+    if n_el == 1
+        obj = merge!(obj,matfile.subsystem["_objects"][object_ids[1]])
+    elseif n_el > 1
+        # Multiple objects as a dict of arrays, use the first as a template?
+        fields = keys(matfile.subsystem["_objects"][object_ids[1]])
+        for fld in fields
+            obj[fld] = cell(dims...)
+        end
+        for i = 1:n_el
+            sys_obj = matfile.subsystem["_objects"][object_ids[i]]
+            for fld in fields
+                obj[fld][i] = sys_obj[fld]
+            end
+        end
+    end
+    
     return obj
 end
 

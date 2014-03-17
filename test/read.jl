@@ -149,8 +149,30 @@ for format in ["v6", "v7", "v7.3"]
                 "array_field_2" => [0.0 1.0 2.0 3.0 4.0 5.0],
                 "cell_field_3" => {1.0  "one"  2.0  "two"},
                 "_class" => ("", "SimpleClass")
+            ],
+            "empty" => (ASCIIString=>Any)[
+                "_class" => ("", "SimpleClass")
+            ],
+            "array" => (ASCIIString=>Any)[
+                "char_field_1" => {"one" "two" "three"},
+                "array_field_2" => {[1.0 0.0] [2.0 2.0] [3.0 3.0 3.0]},
+                "cell_field_3" => {{1.0 0.0} {2.0 2.0} {3.0 3.0 3.0}},
+                "_class" => ("", "SimpleClass")
+            ],
+            "threed" => (ASCIIString=>Any)[
+                "char_field_1" => cell(1,1,2),
+                "array_field_2" => cell(1,1,2),
+                "cell_field_3" => cell(1,1,2),
+                "_class" => ("", "SimpleClass")
             ]
         }
+        result["threed"]["char_field_1"][1] = "one one one"
+        result["threed"]["array_field_2"][1] = [1.0 1.0 1.0]
+        result["threed"]["cell_field_3"][1] = {1.0 1.0 1.0}
+        result["threed"]["char_field_1"][2] = "one one two"
+        result["threed"]["array_field_2"][2] = [1.0 1.0 2.0]
+        result["threed"]["cell_field_3"][2] = {1.0 1.0 2.0}
+        
         check("simpleclass.mat", result)
     end
     
