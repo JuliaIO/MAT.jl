@@ -30,12 +30,26 @@ using Zlib, HDF5
 import Base: read, write, close
 import HDF5: names, exists
 
-type Matlabv5File <: HDF5.DataFile
-    ios::IOStream
+type Matlabv5File{I<:IO} <: HDF5.DataFile
+    ios::I
     swap_bytes::Bool
+    subsys_offset::FileOffset
     varnames::Dict{ASCIIString, FileOffset}
+    subsystem::Dict{ASCIIString, Any}
 
-    Matlabv5File(ios, swap_bytes) = new(ios, swap_bytes)
+    Matlabv5File(ios::I, swap_bytes::Bool, subsys_offset) = new(ios, swap_bytes, subsys_offset)
+end
+Matlabv5File{I<:IO}(ios::I, swap_bytes::Bool, subsys_offset) = Matlabv5File{I}(ios, swap_bytes, subsys_offset)
+# TODO: Remove if/when github.com/JuliaLang/julia/issues/5333 lands for mutables
+function Matlabv5File(matfile::Matlabv5File, f::IO)
+    v = Matlabv5File(f, matfile.swap_bytes, 0)
+    if isdefined(matfile, :varnames)
+        v.varnames = matfile.varnames
+    end
+    if isdefined(matfile, :subsystem)
+        v.subsystem = matfile.subsystem
+    end
+    v
 end
 
 const miINT8 = 1
@@ -68,14 +82,18 @@ const mxINT32_CLASS = 12
 const mxUINT32_CLASS = 13
 const mxINT64_CLASS = 14
 const mxUINT64_CLASS = 15
+const mxFUNCTION_CLASS = 16 # undocumented (function handles)
+const mxOPAQUE_CLASS = 17   # undocumented (classdef objects)
 const READ_TYPES = Type[Int8, Uint8, Int16, Uint16, Int32, Uint32, Float32, None, Float64,
-    None, None, Int64, Uint64]
+    None, None, Int64, Uint64, Uint8, Uint8]
 const CONVERT_TYPES = Type[None, None, None, None, None, Float64, Float32, Int8, Uint8,
-    Int16, Uint16, Int32, Uint32, Int64, Uint64]
+    Int16, Uint16, Int32, Uint32, Int64, Uint64, None, None]
 
-read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}) = 
+const SUBSYS_HEADER_PADDING = 120
+
+read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}) =
     swap_bytes ? bswap(read(f, T)) : read(f, T)
-read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union(Int, (Int...))) = 
+read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union(Int, (Int...))) =
     swap_bytes ? [bswap(x) for x in read(f, T, dim)] : read(f, T, dim)
 
 skip_padding(f::IO, nbytes::Int64, hbytes::Int) = if nbytes % hbytes != 0
@@ -133,15 +151,16 @@ function read_data{T}(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int
     read_array ? convert(Array{T}, data) : convert(T, data)
 end
 
-function read_cell(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
+function read_cell(matfile::Matlabv5File, dimensions::Vector{Int32})
     data = cell(int(dimensions)...)
     for i = 1:length(data)
-        (ignored_name, data[i]) = read_matrix(f, swap_bytes)
+        (ignored_name, data[i]) = read_matrix(matfile)
     end
     data
 end
 
-function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_object::Bool)
+function read_struct(matfile::Matlabv5File, dimensions::Vector{Int32}, is_object::Bool)
+    f, swap_bytes = matfile.ios, matfile.swap_bytes
     field_length = read_element(f, swap_bytes, Int32)[1]
     field_names = read_element(f, swap_bytes, Uint8)
     n_fields = div(length(field_names), field_length)
@@ -168,7 +187,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
     if n_el == 1
         # Read a single struct into a dict
         for field_name in field_name_strings
-            data[field_name] = read_matrix(f, swap_bytes)[2]
+            data[field_name] = read_matrix(matfile)[2]
         end
     else
         # Read multiple structs into a dict of arrays
@@ -177,7 +196,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
         end
         for i = 1:n_el
             for field_name in field_name_strings
-                data[field_name][i] = read_matrix(f, swap_bytes)[2]
+                data[field_name][i] = read_matrix(matfile)[2]
             end
         end
     end
@@ -192,7 +211,8 @@ function plusone!(A)
     A
 end
 
-function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::Vector{Uint32})
+function read_sparse(matfile::Matlabv5File, dimensions::Vector{Int32}, flags::Vector{Uint32})
+    f, swap_bytes = matfile.ios, matfile.swap_bytes
     local m::Int, n::Int
     if length(dimensions) == 2
         (m, n) = dimensions
@@ -223,7 +243,8 @@ function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::
     SparseMatrixCSC(m, n, jc, ir, pr)
 end
 
-function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
+function read_string(matfile::Matlabv5File, dimensions::Vector{Int32})
+    f, swap_bytes = matfile.ios, matfile.swap_bytes
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     if dtype <= 2 || dtype == 16
         # If dtype <= 2, this may give an error on non-ASCII characters, since the string
@@ -265,20 +286,65 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
     data
 end
 
+function read_opaque(matfile::Matlabv5File)
+    f, swap_bytes = matfile.ios, matfile.swap_bytes
+    # This is undocumented. There are two strings followed by an array
+    # The first string is always (?) MCOS: "Matlab Common/Class Object System"
+    class_system = ascii(read_element(f, swap_bytes, Uint8))
+    class_system == "MCOS" || error("unknown opaque class system: ", class_system)
+    # The second string is the object's class name
+    class_name = ascii(read_element(f, swap_bytes, Uint8))
+
+    # The subsystem contains a FileWrapper__; an opaque object unlike all others
+    class_name == "FileWrapper__" && return read_matrix(matfile)[2]
+
+    # This is an unnamed array of uint32s: indexes into the subsystem
+    ids = read_matrix(matfile)[2]
+    ids[1] == 0xdd00_0000 || error("unknown opaque sentinal value: ", idxs[1])
+    ndims = ids[2]
+    dims = ids[3:2+ndims]
+    n_el = isempty(dims) ? 0 : prod(dims)
+    object_ids = ids[3+ndims:2+ndims+n_el]
+    class_id = ids[3+ndims+n_el]
+    @assert 3+ndims+n_el == length(ids) "unexpected data at end of opaque id"
+    
+    # Return like a struct or struct array
+    obj = Dict{ASCIIString,Any}()
+    obj["_class"] = matfile.subsystem["_classes"][class_id]
+    if n_el == 1
+        obj = merge!(obj,matfile.subsystem["_objects"][object_ids[1]])
+    elseif n_el > 1
+        # Multiple objects as a dict of arrays, use the first as a template?
+        fields = keys(matfile.subsystem["_objects"][object_ids[1]])
+        for fld in fields
+            obj[fld] = cell(dims...)
+        end
+        for i = 1:n_el
+            sys_obj = matfile.subsystem["_objects"][object_ids[i]]
+            for fld in fields
+                obj[fld][i] = sys_obj[fld]
+            end
+        end
+    end
+    
+    return obj
+end
+
 # Read matrix data
-function read_matrix(f::IO, swap_bytes::Bool)
+function read_matrix(matfile::Matlabv5File)
+    f, swap_bytes = matfile.ios, matfile.swap_bytes
     (dtype, nbytes) = read_header(f, swap_bytes)
     if dtype == miCOMPRESSED
         bytes = decompress(read(f, Uint8, nbytes))
-        mi = IOBuffer(bytes)
-        output = read_matrix(mi, swap_bytes)
+        mi = Matlabv5File(matfile,IOBuffer(bytes))
+        output = read_matrix(mi)
         close(mi)
         return output
     elseif dtype != miMATRIX
         error("Unexpected data type")
     elseif nbytes == 0
         # If one creates a cell array using
-        #     y = cell(m, n)
+        #     y = cell(matfile, n)
         # then MATLAB will save the empty cells as zero-byte matrices. If one creates a
         # empty cells using
         #     a = {[], [], []}
@@ -288,19 +354,25 @@ function read_matrix(f::IO, swap_bytes::Bool)
     end
 
     flags = read_element(f, swap_bytes, Uint32)
-    dimensions = read_element(f, swap_bytes, Int32)
+    class = flags[1] & 0xFF
+    # Opaque objects are dimensionless
+    dimensions = (class == mxOPAQUE_CLASS) ? Int32[] : read_element(f, swap_bytes, Int32)
     name = ascii(read_element(f, swap_bytes, Uint8))
 
-    class = flags[1] & 0xFF
     local data
     if class == mxCELL_CLASS
-        data = read_cell(f, swap_bytes, dimensions)
+        data = read_cell(matfile, dimensions)
     elseif class == mxSTRUCT_CLASS || class == mxOBJECT_CLASS
-        data = read_struct(f, swap_bytes, dimensions, class == mxOBJECT_CLASS)
+        data = read_struct(matfile, dimensions, class == mxOBJECT_CLASS)
     elseif class == mxSPARSE_CLASS
-        data = read_sparse(f, swap_bytes, dimensions, flags)
+        data = read_sparse(matfile, dimensions, flags)
     elseif class == mxCHAR_CLASS && length(dimensions) <= 2
-        data = read_string(f, swap_bytes, dimensions)
+        data = read_string(matfile, dimensions)
+    elseif class == mxFUNCTION_CLASS
+        # Unnamed submatrix with a struct of function implementation details
+        data = read_matrix(matfile)[2]
+    elseif class == mxOPAQUE_CLASS
+        data = read_opaque(matfile)
     else
         convert_type = CONVERT_TYPES[class]
         data = read_data(f, swap_bytes, convert_type, dimensions)
@@ -322,7 +394,10 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
 
     ios = open(filename, "r")
     header = read(ios, Uint8, 116)
-    skip(ios, 8)
+    subsys_offset = read(ios, Uint64)
+    if subsys_offset == 0x2020_2020_2020_2020
+        subsys_offset = zero(subsys_offset)
+    end
     version = read(ios, Uint16)
     endian_indicator = read(ios, Uint16)
 
@@ -342,17 +417,215 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
         error("Unsupported MATLAB file version")
     end
 
-    return Matlabv5File(ios, swap_bytes)
+    matfile = Matlabv5File(ios, swap_bytes, subsys_offset)
+
+    if subsys_offset > 0
+        seek(ios, subsys_offset)
+        matfile.subsystem = read_subsystem(matfile)
+    end
+
+    matfile
+end
+
+# Undocumented methods for reading the subsystem
+is_subsystem_matfile(x::Any) = false;
+function is_subsystem_matfile{N}(x::Array{Uint8,N})
+    N > 2          && return false
+    length(x) < 12 && return false
+
+    # Check first 4 characters in either endianness
+    (x[1:4] == [0x00,0x01,0x49,0x4d] || x[1:4] == [0x01,0x00,0x4d,0x49])
+end
+
+function read_subsystem(matfile::Matlabv5File)
+    # Read the final, unnamed matrix hidden at the end of the file
+    name, data = read_matrix(matfile)
+    @assert isempty(name) && is_subsystem_matfile(data) "invalid subsystem"
+    @assert eof(matfile.ios) "unread data at end of subsystem"
+
+    sys = read_subsystem_matfile(data);
+
+    # Parse the FileWrapper__ object - might there be more than one?
+    mcos = sys["_i1"]["MCOS"]
+    sys["_classes"], sys["_objects"] = parse_filewrapper(mcos)
+
+    sys
+end
+
+function read_subsystem_matfile{N}(data::Array{Uint8,N})
+    # A Matfile is stored within this matrix's data
+    f = IOBuffer(vec(data))
+    # Check endianness and versioning.
+    seek(f,2)
+    endian_flag = read(f,Uint16)
+    swap_bytes = endian_flag == 0x494D
+    @assert swap_bytes || endian_flag == 0x4D49 "unknown endian flags in subsystem"
+    seek(f,0)
+    @assert read_bswap(f,swap_bytes,Uint16) == 0x0100 "unsupported MATLAB file version in subsystem"
+    seek(f,8)
+
+    matfile = Matlabv5File(f,swap_bytes,0);
+    svars = Dict{ASCIIString,Any}()
+    i=0;
+    while !eof(matfile.ios)
+        name,data = read_matrix(matfile)
+
+        if isempty(name) && is_subsystem_matfile(data)
+            # There are sometimes nested subsystems? Are they ever non-empty?
+            data = read_subsystem_matfile(data)
+        end
+        name = isempty(name) ? "_i$(i+=1)" : name;
+        svars[name] = data
+    end
+    close(f)
+
+    svars
+end
+
+# Returns a tuple of parsed (classes, objects)
+function parse_filewrapper(mcos::Array{Any})
+    # Parse the first element as an IOBuffer data stream
+    f = IOBuffer(vec(mcos[1]))
+    offsets,strs = parse_filewrapper_header(f)
+    classes = parse_filewrapper_classes(f,strs,offsets)
+    objects = parse_filewrapper_objects(f,strs,mcos,offsets)
+
+    (classes, objects)
+end
+
+function parse_filewrapper_header(f)
+    id = read(f,Uint32) # First element is a version number? Always 2?
+    id == 2 || error("unknown first field (version/id?): ", id)
+
+    n_strs = read(f,Uint32) # Second element is the number of strings
+    offsets = read(f,Uint32,6) # Followed by up to 6 section offsets
+
+    # And two unknown/reserved fields
+    all(read(f,Uint32,2) .== 0) || error("reserved header fields nonzero")
+
+    # The string data section: a stream of null-delimited strings
+    @assert position(f) == 0x28
+    strs = Array(ASCIIString,n_strs)
+    for i = 1:n_strs
+        strs[i] = readuntil(f, '\0')[1:end-1] # drop the trailing null byte
+    end
+
+    (offsets,strs)
+end
+
+function parse_filewrapper_classes(f,strs,offsets)
+    # Class information is a set of four Int32s per class, but the first four
+    # values always seem to be 0. Are they reserved? Or simply never used?
+    seek(f,offsets[1])
+    all(read(f,Int32,4) .== 0) || error("unknown header to class information")
+
+    n = div(offsets[2]-offsets[1],4*4) - 1
+    classes = Array((ASCIIString,ASCIIString),n)
+    for i=1:n
+        package_idx = read(f,Int32)
+        package = package_idx > 0 ? strs[package_idx] : ""
+        name_idx = read(f,Int32)
+        name = name_idx > 0 ? strs[name_idx] : ""
+        all(read(f,Uint32,2) .== 0) || error("discovered a nonzero class property for ",name)
+        classes[i] = (package, name)
+    end
+    @assert position(f) == offsets[2]
+
+    classes
+end
+
+function parse_filewrapper_objects(f,names,heap,offsets)
+    seek(f,offsets[2])
+    seg2_props = parse_filewrapper_props(f,names,heap,offsets[3])
+
+    seek(f,offsets[3])
+    # Again, first set of elements are all zero
+    all(read(f,Int32,6) .== 0) || error("unknown header to object information")
+
+    n = div(offsets[4]-position(f),6*4)
+    # 6 values per obj: class_idx, unknown, unknown, seg2_idx, seg4_idx, obj_id
+    object_info = Array(Int32,6,n)
+    read(f,object_info)
+    object_info = object_info.' # Transpose to column-major
+    @assert all(object_info[:,2:3] .== 0) "discovered a nonzero unknown object property"
+
+    @assert position(f) == offsets[4]
+    seg4_props = parse_filewrapper_props(f,names,heap,offsets[5])
+
+    objects = Array(Dict{ASCIIString,Any},n)
+    for i=1:n
+        class_idx = object_info[i,1]
+        seg2_idx, seg4_idx = object_info[i,4:5]
+        obj_id = object_info[i,6]
+
+        if seg2_idx > 0 && seg4_idx == 0
+            props = seg2_props[seg2_idx]
+        elseif seg4_idx > 0 && seg2_idx == 0
+            props = seg4_props[seg4_idx]
+        else
+            error("unable to find property for object with id ", obj_id)
+        end
+
+        # Merge it with the matfile defaults for this class
+        @assert obj_id <= n "obj_ids are assumed to be continuous"
+        objects[obj_id] = merge(heap[end][class_idx+1],props)
+    end
+    objects
+end
+
+function parse_filewrapper_props(f,names,heap,section_end)
+    props = Array(Dict{ASCIIString,Any},0)
+    position(f) >= section_end && return props
+
+    # Another first element that's always zero; reserved? or ignored?
+    all(read(f,Int32,2) .== 0) || error("unknown header to properties segment")
+
+    # We have to guess on the array size; 8 int32s would be 2 props per object
+    sizehint(props,iceil((section_end-position(f))/(8*4)))
+
+    while position(f) < section_end
+        # For each object, there is first an Int32 for the number of properties
+        nprops = read(f,Int32)
+        d = Dict{ASCIIString,Any}()
+        sizehint(d,nprops)
+        for i=1:nprops
+            # And then three Int32s for each property
+            name  = names[read(f,Int32)]
+            flag  = read(f,Int32) # A flag describing how the value is used
+            value = read(f,Int32)
+
+            if flag == 0  # The prop is stored in the names array
+                d[name] = names[value]
+            elseif flag == 1 # The prop is stored in the MCOS FileWrapper__ heap
+                d[name] = heap[value+3] # But… it's off by 3!? Crazy.
+            elseif flag == 2 # The prop is a boolean, and it's the value itself
+                @assert 0 <= value <= 1 "boolean flag has a value other than 0 or 1"
+                d[name] = bool(value)
+            else
+                error("unknown flag ",flag," for property ",name," with value ",value)
+            end
+        end
+        push!(props,d)
+
+        # Jump to the next 8-byte aligned offset
+        if position(f) % 8 != 0
+            seek(f,iceil(position(f)/8)*8)
+        end
+    end
+    props
 end
 
 # Read whole MAT file
 function read(matfile::Matlabv5File)
     seek(matfile.ios, 128)
     vars = Dict{ASCIIString, Any}()
-    while !eof(matfile.ios)
-        (name, data) = read_matrix(matfile.ios, matfile.swap_bytes)
+    i = 0;
+    while !eof(matfile.ios) && (matfile.subsys_offset==0 || position(matfile.ios) < matfile.subsys_offset)
+        (name, data) = read_matrix(matfile)
+        name = isempty(name) ? "_i$(i+=1)" : name;
         vars[name] = data
     end
+
     vars
 end
 
@@ -361,7 +634,7 @@ function getvarnames(matfile::Matlabv5File)
     if !isdefined(matfile, :varnames)
         seek(matfile.ios, 128)
         matfile.varnames = varnames = Dict{ASCIIString, FileOffset}()
-        while !eof(matfile.ios)
+        while !eof(matfile.ios) && (matfile.subsys_offset==0 || position(matfile.ios) < matfile.subsys_offset)
             offset = position(matfile.ios)
             (dtype, nbytes, hbytes) = read_header(matfile.ios, matfile.swap_bytes)
             if dtype == miCOMPRESSED
@@ -393,8 +666,8 @@ function getvarnames(matfile::Matlabv5File)
                 error("Unexpected data type")
             end
 
-            read_element(f, matfile.swap_bytes, Uint32)
-            read_element(f, matfile.swap_bytes, Int32)
+            class = read_element(f, matfile.swap_bytes, Uint32)[1] & 0xFF
+            (class != mxOPAQUE_CLASS) && read_element(f, matfile.swap_bytes, Int32)
             varnames[ascii(read_element(f, matfile.swap_bytes, Uint8))] = offset
 
             if dtype == miCOMPRESSED
@@ -421,7 +694,7 @@ function read(matfile::Matlabv5File, varname::ASCIIString)
         error("no variable $varname in file")
     end
     seek(matfile.ios, varnames[varname])
-    (name, data) = read_matrix(matfile.ios, matfile.swap_bytes)
+    (name, data) = read_matrix(matfile)
     data
 end
 
