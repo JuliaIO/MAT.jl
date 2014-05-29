@@ -244,19 +244,26 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         # However, the first 256 Unicode code points are derived from ISO-8859-1, so UCS-2
         # is a superset of 2-byte ISO-8859-1.
         chars = read_bswap(f, swap_bytes, Uint16, int(div(nbytes, 2)))
-        for i = 1:length(chars)
-            if chars[i] > 255
-                # Newer versions of MATLAB seem to write some mongrel UTF-8...
-                chars[i] = bytestring(reverse(reinterpret(Uint8, [chars[i]])))[1]
+        bufs = [IOBuffer() for i = 1:dimensions[1]]
+        i = 1
+        while i <= length(chars)
+            for j = 1:dimensions[1]
+                char = convert(Char, chars[i])
+                if char > 255
+                    # Newer versions of MATLAB seem to write some mongrel UTF-8...
+                    char = bytestring([uint8(chars[i] >> 8), uint8(chars[i])])[1]
+                end
+                write(bufs[j], char)
+                i += 1
             end
         end
-        if dimensions[1] <= 1
-            data = bytestring(CharString(chars))
+
+        if dimensions[1] == 0
+            data = ""
+        elseif dimensions[1] == 1
+            data = bytestring(bufs[1])
         else
-            data = Array(ByteString, dimensions[1])
-            for i = 1:dimensions[1]
-                data[i] = rstrip(bytestring(CharString(chars[i:dimensions[1]:end])))
-            end
+            data = [rstrip(bytestring(buf)) for buf in bufs]
         end
     else
         error("Unsupported string type")
