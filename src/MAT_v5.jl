@@ -75,8 +75,15 @@ const CONVERT_TYPES = Type[None, None, None, None, None, Float64, Float32, Int8,
 
 read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}) = 
     swap_bytes ? bswap(read(f, T)) : read(f, T)
-read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union(Int, (Int...))) = 
-    swap_bytes ? [bswap(x) for x in read(f, T, dim)] : read(f, T, dim)
+function read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union(Int, (Int...)))
+    d = read(f, T, dim)
+    if swap_bytes
+        for i = 1:length(d)
+            @inbounds d[i] = bswap(d[i])
+        end
+    end
+    d
+end
 
 skip_padding(f::IO, nbytes::Int64, hbytes::Int) = if nbytes % hbytes != 0
     skip(f, hbytes-(nbytes % hbytes))
