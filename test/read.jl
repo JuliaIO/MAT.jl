@@ -5,7 +5,7 @@ function check(filename, result)
 	for (k, v) in result
 		@test exists(matfile, k)
 		got = read(matfile, k)
-		if !isequal(got, v) || typeof(got) != typeof(v)
+		if !isequal(got, v) || (typeof(got) != typeof(v) && (!isa(got, ByteString) || !(isa(v, ByteString))))
 			close(matfile)
 			error("""
 				Data mismatch reading $k from $filename ($format)

@@ -539,9 +539,9 @@ function read(obj::HDF5Object, ::Type{MatlabString})
         data = reshape(data, sz[2:end])
     end
     if ndims(data) == 1
-        return bytestring(utf16(data))
+        return utf8(convert(Vector{Char}, data))
     elseif ndims(data) == 2
-        return datap = ByteString[rstrip(bytestring(utf16(reshape(data[i, :], size(data,2))))) for i = 1:size(data, 1)]
+        return datap = ByteString[rstrip(utf8(convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
     else
         return data
     end
