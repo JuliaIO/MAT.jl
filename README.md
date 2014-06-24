@@ -47,7 +47,7 @@ To write a Dict to a MAT file, using its keys as variable names:
 
 ```julia
 matwrite("matfile.mat", {
-	"myvar1" => 0
+	"myvar1" => 0,
 	"myvar2" => 1
 })
 ```
