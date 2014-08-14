@@ -373,6 +373,7 @@ function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name
         if isempty(str)
             a_write(dset, empty_attr_matlab, uint8(1))
         end
+        a_write(dset, int_decode_attr_matlab, int32(2))
         HDF5.writearray(dset, dtype.id, data)
     finally
         close(dset)
