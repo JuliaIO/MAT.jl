@@ -52,6 +52,24 @@ matwrite("matfile.mat", {
 })
 ```
 
+To get a list of variable names in a MAT file:
+
+```julia
+file = matopen("matfile.mat")
+varnames = names(file)
+close(file)
+```
+
+To check for the presence of a variable name in a MAT file:
+
+```julia
+file = matopen("matfile.mat")
+if exists(file, "variable")
+    # something
+end
+close(file)
+```
+
 ## Caveats
 
 * All files are written in MATLAB v7.3 format.
