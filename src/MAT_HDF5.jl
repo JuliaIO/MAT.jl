@@ -28,7 +28,7 @@
 
 module MAT_HDF5
 using HDF5
-import Base: read, write, close
+import Base: read, write, close, getindex, setindex!
 import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
 
 type MatlabHDF5File <: HDF5.DataFile
@@ -241,6 +241,9 @@ function read(f::MatlabHDF5File, name::ASCIIString)
     end
     val
 end
+
+getindex(f::MatlabHDF5File, name::ASCIIString) = read(f, name)
+getindex(f::MatlabHDF5File, name::Symbol) = read(f, string(name))
 
 names(f::MatlabHDF5File) = filter!(x->x != "#refs#", names(f.plain))
 exists(p::MatlabHDF5File, path::ASCIIString) = exists(p.plain, path)
@@ -479,6 +482,9 @@ function write(parent::MatlabHDF5File, name::ByteString, thing)
     check_valid_varname(name)
     m_write(parent, parent.plain, name, thing)
 end
+
+setindex!(parent::MatlabHDF5File, thing, name::ByteString) = write(parent, name, thing)
+setindex!(parent::MatlabHDF5File, thing, name::Symbol) = write(parent, string(name), thing)
 
 ## Type conversion operations ##
 
