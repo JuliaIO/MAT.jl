@@ -77,9 +77,9 @@ test_write({
 	"sparse_zeros" => SparseMatrixCSC(20, 20, ones(Int, 21), Int[], Float64[])
 })
 
-@test_throws test_write({ "1invalidkey" => "starts with a number" })
-@test_throws test_write({ "another invalid key" => "invalid characters" })
-@test_throws test_write({ "yetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkey" => "too long" })
+@test_throws ErrorException test_write({ "1invalidkey" => "starts with a number" })
+@test_throws ErrorException test_write({ "another invalid key" => "invalid characters" })
+@test_throws ErrorException test_write({ "yetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkey" => "too long" })
 
 type TestCompositeKind
 	field1::String
@@ -94,5 +94,5 @@ close(fid)
 
 
 fid = matopen(tmpfile, "w")
-@test_throws write(fid, "1invalidvarname", "1invalidvarvalue")
+@test_throws ErrorException write(fid, "1invalidvarname", "1invalidvarvalue")
 close(fid)

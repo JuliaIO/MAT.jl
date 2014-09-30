@@ -342,9 +342,9 @@ function m_write{T}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), n
         a_write(g, sparse_attr_matlab, uint64(size(data, 1)))
         if !isempty(data.nzval)
             close(m_writearray(g, "data", toarray(data.nzval)))
-            close(m_writearray(g, "ir", add!(isa(data.rowval, Vector{Uint64}) ? copy(data.rowval) : uint64(data.rowval), -1)))
+            close(m_writearray(g, "ir", add!(isa(data.rowval, Vector{Uint64}) ? copy(data.rowval) : uint64(data.rowval), reinterpret(Uint64, int64(-1)))))
         end
-        close(m_writearray(g, "jc", add!(isa(data.colptr, Vector{Uint64}) ? copy(data.colptr) : uint64(data.colptr), -1)))
+        close(m_writearray(g, "jc", add!(isa(data.colptr, Vector{Uint64}) ? copy(data.colptr) : uint64(data.colptr), reinterpret(Uint64, int64(-1)))))
     finally
         close(g)
     end
