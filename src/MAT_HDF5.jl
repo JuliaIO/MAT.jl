@@ -27,6 +27,16 @@
 ###########################################
 
 module MAT_HDF5
+if VERSION < v"0.4.0-dev+980"
+    macro Dict(pairs...)
+        esc(Expr(:dict, pairs...))
+    end
+else
+    macro Dict(pairs...)
+        esc(Expr(:call, :Dict, pairs...))
+    end
+end
+
 using HDF5
 import Base: read, write, close
 import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
@@ -163,11 +173,13 @@ function m_read(dset::HDF5Dataset)
 
     # Check for a COMPOUND data set, and if so handle complex numbers specially
     dtype = datatype(dset)
-    class_id = HDF5.h5t_get_class(dtype.id)
-    d = class_id == HDF5.H5T_COMPOUND ? read_complex(dtype, dset, T) : read(dset, T)
-    
-    close(dtype)
-    length(d) == 1 ? d[1] : d
+    try
+        class_id = HDF5.h5t_get_class(dtype.id)
+        d = class_id == HDF5.H5T_COMPOUND ? read_complex(dtype, dset, T) : read(dset, T)
+        length(d) == 1 ? d[1] : d
+    finally
+        close(dtype)
+    end
 end
 
 function add!(A, x)
@@ -313,6 +325,8 @@ function m_writearray{T<:Union(HDF5BitsKind,Bool)}(parent::Union(HDF5File, HDF5G
         catch e
             close(dset)
             rethrow(e)
+        finally
+            close(stype)
         end
         dset
     finally
@@ -484,7 +498,7 @@ end
 
 type MatlabString; end
 
-const str2type_matlab = [
+const str2type_matlab = @Dict(
     "canonical empty" => nothing,
     "int8"    => Array{Int8},
     "uint8"   => Array{Uint8},
@@ -499,9 +513,9 @@ const str2type_matlab = [
     "cell"    => Array{Any},
     "char"    => MatlabString,
     "logical" => Array{Bool}
-]
+)
 # These operate on the element type rather than the whole type
-const str2eltype_matlab = [
+const str2eltype_matlab = @Dict(
     "canonical empty" => nothing,
     "int8"    => Int8,
     "uint8"   => Uint8,
@@ -516,8 +530,8 @@ const str2eltype_matlab = [
     "cell"    => Any,
     "char"    => MatlabString,
     "logical" => Bool
-]
-const type2str_matlab = [
+)
+const type2str_matlab = @Dict(
     Int8    => "int8",
     Uint8   => "uint8",
     Int16   => "int16",
@@ -529,7 +543,7 @@ const type2str_matlab = [
     Float32 => "single",
     Float64 => "double",
     Bool    => "logical"
-]
+)
 
 
 function read(obj::HDF5Object, ::Type{MatlabString})
