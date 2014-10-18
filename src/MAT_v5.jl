@@ -27,7 +27,7 @@
 
 module MAT_v5
 using Zlib, HDF5
-import Base: read, write, close
+import Base: read, write, close, getindex, setindex!
 import HDF5: names, exists
 
 type Matlabv5File <: HDF5.DataFile
@@ -439,10 +439,18 @@ function read(matfile::Matlabv5File, varname::ASCIIString)
     data
 end
 
+# []-accessor syntax.
+getindex(matfile::Matlabv5File, varname::ASCIIString) = read(matfile, varname)
+getindex(matfile::Matlabv5File, varname::Symbol) = read(matfile, string(varname))
+
 # Complain about writing to a MAT file
-function write(parent::Matlabv5File, name::ByteString, s)
+function write(parent::Matlabv5File, name::ASCIIString, s)
     error("Writing to a MATLAB v5 file is not currently supported. Create a new file instead.")
 end
+
+# For completeness' sake
+setindex!(parent::Matlabv5File, s, name::ASCIIString) = write(parent, name, s)
+setindex!(parent::Matlabv5File, s, name::Symbol) = write(parent, string(name), s)
 
 # Close MAT file
 close(matfile::Matlabv5File) = close(matfile.ios)
