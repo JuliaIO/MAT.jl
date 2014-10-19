@@ -1,5 +1,5 @@
 using MAT, Base.Test
-using MAT.HDF5: @Dict
+using Compat
 
 function check(filename, result)
     matfile = matopen(filename)
@@ -48,7 +48,7 @@ global format
 for format in ["v6", "v7", "v7.3"]
     cd(joinpath(dirname(@__FILE__), format))
 
-    result = @Dict(
+    result = @compat Dict(
         "int8" => int8(1),
         "uint8" => uint8(1),
         "int16" => int16(1),
@@ -71,21 +71,21 @@ for format in ["v6", "v7", "v7.3"]
         end
     end
 
-    result = @Dict(
+    result = @compat Dict(
         "imaginary" => Complex128[1 -1 1+im 1-im -1+im -1-im im]
     )
     check("complex.mat", result)
 
-    result = @Dict(
+    result = @compat Dict(
         "simple_string" => "the quick brown fox",
         "accented_string" => "thé qüîck browñ fòx",
         "concatenated_strings" => ByteString["this is a string", "this is another string"],
-        "cell_strings" => {"this is a string" "this is another string"},
+        "cell_strings" => Any["this is a string" "this is another string"],
         "empty_string" => ""
     )
     check("string.mat", result)
 
-    result = @Dict(
+    result = @compat Dict(
         "a1x2" => [1.0 2.0],
         "a2x1" => zeros(2, 1)+[1.0, 2.0],
         "a2x2" => [1.0 3.0; 4.0 2.0],
@@ -95,22 +95,22 @@ for format in ["v6", "v7", "v7.3"]
     )
     check("array.mat", result)
 
-    result = @Dict(
-        "cell" => {1.0 2.01 "string" {"string1" "string2"}}
+    result = @compat Dict(
+        "cell" => Any[1.0 2.01 "string" Any["string1" "string2"]]
     )
     check("cell.mat", result)
 
-    result = @Dict(
-        "s" => Dict{ASCIIString,Any}([
-            ("a", 1.0),
-            ("b", [1.0 2.0]),
-            ("c", [1.0 2.0 3.0])
-        ]),
-        "s2" => Dict{ASCIIString,Any}([("a", {1.0 2.0})])
+    result = @compat Dict(
+        "s" => Dict{ASCIIString,Any}(
+            "a" => 1.0,
+            "b" => [1.0 2.0],
+            "c" => [1.0 2.0 3.0]
+        ),
+        "s2" => Dict{ASCIIString,Any}("a" => Any[1.0 2.0])
     )
     check("struct.mat", result)
 
-    result = @Dict(
+    result = @compat Dict(
         "logical" => false,
         "logical_mat" => [
             true false false
@@ -120,12 +120,12 @@ for format in ["v6", "v7", "v7.3"]
     )
     check("logical.mat", result)
     
-    result = @Dict(
-        "empty_cells" => {zeros(0, 0) "test" zeros(0, 0)}
+    result = @compat Dict(
+        "empty_cells" => Any[zeros(0, 0) "test" zeros(0, 0)]
     )
     check("empty_cells.mat", result)
 
-    result = @Dict(
+    result = @compat Dict(
         "sparse_empty" => sparse(Array(Float64, 0, 0)),
         "sparse_eye" => speye(20),
         "sparse_logical" => SparseMatrixCSC{Bool,Int64}(5, 5, [1:6], [1:5], bitunpack(trues(5))),
@@ -144,7 +144,7 @@ for format in ["v6", "v7", "v7.3"]
 
 end
 
-result = @Dict(
+result = @compat Dict(
     "index" => [8.8604784000000000e+04   9.8707212000000000e+04   1.0394035200000000e+05   1.1429712000000000e+05   1.5474923999999999e+05   1.5475435200000001e+05   1.5501074400000001e+05   1.5505315200000000e+05   1.5505718400000001e+05   1.5506168400000001e+05   1.5506524799999999e+05   5.4945741599999997e+05   5.6345896799999999e+05   5.9956981200000003e+05   7.0691623199999996e+05   7.9063657200000004e+05   8.4311938800000004e+05   9.2225131200000003e+05   1.1248994160000000e+06   1.2508148520000000e+06   1.4164141320000000e+06   1.4275988280000000e+06   1.4744331000000001e+06   1.4982212879999999e+06   1.5549058440000000e+06   1.5870300840000000e+06   1.6192005120000001e+06   1.6766071560000000e+06   1.9386816839999999e+06   1.9969427879999999e+06   2.0021861880000001e+06   2.3272494120000000e+06   2.5309351080000000e+06   2.6743788720000000e+06],
     "spikes" => [
       -3.9146236245031032e+00  -6.7657651330021364e+00  -1.0780027188484372e+01  -1.4345619557780790e+01  -1.5488781013877338e+01  -1.3241531877846004e+01  -8.6339302778751907e+00  -4.1571900578409995e+00  -1.4845719040296610e+00   2.3147400250828232e-01   2.8917910181412778e+00   6.4067867244186800e+00   8.3368575385567603e+00   7.0732985406218223e+00   4.4095174940268036e+00   3.8495932342509342e+00   7.0605464919276546e+00   1.2892731012948772e+01   1.8593404980539656e+01   2.1332908128411184e+01   2.0142332517120792e+01   1.6740473413471157e+01   1.3650330377340575e+01   1.1913871749214691e+01   1.0804794411826084e+01   8.8366401987297127e+00   5.1092331749990514e+00   5.1218216653980408e-01  -2.9327647633922682e+00  -4.4870896208146753e+00  -5.0598199463728655e+00  -4.8330524336350118e+00  -2.8556000012645000e+00   2.9794817723619027e-01   1.8265416505730325e+00  -8.6155940979615875e-02  -3.9623352473810947e+00  -6.9070013227561047e+00  -7.3941131196997647e+00  -5.7411207637544166e+00  -3.2366812420300106e+00  -1.1460492068000723e+00   1.2381260731009580e-01   1.0930145325605314e+00   2.1927876983540933e+00   2.6570284430776856e+00   1.3381366125210661e+00  -1.2539624260623763e+00  -3.3642620416729994e+00  -4.1849749207505456e+00  -3.8760400918509301e+00  -2.6869552030388291e+00  -1.6718246062697015e+00  -2.3709942853677934e+00  -4.6623835517993664e+00  -6.6575320887201714e+00  -6.9891263747717174e+00  -5.7017039068420186e+00  -3.4759011423153079e+00  -1.7092931352045238e+00  -2.3854494206243695e+00  -5.8068462168496913e+00  -9.1001745572212531e+00  -8.8479323560036516e+00

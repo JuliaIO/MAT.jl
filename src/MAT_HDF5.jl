@@ -27,17 +27,8 @@
 ###########################################
 
 module MAT_HDF5
-if VERSION < v"0.4.0-dev+980"
-    macro Dict(pairs...)
-        esc(Expr(:dict, pairs...))
-    end
-else
-    macro Dict(pairs...)
-        esc(Expr(:call, :Dict, pairs...))
-    end
-end
 
-using HDF5
+using HDF5, Compat
 import Base: read, write, close
 import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
 
@@ -498,7 +489,7 @@ end
 
 type MatlabString; end
 
-const str2type_matlab = @Dict(
+const str2type_matlab = @compat Dict(
     "canonical empty" => nothing,
     "int8"    => Array{Int8},
     "uint8"   => Array{Uint8},
@@ -515,7 +506,7 @@ const str2type_matlab = @Dict(
     "logical" => Array{Bool}
 )
 # These operate on the element type rather than the whole type
-const str2eltype_matlab = @Dict(
+const str2eltype_matlab = @compat Dict(
     "canonical empty" => nothing,
     "int8"    => Int8,
     "uint8"   => Uint8,
@@ -531,7 +522,7 @@ const str2eltype_matlab = @Dict(
     "char"    => MatlabString,
     "logical" => Bool
 )
-const type2str_matlab = @Dict(
+const type2str_matlab = @compat Dict(
     Int8    => "int8",
     Uint8   => "uint8",
     Int16   => "int16",
