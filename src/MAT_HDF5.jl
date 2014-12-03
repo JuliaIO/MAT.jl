@@ -357,32 +357,38 @@ end
 
 # Write a string
 function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, str::String)
-    # Here we assume no UTF-16
     if isempty(str)
-        data = Uint16[0]
+        data = Uint64[0, 0]
+
+        # Create the dataset
+        dset, dtype = d_create(parent, name, data)
+        try
+            a_write(dset, name_type_attr_matlab, "char")
+            a_write(dset, empty_attr_matlab, uint8(1))
+            HDF5.writearray(dset, dtype.id, data)
+        finally
+            close(dset)
+            close(dtype)
+        end
     else
-        data = zeros(Uint16, length(str))
+        # Here we assume no UTF-16
+        data = zeros(Uint16, 1, length(str))
         i = 1
         for c in str
             data[i] = c
             i += 1
         end
-    end
 
-    # Create the dataset
-    dset, dtype = d_create(parent, name, data)
-    try
-        # Write the attribute
-        a_write(dset, name_type_attr_matlab, "char")
-        # Write the data
-        if isempty(str)
-            a_write(dset, empty_attr_matlab, uint8(1))
+        # Create the dataset
+        dset, dtype = d_create(parent, name, data)
+        try
+            a_write(dset, name_type_attr_matlab, "char")
+            a_write(dset, int_decode_attr_matlab, int32(2))
+            HDF5.writearray(dset, dtype.id, data)
+        finally
+            close(dset)
+            close(dtype)
         end
-        a_write(dset, int_decode_attr_matlab, int32(2))
-        HDF5.writearray(dset, dtype.id, data)
-    finally
-        close(dset)
-        close(dtype)
     end
 end
 
