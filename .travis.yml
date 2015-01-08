@@ -1,23 +1,16 @@
-language: cpp
-compiler: 
-    - gcc
+language: julia
+os:
+    - linux
+    - osx
+julia:
+    - release
+    - nightly
 notifications:
     email: false
-env:
-  matrix:
-    - JULIAVERSION="juliareleases"
-    - JULIAVERSION="julianightlies"
-before_install:
-    - sudo add-apt-repository ppa:staticfloat/julia-deps -y
-    - sudo add-apt-repository ppa:staticfloat/${JULIAVERSION} -y
-    - sudo apt-get update -qq -y
-    - sudo apt-get install libpcre3-dev julia -y
-    - git config --global user.name "Travis User"
-    - git config --global user.email "travis@example.net"
-    - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
 script:
-    - julia -e 'versioninfo(); Pkg.init(); Pkg.clone("HDF5"); Pkg.build("HDF5"); Pkg.clone(pwd())'
-    - if [ $JULIAVERSION = "julianightlies" ]; then julia --code-coverage test/runtests.jl; fi
-    - if [ $JULIAVERSION = "juliareleases" ]; then julia test/runtests.jl; fi
+    - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
+    - julia -e 'Pkg.clone("HDF5"); Pkg.build("HDF5"); Pkg.clone(pwd())'
+    - if [ $TRAVIS_JULIA_VERSION = "nightly" ]; then julia --check-bounds=yes --inline=no --code-coverage=user -e 'Pkg.test("MAT")'; fi
+    - if [ $TRAVIS_JULIA_VERSION = "release" ]; then julia --check-bounds=yes -e 'Pkg.test("MAT")'; fi
 after_success:
-    - julia -e 'cd(Pkg.dir("MAT")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
+    - if [ $TRAVIS_JULIA_VERSION = "nightly" ]; then julia -e 'cd(Pkg.dir("MAT")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'; fi
