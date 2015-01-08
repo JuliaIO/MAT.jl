@@ -25,7 +25,7 @@ To read a single variable from a MAT file:
 
 ```julia
 file = matopen("matfile.mat")
-read(file, "varname")
+read(file, "varname") # note that this does NOT introduce a variable ``varname`` into scope
 close(file)
 ```
 
