@@ -10,7 +10,7 @@ notifications:
 script:
     - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
     - julia -e 'Pkg.clone("HDF5"); Pkg.build("HDF5"); Pkg.clone(pwd())'
-    - if [ $TRAVIS_JULIA_VERSION = "nightly" ]; then julia --check-bounds=yes --inline=no --code-coverage=user -e 'Pkg.test("MAT")'; fi
+    - if [ $TRAVIS_JULIA_VERSION = "nightly" ]; then julia --check-bounds=yes --inline=no --code-coverage=user -e 'include(Pkg.dir("MAT", "test", "runtests.jl"))'; fi
     - if [ $TRAVIS_JULIA_VERSION = "release" ]; then julia --check-bounds=yes -e 'Pkg.test("MAT")'; fi
 after_success:
     - if [ $TRAVIS_JULIA_VERSION = "nightly" ]; then julia -e 'cd(Pkg.dir("MAT")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'; fi
