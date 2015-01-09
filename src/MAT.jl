@@ -30,6 +30,7 @@ using HDF5, MAT_HDF5, MAT_v5
 export matopen, matread, matwrite, names, exists, @read, @write
 
 # Open a MATLAB file
+const HDF5_HEADER = Uint8[0x89, 0x48, 0x44, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]
 function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool)
     # When creating new files, create as HDF5 by default
     fs = filesize(filename)
@@ -40,17 +41,43 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
     end
 
     # Test whether this is a MAT file
-    if fs < 19
+    if fs < 128
         error("File \"$filename\" is too small to be a supported MAT file")
     end
     rawfid = open(filename, "r")
-    magic = read(rawfid, Uint8, 19)
-    close(rawfid)
 
-    # Send to appropriate module
-    magic == "MATLAB 7.3 MAT-file".data ? MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff) :
-    magic == "MATLAB 5.0 MAT-file".data ? MAT_v5.matopen(filename, rd, wr, cr, tr, ff) :
-        error("\"$filename\" is not a MAT file, or is an unsupported (v4) MAT file")
+    # Check for MAT v4 file
+    magic = read(rawfid, Uint8, 4)
+    for i = 1:length(magic)
+        if magic[i] == 0
+        close(rawfid)
+            error("\"$filename\" is not a MAT file, or is an unsupported (v4) MAT file")
+        end
+    end
+
+    # Check for MAT v5 file
+    seek(rawfid, 124)
+    version = read(rawfid, Uint16)
+    endian_indicator = read(rawfid, Uint16)
+    if (version == 0x0100 && endian_indicator == 0x4D49) ||
+       (version == 0x0001 && endian_indicator == 0x494D)
+        if wr || cr || tr || ff
+            error("creating or appending to MATLAB v5 files is not supported")
+        end
+        return MAT_v5.matopen(rawfid, endian_indicator)
+    end
+
+    # Check for HDF5 file
+    for offset = 512:512:fs-8
+        seek(rawfid, offset)
+        if read(rawfid, Uint8, 8) == HDF5_HEADER
+            close(rawfid)
+            return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff)
+        end
+    end
+
+    close(rawfid)
+    error("\"$filename\" is not a MAT file")
 end
 
 function matopen(fname::String, mode::String)

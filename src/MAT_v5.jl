@@ -329,35 +329,8 @@ function read_matrix(f::IO, swap_bytes::Bool)
 end
 
 # Open MAT file for reading
-function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool)
-    if wr || cr || tr || ff
-        error("Creating or appending to MATLAB v5 files is not supported")
-    end
-
-    ios = open(filename, "r")
-    header = read(ios, Uint8, 116)
-    skip(ios, 8)
-    version = read(ios, Uint16)
-    endian_indicator = read(ios, Uint16)
-
-    local swap_bytes
-    if endian_indicator == 0x4D49
-        swap_bytes = false
-    elseif endian_indicator == 0x494D
-        swap_bytes = true
-    else
-        error("Invalid endian indicator")
-    end
-
-    if swap_bytes
-        version = bswap(version)
-    end
-    if version != 0x0100
-        error("Unsupported MATLAB file version")
-    end
-
-    return Matlabv5File(ios, swap_bytes)
-end
+matopen(ios::IOStream, endian_indicator::Uint16) =
+    Matlabv5File(ios, endian_indicator == 0x494D)
 
 # Read whole MAT file
 function read(matfile::Matlabv5File)
