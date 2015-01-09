@@ -26,7 +26,7 @@
 # http://www.mathworks.com/help/pdf_doc/matlab/matfile_format.pdf
 
 module MAT_v5
-using Zlib, HDF5
+using Zlib, HDF5, Compat
 import Base: read, write, close
 import HDF5: names, exists
 
@@ -167,7 +167,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
     end
 
     data = Dict{ASCIIString, Any}()
-    sizehint(data, n_fields+1)
+    sizehint!(data, n_fields+1)
     if is_object
         data["class"] = class
     end
