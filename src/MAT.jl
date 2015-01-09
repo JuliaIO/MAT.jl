@@ -50,7 +50,7 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
     magic = read(rawfid, Uint8, 4)
     for i = 1:length(magic)
         if magic[i] == 0
-        close(rawfid)
+            close(rawfid)
             error("\"$filename\" is not a MAT file, or is an unsupported (v4) MAT file")
         end
     end
