@@ -51,7 +51,7 @@ function close(f::MatlabHDF5File)
     if f.toclose
         close(f.plain)
         if f.writeheader
-            magic = zeros(Uint8, 512)
+            magic = zeros(UInt8, 512)
             const identifier = "MATLAB 7.3 MAT-file" # minimal but sufficient
             magic[1:length(identifier)] = identifier.data
             magic[126] = 0x02
@@ -114,7 +114,7 @@ function read_complex{T}(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{Array{T}
     memtype = build_datatype_complex(T)
     sz = size(dset)
     st = sizeof(T)
-    buf = Array(Uint8, 2*st, sz...)
+    buf = Array(UInt8, 2*st, sz...)
     HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, buf)
 
     if T == Float32
@@ -130,7 +130,7 @@ end
 function m_read(dset::HDF5Dataset)
     if exists(dset, empty_attr_matlab)
         # Empty arrays encode the dimensions as the dataset
-        dims = int(read(dset))
+        dims = convert(Vector{Int}, read(dset))
         mattype = a_read(dset, name_type_attr_matlab)
         if mattype == "char"
             return ""
@@ -190,10 +190,10 @@ function m_read(g::HDF5Group)
             # This is a sparse matrix.
             # ir is the row indices, jc is the column boundaries.
             # We add one to account for the zero-based (MATLAB) to one-based (Julia) transition
-            jc = add!(int(read(g, "jc")), 1)
+            jc = add!(convert(Vector{Int}, read(g, "jc")), 1)
             if "data" in fn && "ir" in fn && "jc" in fn
                 # This matrix is not empty.
-                ir = add!(int(read(g, "ir")), 1)
+                ir = add!(convert(Vector{Int}, read(g, "ir")), 1)
                 dset = g["data"]
                 T = str2type_matlab[mattype]
                 try
@@ -212,7 +212,7 @@ function m_read(g::HDF5Group)
                 ir = Int[]
                 data = str2eltype_matlab[mattype][]
             end
-            return SparseMatrixCSC(int(HDF5.a_read(g, sparse_attr_matlab)), length(jc)-1, jc, ir, data)
+            return SparseMatrixCSC(convert(Int, HDF5.a_read(g, sparse_attr_matlab)), length(jc)-1, jc, ir, data)
         else
             error("Cannot read from a non-struct group, type was $mattype")
         end
@@ -258,8 +258,8 @@ elseif length(s) > 63
 end
 
 toarray(x::Array) = x
-toarray(x::Array{Bool}) = reinterpret(Uint8, x)
-toarray(x::Bool) = [uint8(x)]
+toarray(x::Array{Bool}) = reinterpret(UInt8, x)
+toarray(x::Bool) = UInt8[x]
 toarray(x) = [x]
 
 # Write the MATLAB type string for dset
@@ -273,7 +273,7 @@ function m_writetypeattr(dset, T)
     # Write the attribute
     a_write(dset, name_type_attr_matlab, typename)
     if T == Bool
-        a_write(dset, int_decode_attr_matlab, int32(1))
+        a_write(dset, int_decode_attr_matlab, @compat Int32(1))
     end
 end
 
@@ -282,7 +282,7 @@ function m_writeempty(parent::Union(HDF5File, HDF5Group), name::ByteString, data
     adata = [size(data)...]
     dset, dtype = d_create(parent, name, adata)
     try
-        a_write(dset, empty_attr_matlab, uint8(1))
+        a_write(dset, empty_attr_matlab, 0x01)
         m_writetypeattr(dset, eltype(data))
         HDF5.writearray(dset, dtype.id, adata)
     finally
@@ -344,12 +344,12 @@ function m_write{T}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), n
     g = g_create(parent, name)
     try
         m_writetypeattr(g, T)
-        a_write(g, sparse_attr_matlab, uint64(size(data, 1)))
+        a_write(g, sparse_attr_matlab, @compat UInt64(size(data, 1)))
         if !isempty(data.nzval)
             close(m_writearray(g, "data", toarray(data.nzval)))
-            close(m_writearray(g, "ir", add!(isa(data.rowval, Vector{Uint64}) ? copy(data.rowval) : uint64(data.rowval), reinterpret(Uint64, int64(-1)))))
+            close(m_writearray(g, "ir", add!(isa(data.rowval, Vector{UInt64}) ? copy(data.rowval) : convert(Vector{UInt64}, data.rowval), reinterpret(UInt64, convert(Int64, -1)))))
         end
-        close(m_writearray(g, "jc", add!(isa(data.colptr, Vector{Uint64}) ? copy(data.colptr) : uint64(data.colptr), reinterpret(Uint64, int64(-1)))))
+        close(m_writearray(g, "jc", add!(isa(data.colptr, Vector{UInt64}) ? copy(data.colptr) : convert(Vector{UInt64}, data.colptr), reinterpret(UInt64, convert(Int64, -1)))))
     finally
         close(g)
     end
@@ -358,13 +358,13 @@ end
 # Write a string
 function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, str::String)
     if isempty(str)
-        data = Uint64[0, 0]
+        data = UInt64[0, 0]
 
         # Create the dataset
         dset, dtype = d_create(parent, name, data)
         try
             a_write(dset, name_type_attr_matlab, "char")
-            a_write(dset, empty_attr_matlab, uint8(1))
+            a_write(dset, empty_attr_matlab, 0x01)
             HDF5.writearray(dset, dtype.id, data)
         finally
             close(dset)
@@ -372,7 +372,7 @@ function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name
         end
     else
         # Here we assume no UTF-16
-        data = zeros(Uint16, 1, length(str))
+        data = zeros(UInt16, 1, length(str))
         i = 1
         for c in str
             data[i] = c
@@ -383,7 +383,7 @@ function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name
         dset, dtype = d_create(parent, name, data)
         try
             a_write(dset, name_type_attr_matlab, "char")
-            a_write(dset, int_decode_attr_matlab, int32(2))
+            a_write(dset, int_decode_attr_matlab, @compat Int32(2))
             HDF5.writearray(dset, dtype.id, data)
         finally
             close(dset)
@@ -406,12 +406,12 @@ function m_write{T}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), n
     try
         # If needed, create the "empty" item
         if !exists(g, "a")
-            edata = zeros(Uint64, 2)
+            edata = zeros(UInt64, 2)
             eset, etype = d_create(g, "a", edata)
             try
                 HDF5.writearray(eset, etype.id, edata)
                 a_write(eset, name_type_attr_matlab, "canonical empty")
-                a_write(eset, "MATLAB_empty", uint8(0))
+                a_write(eset, "MATLAB_empty", 0x00)
             finally
                 close(etype)
                 close(eset)
@@ -498,13 +498,13 @@ type MatlabString; end
 const str2type_matlab = @compat Dict(
     "canonical empty" => nothing,
     "int8"    => Array{Int8},
-    "uint8"   => Array{Uint8},
+    "uint8"   => Array{UInt8},
     "int16"   => Array{Int16},
-    "uint16"  => Array{Uint16},
+    "uint16"  => Array{UInt16},
     "int32"   => Array{Int32},
-    "uint32"  => Array{Uint32},
+    "uint32"  => Array{UInt32},
     "int64"   => Array{Int64},
-    "uint64"  => Array{Uint64},
+    "uint64"  => Array{UInt64},
     "single"  => Array{Float32},
     "double"  => Array{Float64},
     "cell"    => Array{Any},
@@ -515,13 +515,13 @@ const str2type_matlab = @compat Dict(
 const str2eltype_matlab = @compat Dict(
     "canonical empty" => nothing,
     "int8"    => Int8,
-    "uint8"   => Uint8,
+    "uint8"   => UInt8,
     "int16"   => Int16,
-    "uint16"  => Uint16,
+    "uint16"  => UInt16,
     "int32"   => Int32,
-    "uint32"  => Uint32,
+    "uint32"  => UInt32,
     "int64"   => Int64,
-    "uint64"  => Uint64,
+    "uint64"  => UInt64,
     "single"  => Float32,
     "double"  => Float64,
     "cell"    => Any,
@@ -530,13 +530,13 @@ const str2eltype_matlab = @compat Dict(
 )
 const type2str_matlab = @compat Dict(
     Int8    => "int8",
-    Uint8   => "uint8",
+    UInt8   => "uint8",
     Int16   => "int16",
-    Uint16  => "uint16",
+    UInt16  => "uint16",
     Int32   => "int32",
-    Uint32  => "uint32",
+    UInt32  => "uint32",
     Int64   => "int64",
-    Uint64  => "uint64",
+    UInt64  => "uint64",
     Float32 => "single",
     Float64 => "double",
     Bool    => "logical"
@@ -559,11 +559,11 @@ function read(obj::HDF5Object, ::Type{MatlabString})
     end
 end
 function read(obj::HDF5Object, ::Type{Bool})
-    tf = read(obj, Uint8)
+    tf = read(obj, UInt8)
     tf > 0
 end
 function read(obj::HDF5Object, ::Type{Array{Bool}})
-    tf = read(obj, Array{Uint8})
+    tf = read(obj, Array{UInt8})
     reinterpret(Bool, tf)
 end
 

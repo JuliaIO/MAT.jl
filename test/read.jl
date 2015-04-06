@@ -49,16 +49,16 @@ for format in ["v6", "v7", "v7.3"]
     cd(joinpath(dirname(@__FILE__), format))
 
     result = @compat Dict(
-        "int8" => int8(1),
-        "uint8" => uint8(1),
-        "int16" => int16(1),
-        "uint16" => uint16(1),
-        "int32" => int32(1),
-        "uint32" => uint32(1),
-        "int64" => int64(1),
-        "uint64" => uint64(1),
-        "single" => float32(1),
-        "double" => float64(1),
+        "int8" => Int8(1),
+        "uint8" => UInt8(1),
+        "int16" => Int16(1),
+        "uint16" => UInt16(1),
+        "int32" => Int32(1),
+        "uint32" => UInt32(1),
+        "int64" => Int64(1),
+        "uint64" => UInt64(1),
+        "single" => Float32(1),
+        "double" => Float64(1),
         "logical" => true
     )
     check("simple.mat", result)
@@ -96,7 +96,7 @@ for format in ["v6", "v7", "v7.3"]
     check("array.mat", result)
 
     result = @compat Dict(
-        "cell" => Any[1.0 2.01 "string" Any["string1" "string2"]]
+        "cell" => Any[1.0, 2.01, "string", Any["string1", "string2"]].'
     )
     check("cell.mat", result)
 
@@ -121,14 +121,14 @@ for format in ["v6", "v7", "v7.3"]
     check("logical.mat", result)
     
     result = @compat Dict(
-        "empty_cells" => Any[zeros(0, 0) "test" zeros(0, 0)]
+        "empty_cells" => Any[zeros(0, 0), "test", zeros(0, 0)].'
     )
     check("empty_cells.mat", result)
 
     result = @compat Dict(
         "sparse_empty" => sparse(Array(Float64, 0, 0)),
         "sparse_eye" => speye(20),
-        "sparse_logical" => SparseMatrixCSC{Bool,Int64}(5, 5, [1:6], [1:5], bitunpack(trues(5))),
+        "sparse_logical" => SparseMatrixCSC{Bool,Int64}(5, 5, [1:6;], [1:5;], fill(true, 5)),
         "sparse_random" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]),
         "sparse_complex" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]*(1. + 1.im)),
         "sparse_zeros" => SparseMatrixCSC(20, 20, ones(Int, 21), Int[], Float64[])
