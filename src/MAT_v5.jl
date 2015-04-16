@@ -85,7 +85,7 @@ function read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union(Int, (Int.
     d
 end
 
-skip_padding(f::IO, nbytes::Int64, hbytes::Int) = if nbytes % hbytes != 0
+skip_padding(f::IO, nbytes::Int, hbytes::Int) = if nbytes % hbytes != 0
     skip(f, hbytes-(nbytes % hbytes))
 end
 
