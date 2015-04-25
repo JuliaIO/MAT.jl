@@ -482,7 +482,7 @@ function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name
         error("This is the write function for CompositeKind, but the input doesn't fit")
     end
     T = typeof(s)
-    m_write(mfile, parent, name, check_struct_keys([string(x) for x in T.names]), [getfield(s, x) for x in T.names])
+    m_write(mfile, parent, name, check_struct_keys([string(x) for x in fieldnames(T)]), [getfield(s, x) for x in fieldnames(T)])
 end
 
 # Check whether a variable name is valid, then write it

@@ -75,7 +75,7 @@ const CONVERT_TYPES = Type[None, None, None, None, None, Float64, Float32, Int8,
 
 read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}) = 
     swap_bytes ? bswap(read(f, T)) : read(f, T)
-function read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union(Int, (Int...)))
+function read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union(Int, @compat Tuple{Vararg{Int}}))
     d = read(f, T, dim)
     if swap_bytes
         for i = 1:length(d)
