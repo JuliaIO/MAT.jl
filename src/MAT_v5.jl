@@ -68,14 +68,17 @@ const mxINT32_CLASS = 12
 const mxUINT32_CLASS = 13
 const mxINT64_CLASS = 14
 const mxUINT64_CLASS = 15
-const READ_TYPES = Type[Int8, UInt8, Int16, UInt16, Int32, UInt32, Float32, Union{}, Float64,
-    Union{}, Union{}, Int64, UInt64]
-const CONVERT_TYPES = Type[Union{}, Union{}, Union{}, Union{}, Union{}, Float64, Float32, Int8, UInt8,
+const READ_TYPES = Type[
+    Int8, UInt8, Int16, UInt16, Int32, UInt32, Float32, @compat(Union{}),
+    Float64, @compat(Union{}), @compat(Union{}), Int64, UInt64]
+const CONVERT_TYPES = Type[
+    @compat(Union{}), @compat(Union{}), @compat(Union{}), @compat(Union{}),
+    @compat(Union{}), Float64, Float32, Int8, UInt8,
     Int16, UInt16, Int32, UInt32, Int64, UInt64]
 
 read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}) = 
     swap_bytes ? bswap(read(f, T)) : read(f, T)
-function read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union{Int, @compat Tuple{Vararg{Int}}})
+function read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::@compat(Union{Int, @compat Tuple{Vararg{Int}}}))
     d = read(f, T, dim)
     if swap_bytes
         for i = 1:length(d)
@@ -304,7 +307,7 @@ function read_matrix(f::IO, swap_bytes::Bool)
         #     a = {[], [], []}
         # then MATLAB does not save the empty cells as zero-byte matrices. To avoid
         # surprises, we produce an empty array in both cases.
-        return ("", Array(Union{}, 0, 0))
+        return ("", Array(@compat(Union{}), 0, 0))
     end
 
     flags = read_element(f, swap_bytes, UInt32)
