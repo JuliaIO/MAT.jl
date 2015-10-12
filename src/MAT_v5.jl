@@ -68,14 +68,14 @@ const mxINT32_CLASS = 12
 const mxUINT32_CLASS = 13
 const mxINT64_CLASS = 14
 const mxUINT64_CLASS = 15
-const READ_TYPES = Type[Int8, UInt8, Int16, UInt16, Int32, UInt32, Float32, None, Float64,
-    None, None, Int64, UInt64]
-const CONVERT_TYPES = Type[None, None, None, None, None, Float64, Float32, Int8, UInt8,
+const READ_TYPES = Type[Int8, UInt8, Int16, UInt16, Int32, UInt32, Float32, Union{}, Float64,
+    Union{}, Union{}, Int64, UInt64]
+const CONVERT_TYPES = Type[Union{}, Union{}, Union{}, Union{}, Union{}, Float64, Float32, Int8, UInt8,
     Int16, UInt16, Int32, UInt32, Int64, UInt64]
 
 read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}) = 
     swap_bytes ? bswap(read(f, T)) : read(f, T)
-function read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union(Int, @compat Tuple{Vararg{Int}}))
+function read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union{Int, @compat Tuple{Vararg{Int}}})
     d = read(f, T, dim)
     if swap_bytes
         for i = 1:length(d)
@@ -158,7 +158,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
 
 
     # Get field names as strings
-    field_name_strings = Array(String, n_fields)
+    field_name_strings = Array(ASCIIString, n_fields)
     n_el = prod(dimensions)
     for i = 1:n_fields
         sname = field_names[(i-1)*field_length+1:i*field_length]
@@ -304,7 +304,7 @@ function read_matrix(f::IO, swap_bytes::Bool)
         #     a = {[], [], []}
         # then MATLAB does not save the empty cells as zero-byte matrices. To avoid
         # surprises, we produce an empty array in both cases.
-        return ("", Array(None, 0, 0))
+        return ("", Array(Union{}, 0, 0))
     end
 
     flags = read_element(f, swap_bytes, UInt32)

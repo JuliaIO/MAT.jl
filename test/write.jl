@@ -83,7 +83,7 @@ test_write(@compat Dict(
 @test_throws ErrorException test_write(@compat Dict("yetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkey" => "too long"))
 
 type TestCompositeKind
-	field1::String
+	field1::AbstractString
 end
 fid = matopen(tmpfile, "w")
 write(fid, "test", TestCompositeKind("test value"))

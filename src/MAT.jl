@@ -32,8 +32,8 @@ using HDF5, MAT_HDF5, MAT_v5
 export matopen, matread, matwrite, names, exists, @read, @write
 
 # Open a MATLAB file
-const HDF5_HEADER = Uint8[0x89, 0x48, 0x44, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]
-function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool)
+const HDF5_HEADER = UInt8[0x89, 0x48, 0x44, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]
+function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool)
     # When creating new files, create as HDF5 by default
     fs = filesize(filename)
     if cr && (tr || fs == 0)
@@ -49,7 +49,7 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
     rawfid = open(filename, "r")
 
     # Check for MAT v4 file
-    magic = read(rawfid, Uint8, 4)
+    magic = read(rawfid, UInt8, 4)
     for i = 1:length(magic)
         if magic[i] == 0
             close(rawfid)
@@ -59,8 +59,8 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
 
     # Check for MAT v5 file
     seek(rawfid, 124)
-    version = read(rawfid, Uint16)
-    endian_indicator = read(rawfid, Uint16)
+    version = read(rawfid, UInt16)
+    endian_indicator = read(rawfid, UInt16)
     if (version == 0x0100 && endian_indicator == 0x4D49) ||
        (version == 0x0001 && endian_indicator == 0x494D)
         if wr || cr || tr || ff
@@ -72,7 +72,7 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
     # Check for HDF5 file
     for offset = 512:512:fs-8
         seek(rawfid, offset)
-        if read(rawfid, Uint8, 8) == HDF5_HEADER
+        if read(rawfid, UInt8, 8) == HDF5_HEADER
             close(rawfid)
             return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff)
         end
@@ -82,7 +82,7 @@ function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::B
     error("\"$filename\" is not a MAT file")
 end
 
-function matopen(fname::String, mode::String)
+function matopen(fname::AbstractString, mode::AbstractString)
     mode == "r"  ? matopen(fname, true , false, false, false, false) :
     mode == "r+" ? matopen(fname, true , true , false, false, false) :
     mode == "w"  ? matopen(fname, false, true , true , true , false) :
@@ -92,7 +92,7 @@ function matopen(fname::String, mode::String)
     error("invalid open mode: ", mode)
 end
 
-matopen(fname::String) = matopen(fname, "r")
+matopen(fname::AbstractString) = matopen(fname, "r")
 
 function matopen(f::Function, args...)
     fid = matopen(args...)
@@ -104,7 +104,7 @@ function matopen(f::Function, args...)
 end
 
 # Read all variables from a MATLAB file
-function matread(filename::String)
+function matread(filename::AbstractString)
     file = matopen(filename)
     local vars
     try
@@ -116,7 +116,7 @@ function matread(filename::String)
 end
 
 # Write a dict to a MATLAB file
-function matwrite{S, T}(filename::String, dict::Dict{S, T})
+function matwrite{S, T}(filename::AbstractString, dict::Dict{S, T})
     file = matopen(filename, "w")
     try
         for (k, v) in dict
