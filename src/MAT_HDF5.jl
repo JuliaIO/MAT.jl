@@ -32,6 +32,9 @@ using HDF5, Compat
 import Base: read, write, close
 import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
 
+typealias HDF5Parent @compat(Union{HDF5File, HDF5Group})
+typealias HDF5BitsOrBool @compat(Union{HDF5BitsKind,Bool})
+
 type MatlabHDF5File <: HDF5.DataFile
     plain::HDF5File
     toclose::Bool
@@ -66,7 +69,7 @@ function close(f::MatlabHDF5File)
     nothing
 end
 
-function matopen(filename::String, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool)
+function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool)
     local f
     if ff && !wr
         error("Cannot append to a write-only file")
@@ -135,7 +138,7 @@ function m_read(dset::HDF5Dataset)
         if mattype == "char"
             return ""
         else
-            T = mattype == "canonical empty" ? None : str2eltype_matlab[mattype]
+            T = mattype == "canonical empty" ? @compat(Union{}) : str2eltype_matlab[mattype]
             return Array(T, dims...)
         end
     end
@@ -251,7 +254,7 @@ exists(p::MatlabHDF5File, path::ASCIIString) = exists(p.plain, path)
 ### Writing
 
 # Check whether a varname is valid for MATLAB
-check_valid_varname(s::String) = if match(r"^[a-zA-Z][a-zA-Z0-9_]*$", s) == nothing 
+check_valid_varname(s::AbstractString) = if match(r"^[a-zA-Z][a-zA-Z0-9_]*$", s) == nothing
     error("Invalid variable name or key \"$s\": variable names must start with a letter and contain only alphanumeric characters and underscore")
 elseif length(s) > 63
     error("Invalid variable name or key \"$s\": variable names must be less than 64 characters")
@@ -278,7 +281,7 @@ function m_writetypeattr(dset, T)
 end
 
 # Writes an empty scalar or array
-function m_writeempty(parent::Union(HDF5File, HDF5Group), name::ByteString, data::Array)
+function m_writeempty(parent::HDF5Parent, name::ByteString, data::Array)
     adata = [size(data)...]
     dset, dtype = d_create(parent, name, adata)
     try
@@ -292,7 +295,7 @@ function m_writeempty(parent::Union(HDF5File, HDF5Group), name::ByteString, data
 end
 
 # Write an array to a dataset in a MATLAB file, returning the dataset
-function m_writearray{T<:Union(HDF5BitsKind,Bool)}(parent::Union(HDF5File, HDF5Group), name::ByteString, adata::Array{T})
+function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::ByteString, adata::Array{T})
     dset, dtype = d_create(parent, name, adata)
     try
         HDF5.writearray(dset, dtype.id, adata)
@@ -304,7 +307,7 @@ function m_writearray{T<:Union(HDF5BitsKind,Bool)}(parent::Union(HDF5File, HDF5G
         close(dtype)
     end
 end
-function m_writearray{T<:Union(HDF5BitsKind,Bool)}(parent::Union(HDF5File, HDF5Group), name::ByteString, adata::Array{Complex{T}})
+function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::ByteString, adata::Array{Complex{T}})
     dtype = build_datatype_complex(T)
     try
         stype = dataspace(adata)
@@ -326,7 +329,7 @@ function m_writearray{T<:Union(HDF5BitsKind,Bool)}(parent::Union(HDF5File, HDF5G
 end
 
 # Write a scalar or array
-function m_write{T<:Union(HDF5BitsKind,Bool)}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, data::Union(T, Complex{T}, Array{T}, Array{Complex{T}}))
+function m_write{T<:HDF5BitsOrBool}(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, data::@compat(Union{T, Complex{T}, Array{T}, Array{Complex{T}}}))
     if isempty(data)
         m_writeempty(parent, name, data)
         return
@@ -340,7 +343,7 @@ function m_write{T<:Union(HDF5BitsKind,Bool)}(mfile::MatlabHDF5File, parent::Uni
 end
 
 # Write sparse arrays
-function m_write{T}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, data::SparseMatrixCSC{T})
+function m_write{T}(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, data::SparseMatrixCSC{T})
     g = g_create(parent, name)
     try
         m_writetypeattr(g, T)
@@ -356,7 +359,7 @@ function m_write{T}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), n
 end
 
 # Write a string
-function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, str::String)
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, str::AbstractString)
     if isempty(str)
         data = UInt64[0, 0]
 
@@ -393,7 +396,7 @@ function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name
 end
 
 # Write cell arrays
-function m_write{T}(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, data::Array{T})
+function m_write{T}(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, data::Array{T})
     pathrefs = "/#refs#"
     fid = file(parent)
     local g
@@ -453,7 +456,7 @@ function check_struct_keys(k::Vector)
     asckeys = Array(ASCIIString, length(k))
     for i = 1:length(k)
         key = k[i]
-        if !isa(key, String)
+        if !isa(key, AbstractString)
             error("Only Dicts with string keys may be saved as MATLAB structs")
         end
         check_valid_varname(key)
@@ -463,7 +466,7 @@ function check_struct_keys(k::Vector)
 end
 
 # Write a struct from arrays of keys and values
-function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, k::Vector{ASCIIString}, v::Vector)
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, k::Vector{ASCIIString}, v::Vector)
     g = g_create(parent, name)
     a_write(g, name_type_attr_matlab, "struct")
     for i = 1:length(k)
@@ -473,11 +476,11 @@ function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name
 end
 
 # Write Associative as a struct
-m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, s::Associative) =
+m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, s::Associative) =
     m_write(mfile, parent, name, check_struct_keys(collect(keys(s))), collect(values(s)))
 
 # Write generic CompositeKind as a struct
-function m_write(mfile::MatlabHDF5File, parent::Union(HDF5File, HDF5Group), name::ByteString, s)
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, s)
     if isbits(s)
         error("This is the write function for CompositeKind, but the input doesn't fit")
     end
