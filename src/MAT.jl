@@ -24,10 +24,14 @@
 
 VERSION >= v"0.4.0-dev+6521" && __precompile__()
 
+module MAT
+
+using HDF5, Compat
+
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")
-module MAT
-using HDF5, MAT_HDF5, MAT_v5, Compat
+
+using .MAT_HDF5, .MAT_v5
 
 export matopen, matread, matwrite, names, exists, @read, @write
 
