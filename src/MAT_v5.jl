@@ -33,7 +33,7 @@ import HDF5: names, exists
 type Matlabv5File <: HDF5.DataFile
     ios::IOStream
     swap_bytes::Bool
-    varnames::Dict{ASCIIString, FileOffset}
+    varnames::Dict{ASCIIString, Int64}
 
     Matlabv5File(ios, swap_bytes) = new(ios, swap_bytes)
 end
@@ -356,7 +356,7 @@ end
 function getvarnames(matfile::Matlabv5File)
     if !isdefined(matfile, :varnames)
         seek(matfile.ios, 128)
-        matfile.varnames = varnames = Dict{ASCIIString, FileOffset}()
+        matfile.varnames = varnames = Dict{ASCIIString, Int64}()
         while !eof(matfile.ios)
             offset = position(matfile.ios)
             (dtype, nbytes, hbytes) = read_header(matfile.ios, matfile.swap_bytes)
