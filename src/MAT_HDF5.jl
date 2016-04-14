@@ -52,6 +52,11 @@ type MatlabHDF5File <: HDF5.DataFile
     end
 end
 
+"""
+    close(matfile_handle)
+
+Close a Matlab file.
+"""
 function close(f::MatlabHDF5File)
     if f.toclose
         close(f.plain)
@@ -239,6 +244,13 @@ function m_read(g::HDF5Group)
     s
 end
 
+"""
+    read(matfile_handle, varname) -> value
+
+Read a variable from an opened Matlab file and return its value.
+
+See `matopen` and `matread`.
+"""
 function read(f::MatlabHDF5File, name::Compat.ASCIIString)
     local val
     obj = f.plain[name]
@@ -250,7 +262,22 @@ function read(f::MatlabHDF5File, name::Compat.ASCIIString)
     val
 end
 
+"""
+    names(matfile_handle) -> Vector{String}
+
+Return a list of variables in an opened Matlab file.
+
+See `matopen`.
+"""
 names(f::MatlabHDF5File) = filter!(x->x != "#refs#", names(f.plain))
+
+"""
+    exists(matfile_handle, varname) -> Bool
+
+Return true if a variable is present in an opened Matlab file.
+
+See `matopen`.
+"""
 exists(p::MatlabHDF5File, path::Compat.ASCIIString) = exists(p.plain, path)
 
 ### Writing
@@ -491,6 +518,13 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s)
 end
 
 # Check whether a variable name is valid, then write it
+"""
+    write(matfile_handle, varname, value)
+
+Write the value into an opened Matlab file as the specified variable.
+
+See `matopen` and `matwrite`.
+"""
 function write(parent::MatlabHDF5File, name::String, thing)
     check_valid_varname(name)
     m_write(parent, parent.plain, name, thing)

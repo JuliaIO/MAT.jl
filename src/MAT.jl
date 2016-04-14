@@ -108,7 +108,24 @@ function matopen(f::Function, args...)
     end
 end
 
+"""
+    matopen(filename [, mode]) -> handle
+    matopen(f::Function, filename [, mode]) -> f(handle)
+
+Mode defaults to "r" for read.  It can also be "w" for write, or "r+" for
+read or write without creation or truncation.
+
+Use with `read`, `write`, `close`, `names`, and `exists`.
+"""
+matopen
+
 # Read all variables from a MATLAB file
+"""
+    matread(filename) -> Dict
+
+Return a dictionary of all the variables and values in a Matlab file,
+opening and closing it automatically.
+"""
 function matread(filename::AbstractString)
     file = matopen(filename)
     local vars
@@ -121,6 +138,12 @@ function matread(filename::AbstractString)
 end
 
 # Write a dict to a MATLAB file
+"""
+    matwrite(filename, d::Dict)
+
+Write a dictionary containing variable names as keys and values as values
+to a Matlab file, opening and closing it automatically.
+"""
 function matwrite{S, T}(filename::AbstractString, dict::Associative{S, T})
     file = matopen(filename, "w")
     try
