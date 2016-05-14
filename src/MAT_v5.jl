@@ -33,7 +33,7 @@ import HDF5: names, exists
 type Matlabv5File <: HDF5.DataFile
     ios::IOStream
     swap_bytes::Bool
-    varnames::Dict{ASCIIString, Int64}
+    varnames::Dict{Compat.ASCIIString, Int64}
 
     Matlabv5File(ios, swap_bytes) = new(ios, swap_bytes)
 end
@@ -161,7 +161,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
 
 
     # Get field names as strings
-    field_name_strings = Array(ASCIIString, n_fields)
+    field_name_strings = Array(Compat.ASCIIString, n_fields)
     n_el = prod(dimensions)
     for i = 1:n_fields
         sname = field_names[(i-1)*field_length+1:i*field_length]
@@ -169,7 +169,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
         field_name_strings[i] = ascii(index == 0 ? sname : sname[1:index-1])
     end
 
-    data = Dict{ASCIIString, Any}()
+    data = Dict{Compat.ASCIIString, Any}()
     sizehint!(data, n_fields+1)
     if is_object
         data["class"] = class
@@ -250,7 +250,7 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         if dimensions[1] <= 1
             data = bytestring(chars)
         else
-            data = Array(ByteString, dimensions[1])
+            data = Array(Compat.String, dimensions[1])
             for i = 1:dimensions[1]
                 data[i] = rstrip(bytestring(chars[i:dimensions[1]:end]))
             end
@@ -265,7 +265,7 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         while i <= length(chars)
             for j = 1:dimensions[1]
                 char = convert(Char, chars[i])
-                if char > 255
+                if 255 < convert(UInt32, char)
                     # Newer versions of MATLAB seem to write some mongrel UTF-8...
                     char = bytestring([truncate_to_uint8(chars[i] >> 8), truncate_to_uint8(chars[i])])[1]
                 end
@@ -344,7 +344,7 @@ matopen(ios::IOStream, endian_indicator::UInt16) =
 # Read whole MAT file
 function read(matfile::Matlabv5File)
     seek(matfile.ios, 128)
-    vars = Dict{ASCIIString, Any}()
+    vars = Dict{Compat.ASCIIString, Any}()
     while !eof(matfile.ios)
         (name, data) = read_matrix(matfile.ios, matfile.swap_bytes)
         vars[name] = data
@@ -356,7 +356,7 @@ end
 function getvarnames(matfile::Matlabv5File)
     if !isdefined(matfile, :varnames)
         seek(matfile.ios, 128)
-        matfile.varnames = varnames = Dict{ASCIIString, Int64}()
+        matfile.varnames = varnames = Dict{Compat.ASCIIString, Int64}()
         while !eof(matfile.ios)
             offset = position(matfile.ios)
             (dtype, nbytes, hbytes) = read_header(matfile.ios, matfile.swap_bytes)
@@ -405,13 +405,13 @@ function getvarnames(matfile::Matlabv5File)
     matfile.varnames
 end
 
-exists(matfile::Matlabv5File, varname::ASCIIString) =
+exists(matfile::Matlabv5File, varname::Compat.ASCIIString) =
     haskey(getvarnames(matfile), varname)
 names(matfile::Matlabv5File) =
     keys(getvarnames(matfile))
 
 # Read a variable from a MAT file
-function read(matfile::Matlabv5File, varname::ASCIIString)
+function read(matfile::Matlabv5File, varname::Compat.ASCIIString)
     varnames = getvarnames(matfile)
     if !haskey(varnames, varname)
         error("no variable $varname in file")
@@ -422,7 +422,7 @@ function read(matfile::Matlabv5File, varname::ASCIIString)
 end
 
 # Complain about writing to a MAT file
-function write(parent::Matlabv5File, name::ByteString, s)
+function write(parent::Matlabv5File, name::String, s)
     error("Writing to a MATLAB v5 file is not currently supported. Create a new file instead.")
 end
 
