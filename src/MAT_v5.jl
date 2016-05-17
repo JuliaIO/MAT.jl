@@ -27,6 +27,7 @@
 
 module MAT_v5
 using Zlib, HDF5, Compat
+using Compat.String
 import Base: read, write, close
 import HDF5: names, exists
 
@@ -76,7 +77,7 @@ const CONVERT_TYPES = Type[
     @compat(Union{}), Float64, Float32, Int8, UInt8,
     Int16, UInt16, Int32, UInt32, Int64, UInt64]
 
-read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}) = 
+read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}) =
     swap_bytes ? bswap(read(f, T)) : read(f, T)
 function read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::@compat(Union{Int, @compat Tuple{Vararg{Int}}}))
     d = read(f, T, dim)

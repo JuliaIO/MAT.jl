@@ -1,5 +1,6 @@
 using MAT, Base.Test
 using Compat
+using Compat.String
 
 function check(filename, result)
     matfile = matopen(filename)
@@ -119,7 +120,7 @@ for format in ["v6", "v7", "v7.3"]
         ]
     )
     check("logical.mat", result)
-    
+
     result = @compat Dict(
         "empty_cells" => Any[zeros(0, 0), "test", zeros(0, 0)].'
     )

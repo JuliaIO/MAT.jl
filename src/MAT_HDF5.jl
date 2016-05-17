@@ -29,6 +29,8 @@
 module MAT_HDF5
 
 using HDF5, Compat
+using Compat.String
+
 import Base: read, write, close
 import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
 
