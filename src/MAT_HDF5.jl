@@ -29,6 +29,8 @@
 module MAT_HDF5
 
 using HDF5, Compat
+using Compat.String
+
 import Base: read, write, close
 import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
 
@@ -225,7 +227,7 @@ function m_read(g::HDF5Group)
     else
         fn = names(g)
     end
-    s = Dict{ASCIIString, Any}()
+    s = Dict{Compat.ASCIIString, Any}()
     for i = 1:length(fn)
         dset = g[fn[i]]
         try
@@ -237,7 +239,7 @@ function m_read(g::HDF5Group)
     s
 end
 
-function read(f::MatlabHDF5File, name::ASCIIString)
+function read(f::MatlabHDF5File, name::Compat.ASCIIString)
     local val
     obj = f.plain[name]
     try
@@ -249,7 +251,7 @@ function read(f::MatlabHDF5File, name::ASCIIString)
 end
 
 names(f::MatlabHDF5File) = filter!(x->x != "#refs#", names(f.plain))
-exists(p::MatlabHDF5File, path::ASCIIString) = exists(p.plain, path)
+exists(p::MatlabHDF5File, path::Compat.ASCIIString) = exists(p.plain, path)
 
 ### Writing
 
@@ -281,7 +283,7 @@ function m_writetypeattr(dset, T)
 end
 
 # Writes an empty scalar or array
-function m_writeempty(parent::HDF5Parent, name::ByteString, data::Array)
+function m_writeempty(parent::HDF5Parent, name::String, data::Array)
     adata = [size(data)...]
     dset, dtype = d_create(parent, name, adata)
     try
@@ -295,7 +297,7 @@ function m_writeempty(parent::HDF5Parent, name::ByteString, data::Array)
 end
 
 # Write an array to a dataset in a MATLAB file, returning the dataset
-function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::ByteString, adata::Array{T})
+function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::String, adata::Array{T})
     dset, dtype = d_create(parent, name, adata)
     try
         HDF5.writearray(dset, dtype.id, adata)
@@ -307,7 +309,7 @@ function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::ByteString, a
         close(dtype)
     end
 end
-function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::ByteString, adata::Array{Complex{T}})
+function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::String, adata::Array{Complex{T}})
     dtype = build_datatype_complex(T)
     try
         stype = dataspace(adata)
@@ -329,7 +331,7 @@ function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::ByteString, a
 end
 
 # Write a scalar or array
-function m_write{T<:HDF5BitsOrBool}(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, data::@compat(Union{T, Complex{T}, Array{T}, Array{Complex{T}}}))
+function m_write{T<:HDF5BitsOrBool}(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::@compat(Union{T, Complex{T}, Array{T}, Array{Complex{T}}}))
     if isempty(data)
         m_writeempty(parent, name, data)
         return
@@ -343,7 +345,7 @@ function m_write{T<:HDF5BitsOrBool}(mfile::MatlabHDF5File, parent::HDF5Parent, n
 end
 
 # Write sparse arrays
-function m_write{T}(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, data::SparseMatrixCSC{T})
+function m_write{T}(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::SparseMatrixCSC{T})
     g = g_create(parent, name)
     try
         m_writetypeattr(g, T)
@@ -359,7 +361,7 @@ function m_write{T}(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString,
 end
 
 # Write a string
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, str::AbstractString)
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, str::AbstractString)
     if isempty(str)
         data = UInt64[0, 0]
 
@@ -396,7 +398,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, st
 end
 
 # Write cell arrays
-function m_write{T}(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, data::Array{T})
+function m_write{T}(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Array{T})
     pathrefs = "/#refs#"
     fid = file(parent)
     local g
@@ -453,20 +455,20 @@ end
 
 # Check that keys are valid for a struct, and convert them to an array of ASCIIStrings
 function check_struct_keys(k::Vector)
-    asckeys = Array(ASCIIString, length(k))
+    asckeys = Array(Compat.ASCIIString, length(k))
     for i = 1:length(k)
         key = k[i]
         if !isa(key, AbstractString)
             error("Only Dicts with string keys may be saved as MATLAB structs")
         end
         check_valid_varname(key)
-        asckeys[i] = convert(ASCIIString, key)
+        asckeys[i] = convert(Compat.ASCIIString, key)
     end
     asckeys
 end
 
 # Write a struct from arrays of keys and values
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, k::Vector{ASCIIString}, v::Vector)
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, k::Vector{Compat.ASCIIString}, v::Vector)
     g = g_create(parent, name)
     a_write(g, name_type_attr_matlab, "struct")
     for i = 1:length(k)
@@ -476,11 +478,11 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, k:
 end
 
 # Write Associative as a struct
-m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, s::Associative) =
+m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::Associative) =
     m_write(mfile, parent, name, check_struct_keys(collect(keys(s))), collect(values(s)))
 
 # Write generic CompositeKind as a struct
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, s)
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s)
     if isbits(s)
         error("This is the write function for CompositeKind, but the input doesn't fit")
     end
@@ -489,7 +491,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::ByteString, s)
 end
 
 # Check whether a variable name is valid, then write it
-function write(parent::MatlabHDF5File, name::ByteString, thing)
+function write(parent::MatlabHDF5File, name::String, thing)
     check_valid_varname(name)
     m_write(parent, parent.plain, name, thing)
 end
@@ -556,7 +558,7 @@ function read(obj::HDF5Object, ::Type{MatlabString})
     if ndims(data) == 1
         return utf8(convert(Vector{Char}, data))
     elseif ndims(data) == 2
-        return datap = ByteString[rstrip(utf8(convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
+        return datap = Compat.String[rstrip(utf8(convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
     else
         return data
     end

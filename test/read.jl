@@ -1,12 +1,13 @@
 using MAT, Base.Test
 using Compat
+using Compat.String
 
 function check(filename, result)
     matfile = matopen(filename)
     for (k, v) in result
         @test exists(matfile, k)
         got = read(matfile, k)
-        if !isequal(got, v) || (typeof(got) != typeof(v) && (!isa(got, ByteString) || !(isa(v, ByteString))))
+        if !isequal(got, v) || (typeof(got) != typeof(v) && (!isa(got, String) || !(isa(v, String))))
             close(matfile)
             error("""
                 Data mismatch reading $k from $filename ($format)
@@ -79,7 +80,7 @@ for format in ["v6", "v7", "v7.3"]
     result = @compat Dict(
         "simple_string" => "the quick brown fox",
         "accented_string" => "thé qüîck browñ fòx",
-        "concatenated_strings" => ByteString["this is a string", "this is another string"],
+        "concatenated_strings" => Compat.String["this is a string", "this is another string"],
         "cell_strings" => Any["this is a string" "this is another string"],
         "empty_string" => ""
     )
@@ -101,12 +102,12 @@ for format in ["v6", "v7", "v7.3"]
     check("cell.mat", result)
 
     result = @compat Dict(
-        "s" => Dict{ASCIIString,Any}(
+        "s" => Dict{Compat.ASCIIString,Any}(
             "a" => 1.0,
             "b" => [1.0 2.0],
             "c" => [1.0 2.0 3.0]
         ),
-        "s2" => Dict{ASCIIString,Any}("a" => Any[1.0 2.0])
+        "s2" => Dict{Compat.ASCIIString,Any}("a" => Any[1.0 2.0])
     )
     check("struct.mat", result)
 
@@ -119,7 +120,7 @@ for format in ["v6", "v7", "v7.3"]
         ]
     )
     check("logical.mat", result)
-    
+
     result = @compat Dict(
         "empty_cells" => Any[zeros(0, 0), "test", zeros(0, 0)].'
     )
