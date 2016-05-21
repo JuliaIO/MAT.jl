@@ -185,3 +185,14 @@ result = @compat Dict(
     ]
 )
 check(joinpath(dirname(@__FILE__), "big_endian.mat"), result)
+
+# test reading of mxOBJECT_CLASS (#57)
+let objtestfile = "obj.mat"
+    vars = matread(joinpath(dirname(@__FILE__), objtestfile))
+    # check if all variables were read
+    for key in ("A", "tm", "signal")
+        @test key in keys(vars)
+    end
+    # check if class name was read correctly
+    @test vars["A"]["class"] == "Assoc"
+end

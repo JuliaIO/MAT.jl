@@ -153,13 +153,12 @@ function read_cell(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
 end
 
 function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_object::Bool)
-    field_length = read_element(f, swap_bytes, Int32)[1]
-    field_names = read_element(f, swap_bytes, UInt8)
-    n_fields = div(length(field_names), field_length)
     if is_object
         class = ascii(read_element(f, swap_bytes, UInt8))
     end
-
+    field_length = read_element(f, swap_bytes, Int32)[1]
+    field_names = read_element(f, swap_bytes, UInt8)
+    n_fields = div(length(field_names), field_length)
 
     # Get field names as strings
     field_name_strings = Array(Compat.ASCIIString, n_fields)
