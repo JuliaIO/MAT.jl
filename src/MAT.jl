@@ -121,7 +121,7 @@ function matread(filename::AbstractString)
 end
 
 # Write a dict to a MATLAB file
-function matwrite{S, T}(filename::AbstractString, dict::Dict{S, T})
+function matwrite{S, T}(filename::AbstractString, dict::Associative{S, T})
     file = matopen(filename, "w")
     try
         for (k, v) in dict
