@@ -556,9 +556,9 @@ function read(obj::HDF5Object, ::Type{MatlabString})
         data = reshape(data, sz[2:end])
     end
     if ndims(data) == 1
-        return utf8(convert(Vector{Char}, data))
+        return convert(Compat.UTF8String, convert(Vector{Char}, data))
     elseif ndims(data) == 2
-        return datap = Compat.String[rstrip(utf8(convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
+        return datap = Compat.String[rstrip(convert(Compat.UTF8String, convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
     else
         return data
     end

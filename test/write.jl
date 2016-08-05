@@ -74,7 +74,7 @@ test_write(@compat Dict(
 	"sparse_eye" => speye(20),
 	"sparse_logical" => SparseMatrixCSC{Bool,Int64}(5, 5, [1:6;], [1:5;], fill(true, 5)),
 	"sparse_random" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]),
-	"sparse_complex" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]*(1. + 1.im)),
+	"sparse_complex" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]*(1. + 1.0im)),
 	"sparse_zeros" => SparseMatrixCSC(20, 20, ones(Int, 21), Int[], Float64[])
 ))
 
