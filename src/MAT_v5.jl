@@ -145,7 +145,7 @@ function read_data{T}(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int
 end
 
 function read_cell(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
-    data = cell(convert(Vector{Int}, dimensions)...)
+    data = Array(Any, convert(Vector{Int}, dimensions)...)
     for i = 1:length(data)
         (ignored_name, data[i]) = read_matrix(f, swap_bytes)
     end
@@ -154,7 +154,7 @@ end
 
 function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_object::Bool)
     if is_object
-        class = ascii(read_element(f, swap_bytes, UInt8))
+        class = Compat.ASCIIString(read_element(f, swap_bytes, UInt8))
     end
     field_length = read_element(f, swap_bytes, Int32)[1]
     field_names = read_element(f, swap_bytes, UInt8)
@@ -166,7 +166,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
     for i = 1:n_fields
         sname = field_names[(i-1)*field_length+1:i*field_length]
         index = findfirst(sname, 0)
-        field_name_strings[i] = ascii(index == 0 ? sname : sname[1:index-1])
+        field_name_strings[i] = Compat.ASCIIString(index == 0 ? sname : sname[1:index-1])
     end
 
     data = Dict{Compat.ASCIIString, Any}()
@@ -183,7 +183,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
     else
         # Read multiple structs into a dict of arrays
         for field_name in field_name_strings
-            data[field_name] = cell(dimensions...)
+            data[field_name] = Array(Any, dimensions...)
         end
         for i = 1:n_el
             for field_name in field_name_strings
@@ -248,11 +248,11 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         # happen in the wild.
         chars = read(f, UInt8, nbytes)
         if dimensions[1] <= 1
-            data = bytestring(chars)
+            data = Compat.UTF8String(chars)
         else
             data = Array(Compat.String, dimensions[1])
             for i = 1:dimensions[1]
-                data[i] = rstrip(bytestring(chars[i:dimensions[1]:end]))
+                data[i] = rstrip(Compat.UTF8String(chars[i:dimensions[1]:end]))
             end
         end
     elseif dtype <= 4 || dtype == 17
@@ -267,7 +267,7 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
                 char = convert(Char, chars[i])
                 if 255 < convert(UInt32, char)
                     # Newer versions of MATLAB seem to write some mongrel UTF-8...
-                    char = bytestring([truncate_to_uint8(chars[i] >> 8), truncate_to_uint8(chars[i])])[1]
+                    char = Compat.UTF8String([truncate_to_uint8(chars[i] >> 8), truncate_to_uint8(chars[i])])[1]
                 end
                 write(bufs[j], char)
                 i += 1
@@ -277,9 +277,9 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         if dimensions[1] == 0
             data = ""
         elseif dimensions[1] == 1
-            data = bytestring(bufs[1])
+            data = takebuf_string(bufs[1])
         else
-            data = [rstrip(bytestring(buf)) for buf in bufs]
+            data = [rstrip(takebuf_string(buf)) for buf in bufs]
         end
     else
         error("Unsupported string type")
@@ -312,7 +312,7 @@ function read_matrix(f::IO, swap_bytes::Bool)
 
     flags = read_element(f, swap_bytes, UInt32)
     dimensions = read_element(f, swap_bytes, Int32)
-    name = ascii(read_element(f, swap_bytes, UInt8))
+    name = Compat.ASCIIString(read_element(f, swap_bytes, UInt8))
 
     class = flags[1] & 0xFF
     local data
@@ -370,7 +370,7 @@ function getvarnames(matfile::Matlabv5File)
                 dest = zeros(UInt8, 1024)
                 dest_buf_size = Int[1024]
 
-                ret = ccall((:uncompress, @windows ? "zlib1" : "libz"), Int32, (Ptr{UInt8}, Ptr{Int}, Ptr{UInt8}, UInt),
+                ret = ccall((:uncompress, @static is_windows() ? "zlib1" : "libz"), Int32, (Ptr{UInt8}, Ptr{Int}, Ptr{UInt8}, UInt),
                     dest, dest_buf_size, source, length(source))
 
                 # Zlib may complain because the buffer is small or the data are incomplete
@@ -391,7 +391,7 @@ function getvarnames(matfile::Matlabv5File)
 
             read_element(f, matfile.swap_bytes, UInt32)
             read_element(f, matfile.swap_bytes, Int32)
-            varnames[ascii(read_element(f, matfile.swap_bytes, UInt8))] = offset
+            varnames[Compat.ASCIIString(read_element(f, matfile.swap_bytes, UInt8))] = offset
 
             if dtype == miCOMPRESSED
                 # Close IOBuffer

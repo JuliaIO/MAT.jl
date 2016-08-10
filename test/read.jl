@@ -97,7 +97,8 @@ for format in ["v6", "v7", "v7.3"]
     check("array.mat", result)
 
     result = @compat Dict(
-        "cell" => Any[1.0, 2.01, "string", Any["string1", "string2"]].'
+        "cell" => Any[v for _ in 1:1,
+                      v in (1.0, 2.01, "string", Any["string1" "string2"])]
     )
     check("cell.mat", result)
 
@@ -122,7 +123,7 @@ for format in ["v6", "v7", "v7.3"]
     check("logical.mat", result)
 
     result = @compat Dict(
-        "empty_cells" => Any[zeros(0, 0), "test", zeros(0, 0)].'
+        "empty_cells" => Any[v for _ in 1:1, v in (zeros(0, 0), "test", zeros(0, 0))]
     )
     check("empty_cells.mat", result)
 
@@ -131,7 +132,7 @@ for format in ["v6", "v7", "v7.3"]
         "sparse_eye" => speye(20),
         "sparse_logical" => SparseMatrixCSC{Bool,Int64}(5, 5, [1:6;], [1:5;], fill(true, 5)),
         "sparse_random" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]),
-        "sparse_complex" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]*(1. + 1.im)),
+        "sparse_complex" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]*(1. + 1.0im)),
         "sparse_zeros" => SparseMatrixCSC(20, 20, ones(Int, 21), Int[], Float64[])
     )
     check("sparse.mat", result)
