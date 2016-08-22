@@ -26,7 +26,7 @@
 # http://www.mathworks.com/help/pdf_doc/matlab/matfile_format.pdf
 
 module MAT_v5
-using Zlib, HDF5, Compat
+using Libz, BufferedStreams, HDF5, Compat
 using Compat.String
 import Base: read, write, close
 import HDF5: names, exists
@@ -91,6 +91,9 @@ end
 
 skip_padding(f::IO, nbytes::Int, hbytes::Int) = if nbytes % hbytes != 0
     skip(f, hbytes-(nbytes % hbytes))
+end
+skip_padding(f::BufferedInputStream, nbytes::Int, hbytes::Int) = if nbytes % hbytes != 0
+    seekforward(f, hbytes-(nbytes % hbytes))
 end
 
 # Read data type and number of bytes at the start of a data element
@@ -292,11 +295,7 @@ end
 function read_matrix(f::IO, swap_bytes::Bool)
     (dtype, nbytes) = read_header(f, swap_bytes)
     if dtype == miCOMPRESSED
-        bytes = decompress(read(f, UInt8, nbytes))
-        mi = IOBuffer(bytes)
-        output = read_matrix(mi, swap_bytes)
-        close(mi)
-        return output
+        return read_matrix(ZlibInflateInputStream(read(f, UInt8, nbytes)), swap_bytes)
     elseif dtype != miMATRIX
         error("Unexpected data type")
     elseif nbytes == 0
@@ -351,7 +350,6 @@ function read(matfile::Matlabv5File)
     end
     vars
 end
-
 # Read only variable names from an HDF5 file
 function getvarnames(matfile::Matlabv5File)
     if !isdefined(matfile, :varnames)
@@ -361,27 +359,7 @@ function getvarnames(matfile::Matlabv5File)
             offset = position(matfile.ios)
             (dtype, nbytes, hbytes) = read_header(matfile.ios, matfile.swap_bytes)
             if dtype == miCOMPRESSED
-                # Read 1K or less of data
-                read_bytes = min(nbytes, 1024)
-                source = read(matfile.ios, UInt8, read_bytes)
-                skip(matfile.ios, nbytes-read_bytes)
-
-                # Uncompress to 1K byte buffer
-                dest = zeros(UInt8, 1024)
-                dest_buf_size = Int[1024]
-
-                ret = ccall((:uncompress, @static is_windows() ? "zlib1" : "libz"), Int32, (Ptr{UInt8}, Ptr{Int}, Ptr{UInt8}, UInt),
-                    dest, dest_buf_size, source, length(source))
-
-                # Zlib may complain because the buffer is small or the data are incomplete
-                if ret != Zlib.Z_OK && ret != Zlib.Z_BUF_ERROR && ret != Zlib.Z_DATA_ERROR
-                    throw(ZError(ret))
-                end
-
-                # Create IOBuffer from uncompressed buffer
-                f = IOBuffer(dest)
-
-                # Read header
+                f = ZlibInflateInputStream(matfile.ios)
                 read_header(f, matfile.swap_bytes)
             elseif dtype == miMATRIX
                 f = matfile.ios
@@ -393,13 +371,7 @@ function getvarnames(matfile::Matlabv5File)
             read_element(f, matfile.swap_bytes, Int32)
             varnames[Compat.ASCIIString(read_element(f, matfile.swap_bytes, UInt8))] = offset
 
-            if dtype == miCOMPRESSED
-                # Close IOBuffer
-                close(f)
-            else
-                # Seek past
-                seek(f, offset+nbytes+hbytes)
-            end
+            seek(matfile.ios, offset+nbytes+hbytes)
         end
     end
     matfile.varnames
