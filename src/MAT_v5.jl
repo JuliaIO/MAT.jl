@@ -70,16 +70,16 @@ const mxUINT32_CLASS = 13
 const mxINT64_CLASS = 14
 const mxUINT64_CLASS = 15
 const READ_TYPES = Type[
-    Int8, UInt8, Int16, UInt16, Int32, UInt32, Float32, @compat(Union{}),
-    Float64, @compat(Union{}), @compat(Union{}), Int64, UInt64]
+    Int8, UInt8, Int16, UInt16, Int32, UInt32, Float32, Union{},
+    Float64, Union{}, Union{}, Int64, UInt64]
 const CONVERT_TYPES = Type[
-    @compat(Union{}), @compat(Union{}), @compat(Union{}), @compat(Union{}),
-    @compat(Union{}), Float64, Float32, Int8, UInt8,
+    Union{}, Union{}, Union{}, Union{},
+    Union{}, Float64, Float32, Int8, UInt8,
     Int16, UInt16, Int32, UInt32, Int64, UInt64]
 
 read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}) =
     swap_bytes ? bswap(read(f, T)) : read(f, T)
-function read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::@compat(Union{Int, @compat Tuple{Vararg{Int}}}))
+function read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union{Int, Tuple{Vararg{Int}}})
     d = read(f, T, dim)
     if swap_bytes
         for i = 1:length(d)
@@ -112,7 +112,7 @@ end
 # Read data element as a vector of a given type
 function read_element{T}(f::IO, swap_bytes::Bool, ::Type{T})
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
-    data = read_bswap(f, swap_bytes, T, @compat Int(div(nbytes, sizeof(T))))
+    data = read_bswap(f, swap_bytes, T, Int(div(nbytes, sizeof(T))))
     skip_padding(f, nbytes, hbytes)
     data
 end
@@ -121,7 +121,7 @@ end
 function read_data(f::IO, swap_bytes::Bool)
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     read_type = READ_TYPES[dtype]
-    data = read_bswap(f, swap_bytes, read_type, @compat Int(div(nbytes, sizeof(read_type))))
+    data = read_bswap(f, swap_bytes, read_type, Int(div(nbytes, sizeof(read_type))))
     skip_padding(f, nbytes, hbytes)
     data
 end
@@ -306,7 +306,7 @@ function read_matrix(f::IO, swap_bytes::Bool)
         #     a = {[], [], []}
         # then MATLAB does not save the empty cells as zero-byte matrices. To avoid
         # surprises, we produce an empty array in both cases.
-        return ("", Array(@compat(Union{}), 0, 0))
+        return ("", Array(Union{}, 0, 0))
     end
 
     flags = read_element(f, swap_bytes, UInt32)

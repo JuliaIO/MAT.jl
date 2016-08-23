@@ -34,8 +34,8 @@ using Compat.String
 import Base: read, write, close
 import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
 
-typealias HDF5Parent @compat(Union{HDF5File, HDF5Group})
-typealias HDF5BitsOrBool @compat(Union{HDF5BitsKind,Bool})
+typealias HDF5Parent Union{HDF5File, HDF5Group}
+typealias HDF5BitsOrBool Union{HDF5BitsKind,Bool}
 
 type MatlabHDF5File <: HDF5.DataFile
     plain::HDF5File
@@ -140,7 +140,7 @@ function m_read(dset::HDF5Dataset)
         if mattype == "char"
             return ""
         else
-            T = mattype == "canonical empty" ? @compat(Union{}) : str2eltype_matlab[mattype]
+            T = mattype == "canonical empty" ? Union{} : str2eltype_matlab[mattype]
             return Array(T, dims...)
         end
     end
@@ -278,7 +278,7 @@ function m_writetypeattr(dset, T)
     # Write the attribute
     a_write(dset, name_type_attr_matlab, typename)
     if T == Bool
-        a_write(dset, int_decode_attr_matlab, @compat Int32(1))
+        a_write(dset, int_decode_attr_matlab, Int32(1))
     end
 end
 
@@ -331,7 +331,7 @@ function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::String, adata
 end
 
 # Write a scalar or array
-function m_write{T<:HDF5BitsOrBool}(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::@compat(Union{T, Complex{T}, Array{T}, Array{Complex{T}}}))
+function m_write{T<:HDF5BitsOrBool}(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Union{T, Complex{T}, Array{T}, Array{Complex{T}}})
     if isempty(data)
         m_writeempty(parent, name, data)
         return
@@ -349,7 +349,7 @@ function m_write{T}(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat
     g = g_create(parent, name)
     try
         m_writetypeattr(g, T)
-        a_write(g, sparse_attr_matlab, @compat UInt64(size(data, 1)))
+        a_write(g, sparse_attr_matlab, UInt64(size(data, 1)))
         if !isempty(data.nzval)
             close(m_writearray(g, "data", toarray(data.nzval)))
             close(m_writearray(g, "ir", add!(isa(data.rowval, Vector{UInt64}) ? copy(data.rowval) : convert(Vector{UInt64}, data.rowval), reinterpret(UInt64, convert(Int64, -1)))))
@@ -388,7 +388,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, str::A
         dset, dtype = d_create(parent, name, data)
         try
             a_write(dset, name_type_attr_matlab, "char")
-            a_write(dset, int_decode_attr_matlab, @compat Int32(2))
+            a_write(dset, int_decode_attr_matlab, Int32(2))
             HDF5.writearray(dset, dtype.id, data)
         finally
             close(dset)
@@ -500,7 +500,7 @@ end
 
 type MatlabString; end
 
-const str2type_matlab = @compat Dict(
+const str2type_matlab = Dict(
     "canonical empty" => nothing,
     "int8"    => Array{Int8},
     "uint8"   => Array{UInt8},
@@ -517,7 +517,7 @@ const str2type_matlab = @compat Dict(
     "logical" => Array{Bool}
 )
 # These operate on the element type rather than the whole type
-const str2eltype_matlab = @compat Dict(
+const str2eltype_matlab = Dict(
     "canonical empty" => nothing,
     "int8"    => Int8,
     "uint8"   => UInt8,
@@ -533,7 +533,7 @@ const str2eltype_matlab = @compat Dict(
     "char"    => MatlabString,
     "logical" => Bool
 )
-const type2str_matlab = @compat Dict(
+const type2str_matlab = Dict(
     Int8    => "int8",
     UInt8   => "uint8",
     Int16   => "int16",
