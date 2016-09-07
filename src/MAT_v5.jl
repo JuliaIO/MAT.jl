@@ -92,9 +92,6 @@ end
 skip_padding(f::IO, nbytes::Int, hbytes::Int) = if nbytes % hbytes != 0
     skip(f, hbytes-(nbytes % hbytes))
 end
-skip_padding(f::BufferedInputStream, nbytes::Int, hbytes::Int) = if nbytes % hbytes != 0
-    seekforward(f, hbytes-(nbytes % hbytes))
-end
 
 # Read data type and number of bytes at the start of a data element
 function read_header(f::IO, swap_bytes::Bool)
