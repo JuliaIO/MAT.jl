@@ -57,8 +57,8 @@ function close(f::MatlabHDF5File)
         close(f.plain)
         if f.writeheader
             magic = zeros(UInt8, 512)
-            const identifier = "MATLAB 7.3 MAT-file" # minimal but sufficient
-            magic[1:length(identifier)] = identifier.data
+            identifier = "MATLAB 7.3 MAT-file" # minimal but sufficient
+            magic[1:length(identifier)] = Vector{UInt8}(identifier)
             magic[126] = 0x02
             magic[127] = 0x49
             magic[128] = 0x4d
@@ -119,7 +119,7 @@ function read_complex{T}(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{Array{T}
     memtype = build_datatype_complex(T)
     sz = size(dset)
     st = sizeof(T)
-    buf = Array(UInt8, 2*st, sz...)
+    buf = Array{UInt8}(2*st, sz...)
     HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, buf)
 
     if T == Float32
@@ -141,7 +141,7 @@ function m_read(dset::HDF5Dataset)
             return ""
         else
             T = mattype == "canonical empty" ? Union{} : str2eltype_matlab[mattype]
-            return Array(T, dims...)
+            return Array{T}(dims...)
         end
     end
 
@@ -150,7 +150,7 @@ function m_read(dset::HDF5Dataset)
     if mattype == "cell"
         # Cell arrays, represented as an array of refs
         refs = read(dset, Array{HDF5ReferenceObj})
-        out = Array(Any, size(refs))
+        out = Array{Any}(size(refs))
         f = file(dset)
         for i = 1:length(refs)
             dset = f[refs[i]]
@@ -429,7 +429,7 @@ function m_write{T}(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat
             close(a)
         end
         # Write the items to the reference group
-        refs = Array(HDF5ReferenceObj, size(data)...)
+        refs = Array{HDF5ReferenceObj}(size(data))
         for i = 1:length(data)
             mfile.refcounter += 1
             itemname = string(mfile.refcounter)
@@ -455,7 +455,7 @@ end
 
 # Check that keys are valid for a struct, and convert them to an array of ASCIIStrings
 function check_struct_keys(k::Vector)
-    asckeys = Array(Compat.ASCIIString, length(k))
+    asckeys = Vector{Compat.ASCIIString}(length(k))
     for i = 1:length(k)
         key = k[i]
         if !isa(key, AbstractString)

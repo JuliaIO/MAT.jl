@@ -31,6 +31,14 @@ using Compat.String
 import Base: read, write, close
 import HDF5: names, exists
 
+if VERSION < v"0.6.0-dev.1632"
+    round_uint8(data) = round(UInt8, data)
+    complex_array(a, b) = complex(a, b)
+else
+    round_uint8(data) = round.(UInt8, data)
+    complex_array(a, b) = complex.(a, b)
+end
+
 type Matlabv5File <: HDF5.DataFile
     ios::IOStream
     swap_bytes::Bool
@@ -145,7 +153,7 @@ function read_data{T}(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int
 end
 
 function read_cell(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
-    data = Array(Any, convert(Vector{Int}, dimensions)...)
+    data = Array{Any}(convert(Vector{Int}, dimensions)...)
     for i = 1:length(data)
         (ignored_name, data[i]) = read_matrix(f, swap_bytes)
     end
@@ -161,7 +169,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
     n_fields = div(length(field_names), field_length)
 
     # Get field names as strings
-    field_name_strings = Array(Compat.ASCIIString, n_fields)
+    field_name_strings = Vector{Compat.ASCIIString}(n_fields)
     n_el = prod(dimensions)
     for i = 1:n_fields
         sname = field_names[(i-1)*field_length+1:i*field_length]
@@ -183,7 +191,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
     else
         # Read multiple structs into a dict of arrays
         for field_name in field_name_strings
-            data[field_name] = Array(Any, dimensions...)
+            data[field_name] = Array{Any}(dimensions...)
         end
         for i = 1:n_el
             for field_name in field_name_strings
@@ -226,7 +234,7 @@ function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::
     else
         pr = read_data(f, swap_bytes)
         if (flags[1] & (1 << 11)) != 0 # complex
-            pr = complex(pr, read_data(f, swap_bytes))
+            pr = complex_array(pr, read_data(f, swap_bytes))
         end
     end
 
@@ -250,7 +258,7 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         if dimensions[1] <= 1
             data = Compat.UTF8String(chars)
         else
-            data = Array(Compat.String, dimensions[1])
+            data = Vector{Compat.String}(dimensions[1])
             for i = 1:dimensions[1]
                 data[i] = rstrip(Compat.UTF8String(chars[i:dimensions[1]:end]))
             end
@@ -277,9 +285,9 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         if dimensions[1] == 0
             data = ""
         elseif dimensions[1] == 1
-            data = takebuf_string(bufs[1])
+            data = String(take!(bufs[1]))
         else
-            data = [rstrip(takebuf_string(buf)) for buf in bufs]
+            data = [rstrip(String(take!(buf))) for buf in bufs]
         end
     else
         error("Unsupported string type")
@@ -303,7 +311,7 @@ function read_matrix(f::IO, swap_bytes::Bool)
         #     a = {[], [], []}
         # then MATLAB does not save the empty cells as zero-byte matrices. To avoid
         # surprises, we produce an empty array in both cases.
-        return ("", Array(Union{}, 0, 0))
+        return ("", Matrix{Union{}}(0, 0))
     end
 
     flags = read_element(f, swap_bytes, UInt32)
@@ -324,9 +332,9 @@ function read_matrix(f::IO, swap_bytes::Bool)
         convert_type = CONVERT_TYPES[class]
         data = read_data(f, swap_bytes, convert_type, dimensions)
         if (flags[1] & (1 << 11)) != 0 # complex
-            data = complex(data, read_data(f, swap_bytes, convert_type, dimensions))
+            data = complex_array(data, read_data(f, swap_bytes, convert_type, dimensions))
         elseif (flags[1] & (1 << 9)) != 0 # logical
-            data = reinterpret(Bool, round(UInt8, data))
+            data = reinterpret(Bool, round_uint8(data))
         end
     end
 
