@@ -70,7 +70,7 @@ test_write(Dict(
 ))
 
 test_write(Dict(
-	"sparse_empty" => sparse(Array(Float64, 0, 0)),
+	"sparse_empty" => sparse(Matrix{Float64}(0, 0)),
 	"sparse_eye" => speye(20),
 	"sparse_logical" => SparseMatrixCSC{Bool,Int64}(5, 5, [1:6;], [1:5;], fill(true, 5)),
 	"sparse_random" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]),
