@@ -34,8 +34,8 @@ using Compat.String
 import Base: read, write, close
 import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
 
-typealias HDF5Parent Union{HDF5File, HDF5Group}
-typealias HDF5BitsOrBool Union{HDF5BitsKind,Bool}
+const HDF5Parent = Union{HDF5File, HDF5Group}
+const HDF5BitsOrBool = Union{HDF5BitsKind,Bool}
 
 type MatlabHDF5File <: HDF5.DataFile
     plain::HDF5File
