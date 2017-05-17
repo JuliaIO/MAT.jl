@@ -58,7 +58,7 @@ function close(f::MatlabHDF5File)
         if f.writeheader
             magic = zeros(UInt8, 512)
             identifier = "MATLAB 7.3 MAT-file" # minimal but sufficient
-            magic[1:length(identifier)] = Vector{UInt8}(identifier)
+            magic[1:length(identifier)] = Vector{UInt8}("$identifier")
             magic[126] = 0x02
             magic[127] = 0x49
             magic[128] = 0x4d
