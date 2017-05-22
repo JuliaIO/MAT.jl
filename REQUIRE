@@ -2,4 +2,4 @@ julia 0.4
 HDF5
 BufferedStreams 0.2.0
 Libz
-Compat 0.7.19
+Compat 0.9.5
