@@ -46,10 +46,10 @@ vars = matread("matfile.mat")
 To write a Dict to a MAT file, using its keys as variable names:
 
 ```julia
-matwrite("matfile.mat", {
+matwrite("matfile.mat", Dict(
 	"myvar1" => 0,
 	"myvar2" => 1
-})
+))
 ```
 
 To get a list of variable names in a MAT file:
