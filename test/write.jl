@@ -97,3 +97,13 @@ close(fid)
 fid = matopen(tmpfile, "w")
 @test_throws ErrorException write(fid, "1invalidvarname", "1invalidvarvalue")
 close(fid)
+
+using DataStructures
+sd = SortedDict(Dict(
+	"uint16" => UInt16(1),
+	"Complex128" => [1.0 -1.0 1.0+1.0im 1.0-1.0im -1.0+1.0im -1.0-1.0im 1.0im],
+	"simple_string" => "the quick brown fox",
+	"a1x2" => [1.0 2.0],
+	"sparse_empty" => sparse(Array(Float64, 0, 0))
+))
+test_write(sd)
