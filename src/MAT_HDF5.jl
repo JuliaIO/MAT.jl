@@ -232,7 +232,7 @@ function m_read(g::HDF5Group)
     else
         fn = names(g)
     end
-    s = Dict{Compat.ASCIIString, Any}()
+    s = Dict{String, Any}()
     for i = 1:length(fn)
         dset = g[fn[i]]
         try
@@ -251,7 +251,7 @@ Read a variable from an opened Matlab file and return its value.
 
 See `matopen` and `matread`.
 """
-function read(f::MatlabHDF5File, name::Compat.ASCIIString)
+function read(f::MatlabHDF5File, name::String)
     local val
     obj = f.plain[name]
     try
@@ -278,7 +278,7 @@ Return true if a variable is present in an opened Matlab file.
 
 See `matopen`.
 """
-exists(p::MatlabHDF5File, path::Compat.ASCIIString) = exists(p.plain, path)
+exists(p::MatlabHDF5File, path::String) = exists(p.plain, path)
 
 ### Writing
 
@@ -482,20 +482,20 @@ end
 
 # Check that keys are valid for a struct, and convert them to an array of ASCIIStrings
 function check_struct_keys(k::Vector)
-    asckeys = Vector{Compat.ASCIIString}(length(k))
+    asckeys = Vector{String}(length(k))
     for i = 1:length(k)
         key = k[i]
         if !isa(key, AbstractString)
             error("Only Dicts with string keys may be saved as MATLAB structs")
         end
         check_valid_varname(key)
-        asckeys[i] = convert(Compat.ASCIIString, key)
+        asckeys[i] = convert(String, key)
     end
     asckeys
 end
 
 # Write a struct from arrays of keys and values
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, k::Vector{Compat.ASCIIString}, v::Vector)
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, k::Vector{String}, v::Vector)
     g = g_create(parent, name)
     a_write(g, name_type_attr_matlab, "struct")
     for i = 1:length(k)
@@ -590,9 +590,9 @@ function read(obj::HDF5Object, ::Type{MatlabString})
         data = reshape(data, sz[2:end])
     end
     if ndims(data) == 1
-        return convert(Compat.UTF8String, convert(Vector{Char}, data))
+        return convert(String, convert(Vector{Char}, data))
     elseif ndims(data) == 2
-        return datap = Compat.String[rstrip(convert(Compat.UTF8String, convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
+        return datap = Compat.String[rstrip(convert(String, convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
     else
         return data
     end

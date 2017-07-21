@@ -150,7 +150,7 @@ function matwrite{S, T}(filename::AbstractString, dict::Associative{S, T})
         for (k, v) in dict
             local kstring
             try
-                kstring = ascii(convert(Compat.ASCIIString, k))
+                kstring = ascii(convert(String, k))
             catch x
                 error("matwrite requires a Dict with ASCII keys")
             end
