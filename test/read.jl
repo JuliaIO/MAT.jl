@@ -103,12 +103,12 @@ for format in ["v6", "v7", "v7.3"]
     check("cell.mat", result)
 
     result = Dict(
-        "s" => Dict{Compat.ASCIIString,Any}(
+        "s" => Dict{String,Any}(
             "a" => 1.0,
             "b" => [1.0 2.0],
             "c" => [1.0 2.0 3.0]
         ),
-        "s2" => Dict{Compat.ASCIIString,Any}("a" => Any[1.0 2.0])
+        "s2" => Dict{String,Any}("a" => Any[1.0 2.0])
     )
     check("struct.mat", result)
 

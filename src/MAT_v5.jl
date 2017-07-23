@@ -42,7 +42,7 @@ end
 type Matlabv5File <: HDF5.DataFile
     ios::IOStream
     swap_bytes::Bool
-    varnames::Dict{Compat.ASCIIString, Int64}
+    varnames::Dict{String, Int64}
 
     Matlabv5File(ios, swap_bytes) = new(ios, swap_bytes)
 end
@@ -162,22 +162,22 @@ end
 
 function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_object::Bool)
     if is_object
-        class = Compat.ASCIIString(read_element(f, swap_bytes, UInt8))
+        class = String(read_element(f, swap_bytes, UInt8))
     end
     field_length = read_element(f, swap_bytes, Int32)[1]
     field_names = read_element(f, swap_bytes, UInt8)
     n_fields = div(length(field_names), field_length)
 
     # Get field names as strings
-    field_name_strings = Vector{Compat.ASCIIString}(n_fields)
+    field_name_strings = Vector{String}(n_fields)
     n_el = prod(dimensions)
     for i = 1:n_fields
         sname = field_names[(i-1)*field_length+1:i*field_length]
         index = findfirst(sname, 0)
-        field_name_strings[i] = Compat.ASCIIString(index == 0 ? sname : sname[1:index-1])
+        field_name_strings[i] = String(index == 0 ? sname : sname[1:index-1])
     end
 
-    data = Dict{Compat.ASCIIString, Any}()
+    data = Dict{String, Any}()
     sizehint!(data, n_fields+1)
     if is_object
         data["class"] = class
@@ -256,11 +256,11 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         # happen in the wild.
         chars = read(f, UInt8, nbytes)
         if dimensions[1] <= 1
-            data = Compat.UTF8String(chars)
+            data = String(chars)
         else
             data = Vector{Compat.String}(dimensions[1])
             for i = 1:dimensions[1]
-                data[i] = rstrip(Compat.UTF8String(chars[i:dimensions[1]:end]))
+                data[i] = rstrip(String(chars[i:dimensions[1]:end]))
             end
         end
     elseif dtype <= 4 || dtype == 17
@@ -275,7 +275,7 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
                 char = convert(Char, chars[i])
                 if 255 < convert(UInt32, char)
                     # Newer versions of MATLAB seem to write some mongrel UTF-8...
-                    char = Compat.UTF8String([truncate_to_uint8(chars[i] >> 8), truncate_to_uint8(chars[i])])[1]
+                    char = String([truncate_to_uint8(chars[i] >> 8), truncate_to_uint8(chars[i])])[1]
                 end
                 write(bufs[j], char)
                 i += 1
@@ -316,7 +316,7 @@ function read_matrix(f::IO, swap_bytes::Bool)
 
     flags = read_element(f, swap_bytes, UInt32)
     dimensions = read_element(f, swap_bytes, Int32)
-    name = Compat.ASCIIString(read_element(f, swap_bytes, UInt8))
+    name = String(read_element(f, swap_bytes, UInt8))
 
     class = flags[1] & 0xFF
     local data
@@ -348,7 +348,7 @@ matopen(ios::IOStream, endian_indicator::UInt16) =
 # Read whole MAT file
 function read(matfile::Matlabv5File)
     seek(matfile.ios, 128)
-    vars = Dict{Compat.ASCIIString, Any}()
+    vars = Dict{String, Any}()
     while !eof(matfile.ios)
         (name, data) = read_matrix(matfile.ios, matfile.swap_bytes)
         vars[name] = data
@@ -359,7 +359,7 @@ end
 function getvarnames(matfile::Matlabv5File)
     if !isdefined(matfile, :varnames)
         seek(matfile.ios, 128)
-        matfile.varnames = varnames = Dict{Compat.ASCIIString, Int64}()
+        matfile.varnames = varnames = Dict{String, Int64}()
         while !eof(matfile.ios)
             offset = position(matfile.ios)
             (dtype, nbytes, hbytes) = read_header(matfile.ios, matfile.swap_bytes)
@@ -374,7 +374,7 @@ function getvarnames(matfile::Matlabv5File)
 
             read_element(f, matfile.swap_bytes, UInt32)
             read_element(f, matfile.swap_bytes, Int32)
-            varnames[Compat.ASCIIString(read_element(f, matfile.swap_bytes, UInt8))] = offset
+            varnames[String(read_element(f, matfile.swap_bytes, UInt8))] = offset
 
             seek(matfile.ios, offset+nbytes+hbytes)
         end
@@ -382,13 +382,13 @@ function getvarnames(matfile::Matlabv5File)
     matfile.varnames
 end
 
-exists(matfile::Matlabv5File, varname::Compat.ASCIIString) =
+exists(matfile::Matlabv5File, varname::String) =
     haskey(getvarnames(matfile), varname)
 names(matfile::Matlabv5File) =
     keys(getvarnames(matfile))
 
 # Read a variable from a MAT file
-function read(matfile::Matlabv5File, varname::Compat.ASCIIString)
+function read(matfile::Matlabv5File, varname::String)
     varnames = getvarnames(matfile)
     if !haskey(varnames, varname)
         error("no variable $varname in file")
