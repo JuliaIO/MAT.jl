@@ -28,8 +28,7 @@
 
 module MAT_HDF5
 
-using HDF5, Compat
-using Compat.String
+using HDF5
 
 import Base: read, write, close
 import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
@@ -123,16 +122,17 @@ function read_complex{T}(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{Array{T}
     end
     memtype = build_datatype_complex(T)
     sz = size(dset)
+    dbuf = Array{T}(2, sz...)
     st = sizeof(T)
-    buf = Array{UInt8}(2*st, sz...)
+    buf = reinterpret(UInt8, dbuf, (2 * st, sz...))
     HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, buf)
 
     if T == Float32
-        d = reinterpret(Complex64, buf, sz)
+        d = reinterpret(Complex64, dbuf, sz)
     elseif T == Float64
-        d = reinterpret(Complex128, buf, sz)
+        d = reinterpret(Complex128, dbuf, sz)
     else
-        d = reinterpret(T, slicedim(buf, 1, 1:st), sz) + im*reinterpret(T, slicedim(buf, 1, st+1:2*st), sz)
+        d = slicedim(dbuf, 1, 1) + im * slicedim(dbuf, 1, 2)
     end
     length(d) == 1 ? d[1] : d
 end
@@ -592,7 +592,7 @@ function read(obj::HDF5Object, ::Type{MatlabString})
     if ndims(data) == 1
         return convert(String, convert(Vector{Char}, data))
     elseif ndims(data) == 2
-        return datap = Compat.String[rstrip(convert(String, convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
+        return datap = String[rstrip(convert(String, convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
     else
         return data
     end
