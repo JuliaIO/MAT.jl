@@ -1,6 +1,4 @@
 using MAT, Base.Test
-using Compat
-using Compat.String
 
 function check(filename, result)
     matfile = matopen(filename)
@@ -80,7 +78,7 @@ for format in ["v6", "v7", "v7.3"]
     result = Dict(
         "simple_string" => "the quick brown fox",
         "accented_string" => "thé qüîck browñ fòx",
-        "concatenated_strings" => Compat.String["this is a string", "this is another string"],
+        "concatenated_strings" => String["this is a string", "this is another string"],
         "cell_strings" => Any["this is a string" "this is another string"],
         "empty_string" => ""
     )

@@ -26,8 +26,7 @@
 # http://www.mathworks.com/help/pdf_doc/matlab/matfile_format.pdf
 
 module MAT_v5
-using Libz, BufferedStreams, HDF5, Compat
-using Compat.String
+using Libz, BufferedStreams, HDF5
 import Base: read, write, close
 import HDF5: names, exists
 
@@ -88,7 +87,7 @@ const CONVERT_TYPES = Type[
 read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}) =
     swap_bytes ? bswap(read(f, T)) : read(f, T)
 function read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union{Int, Tuple{Vararg{Int}}})
-    d = read(f, T, dim)
+    d = read!(f, Array{T}(dim))
     if swap_bytes
         for i = 1:length(d)
             @inbounds d[i] = bswap(d[i])
@@ -254,11 +253,11 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         # would be ISO-8859-1 and not UTF-8. However, MATLAB 2012b always saves strings with
         # a 2-byte encoding in v6 format, and saves UTF-8 in v7 format. Thus, this may never
         # happen in the wild.
-        chars = read(f, UInt8, nbytes)
+        chars = read!(f, Vector{UInt8}(nbytes))
         if dimensions[1] <= 1
             data = String(chars)
         else
-            data = Vector{Compat.String}(dimensions[1])
+            data = Vector{String}(dimensions[1])
             for i = 1:dimensions[1]
                 data[i] = rstrip(String(chars[i:dimensions[1]:end]))
             end
@@ -287,7 +286,7 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         elseif dimensions[1] == 1
             data = String(take!(bufs[1]))
         else
-            data = [rstrip(String(take!(buf))) for buf in bufs]
+            data = String[rstrip(String(take!(buf))) for buf in bufs]
         end
     else
         error("Unsupported string type")
@@ -300,7 +299,7 @@ end
 function read_matrix(f::IO, swap_bytes::Bool)
     (dtype, nbytes) = read_header(f, swap_bytes)
     if dtype == miCOMPRESSED
-        return read_matrix(ZlibInflateInputStream(read(f, UInt8, nbytes)), swap_bytes)
+        return read_matrix(ZlibInflateInputStream(read!(f, Vector{UInt8}(nbytes))), swap_bytes)
     elseif dtype != miMATRIX
         error("Unexpected data type")
     elseif nbytes == 0
