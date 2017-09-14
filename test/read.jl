@@ -44,7 +44,8 @@ function check(filename, result)
 end
 
 global format
-for format in ["v6", "v7", "v7.3"]
+for _format in ["v6", "v7", "v7.3"]
+    format = _format
     cd(joinpath(dirname(@__FILE__), format))
 
     result = Dict(
