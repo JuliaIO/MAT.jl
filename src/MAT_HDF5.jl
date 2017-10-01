@@ -41,9 +41,10 @@ type MatlabHDF5File <: HDF5.DataFile
     toclose::Bool
     writeheader::Bool
     refcounter::Int
+    compress::Bool
 
-    function MatlabHDF5File(plain, toclose::Bool=true, writeheader::Bool=false, refcounter::Int=0)
-        f = new(plain, toclose, writeheader, refcounter)
+    function MatlabHDF5File(plain, toclose::Bool=true, writeheader::Bool=false, refcounter::Int=0,compress::Bool=false)
+        f = new(plain, toclose, writeheader, refcounter,compress)
         if toclose
             finalizer(f, close)
         end
@@ -75,7 +76,7 @@ function close(f::MatlabHDF5File)
     nothing
 end
 
-function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool)
+function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool)
     local f
     if ff && !wr
         error("Cannot append to a write-only file")
@@ -97,7 +98,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         writeheader = false
     end
     close(pa)
-    fid = MatlabHDF5File(HDF5File(f, filename), true, writeheader, 0)
+    fid = MatlabHDF5File(HDF5File(f, filename), true, writeheader, 0,compress)
     pathrefs = "/#refs#"
     if exists(fid.plain, pathrefs)
         g = fid.plain[pathrefs]
@@ -324,8 +325,8 @@ function m_writeempty(parent::HDF5Parent, name::String, data::Array)
 end
 
 # Write an array to a dataset in a MATLAB file, returning the dataset
-function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::String, adata::Array{T})
-    dset, dtype = d_create(parent, name, adata)
+function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::String, adata::Array{T},compress::Bool)
+    dset, dtype = compress ? d_create(parent, name, adata,"chunk",HDF5.heuristic_chunk(adata),"compress",3) : d_create(parent, name, adata)
     try
         HDF5.writearray(dset, dtype.id, adata)
         dset
@@ -336,11 +337,19 @@ function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::String, adata
         close(dtype)
     end
 end
-function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::String, adata::Array{Complex{T}})
+function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::String, adata::Array{Complex{T}},compress::Bool)
     dtype = build_datatype_complex(T)
     try
         stype = dataspace(adata)
-        obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id)
+        if compress
+            p = p_create(HDF5.H5P_DATASET_CREATE)
+            p["compress"] = 3
+            p["chunk"]=HDF5.heuristic_chunk(adata)
+            obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id,
+                                     HDF5._link_properties(name),p.id,HDF5.H5P_DEFAULT)
+        else
+            obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id)
+        end
         dset = HDF5Dataset(obj_id, file(parent))
         try
             arr = reinterpret(T, adata, tuple(2, size(adata)...))
@@ -363,7 +372,7 @@ function m_write{T<:HDF5BitsOrBool}(mfile::MatlabHDF5File, parent::HDF5Parent, n
         m_writeempty(parent, name, data)
         return
     end
-    dset = m_writearray(parent, name, toarray(data))
+    dset = m_writearray(parent, name, toarray(data),mfile.compress)
     try
         m_writetypeattr(dset, T)
     finally
@@ -378,10 +387,10 @@ function m_write{T}(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat
         m_writetypeattr(g, T)
         a_write(g, sparse_attr_matlab, UInt64(size(data, 1)))
         if !isempty(data.nzval)
-            close(m_writearray(g, "data", toarray(data.nzval)))
-            close(m_writearray(g, "ir", add!(isa(data.rowval, Vector{UInt64}) ? copy(data.rowval) : convert(Vector{UInt64}, data.rowval), reinterpret(UInt64, convert(Int64, -1)))))
+            close(m_writearray(g, "data", toarray(data.nzval),mfile.compress))
+            close(m_writearray(g, "ir", add!(isa(data.rowval, Vector{UInt64}) ? copy(data.rowval) : convert(Vector{UInt64}, data.rowval), reinterpret(UInt64, convert(Int64, -1))),mfile.compress))
         end
-        close(m_writearray(g, "jc", add!(isa(data.colptr, Vector{UInt64}) ? copy(data.colptr) : convert(Vector{UInt64}, data.colptr), reinterpret(UInt64, convert(Int64, -1)))))
+        close(m_writearray(g, "jc", add!(isa(data.colptr, Vector{UInt64}) ? copy(data.colptr) : convert(Vector{UInt64}, data.colptr), reinterpret(UInt64, convert(Int64, -1))),mfile.compress))
     finally
         close(g)
     end

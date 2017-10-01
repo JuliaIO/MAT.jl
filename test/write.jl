@@ -2,8 +2,8 @@ using MAT
 
 tmpfile = string(tempname, ".mat")
 
-function test_write(data)
-	matwrite(tmpfile, data)
+function test_write(data,compress)
+	matwrite(tmpfile, data,compress)
 
 	fid = matopen(tmpfile, "r")
 	local result
@@ -16,6 +16,11 @@ function test_write(data)
 	if !isequal(result, data)
 		error("Data mismatch")
 	end
+end
+
+function test_write(data)
+        test_write(data,false)
+        test_write(data,true)
 end
 
 test_write(Dict(
