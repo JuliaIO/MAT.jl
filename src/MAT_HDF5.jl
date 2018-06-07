@@ -508,6 +508,10 @@ end
 m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::Associative) =
     m_write(mfile, parent, name, check_struct_keys(collect(keys(s))), collect(values(s)))
 
+# Write BitArray as Array{Bool}
+m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::BitArray) =
+    m_write(mfile, parent, name, convert(Array{Bool},s))
+
 # Write generic CompositeKind as a struct
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s)
     if isbits(s)
