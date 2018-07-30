@@ -26,7 +26,7 @@
 # http://www.mathworks.com/help/pdf_doc/matlab/matfile_format.pdf
 
 module MAT_v5
-using Libz, BufferedStreams, HDF5
+using Libz, BufferedStreams, HDF5, SparseArrays
 import Base: read, write, close
 import HDF5: names, exists
 
@@ -38,7 +38,7 @@ else
     complex_array(a, b) = complex.(a, b)
 end
 
-type Matlabv5File <: HDF5.DataFile
+mutable struct Matlabv5File <: HDF5.DataFile
     ios::IOStream
     swap_bytes::Bool
     varnames::Dict{String, Int64}
@@ -84,10 +84,10 @@ const CONVERT_TYPES = Type[
     Union{}, Float64, Float32, Int8, UInt8,
     Int16, UInt16, Int32, UInt32, Int64, UInt64]
 
-read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}) =
+read_bswap(f::IO, swap_bytes::Bool, ::Type{T}) where T =
     swap_bytes ? bswap(read(f, T)) : read(f, T)
-function read_bswap{T}(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union{Int, Tuple{Vararg{Int}}})
-    d = read!(f, Array{T}(dim))
+function read_bswap(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union{Int, Tuple{Vararg{Int}}}) where T
+    d = read!(f, Array{T}(undef, dim))
     if swap_bytes
         for i = 1:length(d)
             @inbounds d[i] = bswap(d[i])
@@ -114,7 +114,7 @@ function read_header(f::IO, swap_bytes::Bool)
 end
 
 # Read data element as a vector of a given type
-function read_element{T}(f::IO, swap_bytes::Bool, ::Type{T})
+function read_element(f::IO, swap_bytes::Bool, ::Type{T}) where T
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     data = read_bswap(f, swap_bytes, T, Int(div(nbytes, sizeof(T))))
     skip_padding(f, nbytes, hbytes)
@@ -133,7 +133,7 @@ end
 # Read data element as encoded type with given dimensions, converting
 # to another type if necessary and collapsing one-element matrices to
 # scalars
-function read_data{T}(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int32})
+function read_data(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int32}) where T
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     read_type = READ_TYPES[dtype]
 
@@ -152,7 +152,7 @@ function read_data{T}(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int
 end
 
 function read_cell(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
-    data = Array{Any}(convert(Vector{Int}, dimensions)...)
+    data = Array{Any}(undef, convert(Vector{Int}, dimensions)...)
     for i = 1:length(data)
         (ignored_name, data[i]) = read_matrix(f, swap_bytes)
     end
@@ -168,11 +168,11 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
     n_fields = div(length(field_names), field_length)
 
     # Get field names as strings
-    field_name_strings = Vector{String}(n_fields)
+    field_name_strings = Vector{String}(undef, n_fields)
     n_el = prod(dimensions)
     for i = 1:n_fields
         sname = field_names[(i-1)*field_length+1:i*field_length]
-        index = findfirst(sname, 0)
+        index = something(findfirst(iszero, sname), 0)
         field_name_strings[i] = String(index == 0 ? sname : sname[1:index-1])
     end
 
@@ -190,7 +190,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
     else
         # Read multiple structs into a dict of arrays
         for field_name in field_name_strings
-            data[field_name] = Array{Any}(dimensions...)
+            data[field_name] = Array{Any}(undef, dimensions...)
         end
         for i = 1:n_el
             for field_name in field_name_strings
@@ -240,11 +240,7 @@ function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::
     SparseMatrixCSC(m, n, jc, ir, pr)
 end
 
-if VERSION >= v"0.4.0-dev+1039"
-    truncate_to_uint8(x) = x % UInt8
-else
-    truncate_to_uint8(x) = convert(UInt8, x)
-end
+truncate_to_uint8(x) = x % UInt8
 
 function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
@@ -253,11 +249,11 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         # would be ISO-8859-1 and not UTF-8. However, MATLAB 2012b always saves strings with
         # a 2-byte encoding in v6 format, and saves UTF-8 in v7 format. Thus, this may never
         # happen in the wild.
-        chars = read!(f, Vector{UInt8}(nbytes))
+        chars = read!(f, Vector{UInt8}(undef, nbytes))
         if dimensions[1] <= 1
             data = String(chars)
         else
-            data = Vector{String}(dimensions[1])
+            data = Vector{String}(undef, dimensions[1])
             for i = 1:dimensions[1]
                 data[i] = rstrip(String(chars[i:dimensions[1]:end]))
             end
@@ -299,7 +295,7 @@ end
 function read_matrix(f::IO, swap_bytes::Bool)
     (dtype, nbytes) = read_header(f, swap_bytes)
     if dtype == miCOMPRESSED
-        return read_matrix(ZlibInflateInputStream(read!(f, Vector{UInt8}(nbytes))), swap_bytes)
+        return read_matrix(ZlibInflateInputStream(read!(f, Vector{UInt8}(undef, nbytes))), swap_bytes)
     elseif dtype != miMATRIX
         error("Unexpected data type")
     elseif nbytes == 0
@@ -310,7 +306,7 @@ function read_matrix(f::IO, swap_bytes::Bool)
         #     a = {[], [], []}
         # then MATLAB does not save the empty cells as zero-byte matrices. To avoid
         # surprises, we produce an empty array in both cases.
-        return ("", Matrix{Union{}}(0, 0))
+        return ("", Matrix{Union{}}(undef, 0, 0))
     end
 
     flags = read_element(f, swap_bytes, UInt32)
@@ -333,7 +329,8 @@ function read_matrix(f::IO, swap_bytes::Bool)
         if (flags[1] & (1 << 11)) != 0 # complex
             data = complex_array(data, read_data(f, swap_bytes, convert_type, dimensions))
         elseif (flags[1] & (1 << 9)) != 0 # logical
-            data = reinterpret(Bool, round_uint8(data))
+            data = reinterpret.(Bool, round_uint8(data))
+            data = typeof(data) === Bool ? data[1] : collect(data)
         end
     end
 
