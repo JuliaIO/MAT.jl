@@ -22,11 +22,11 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-VERSION >= v"0.4.0-dev+6521" && __precompile__()
+__precompile__()
 
 module MAT
 
-using HDF5, Compat
+using HDF5, Compat, SparseArrays
 
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")
@@ -143,7 +143,7 @@ end
 Write a dictionary containing variable names as keys and values as values
 to a Matlab file, opening and closing it automatically.
 """
-function matwrite(filename::AbstractString, dict::AbstractDict{S, T}) where {S,T}
+function matwrite(filename::AbstractString, dict::AbstractDict{S, T}) where {S, T}
     file = matopen(filename, "w")
     try
         for (k, v) in dict
