@@ -81,7 +81,7 @@ test_write(Dict(
 @test_throws ErrorException test_write(Dict("another invalid key" => "invalid characters"))
 @test_throws ErrorException test_write(Dict("yetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkey" => "too long"))
 
-mutable struct TestCompositeKind
+struct TestCompositeKind
 	field1::AbstractString
 end
 fid = matopen(tmpfile, "w")

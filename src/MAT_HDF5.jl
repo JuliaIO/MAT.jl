@@ -540,7 +540,7 @@ end
 
 ## Type conversion operations ##
 
-struct MatlabString; end
+struct MatlabString end
 
 const str2type_matlab = Dict(
     "canonical empty" => nothing,
