@@ -144,6 +144,14 @@ function m_read(dset::HDF5Dataset)
         mattype = a_read(dset, name_type_attr_matlab)
         if mattype == "char"
             return ""
+        elseif mattype == "struct"
+            # Not sure if this check is necessary but it is checked in
+            # `m_read(g::HDF5Group)`
+            if exists(dset, "MATLAB_fields")
+                return Dict{String,Any}(n=>[] for n in a_read(dset, "MATLAB_fields"))
+            else
+                return Dict{String,Any}()
+            end
         else
             T = mattype == "canonical empty" ? Union{} : str2eltype_matlab[mattype]
             return Array{T}(dims...)
