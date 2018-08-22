@@ -3,13 +3,11 @@ os:
     - linux
     - osx
 julia:
-    - 0.5
-    - 0.6
+    - 1.0
     - nightly
 notifications:
     email: false
-script:
-    - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-    - julia -e 'Pkg.clone(pwd()); Pkg.build("MAT"); Pkg.test("MAT"; coverage=true)'
+git:
+    depth: 9999999
 after_success:
-    - julia -e 'cd(Pkg.dir("MAT")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
+    - julia -e 'using Pkg, MAT; cd(joinpath(dirname(pathof(MAT)), "..")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder()); Coveralls.submit(process_folder())'
