@@ -143,7 +143,7 @@ end
 Write a dictionary containing variable names as keys and values as values
 to a Matlab file, opening and closing it automatically.
 """
-function matwrite(filename::AbstractString, dict::AbstractDict{S, T}) where {S, T}
+function matwrite(filename::AbstractString, dict::AbstractDict)
     file = matopen(filename, "w")
     try
         for (k, v) in dict
