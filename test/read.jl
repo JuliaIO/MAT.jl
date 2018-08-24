@@ -1,4 +1,4 @@
-using MAT, Base.Test
+using MAT, Test
 
 function check(filename, result)
     matfile = matopen(filename)
