@@ -33,10 +33,10 @@ test_write(Dict(
 ))
 
 test_write(Dict(
-	"Complex128" => [1.0 -1.0 1.0+1.0im 1.0-1.0im -1.0+1.0im -1.0-1.0im 1.0im],
+	"ComplexF64" => [1.0 -1.0 1.0+1.0im 1.0-1.0im -1.0+1.0im -1.0-1.0im 1.0im],
 	"ComplexPair" => [1 2-3im 4+5im]
 ))
-test_write(Dict("Complex128" => 1.0im, "ComplexPair" => 2-3im))
+test_write(Dict("ComplexF64" => 1.0im, "ComplexPair" => 2-3im))
 
 test_write(Dict(
 	"simple_string" => "the quick brown fox",
@@ -100,7 +100,7 @@ close(fid)
 using DataStructures
 sd = SortedDict(Dict(
 	"uint16" => UInt16(1),
-	"Complex128" => [1.0 -1.0 1.0+1.0im 1.0-1.0im -1.0+1.0im -1.0-1.0im 1.0im],
+	"ComplexF64" => [1.0 -1.0 1.0+1.0im 1.0-1.0im -1.0+1.0im -1.0-1.0im 1.0im],
 	"simple_string" => "the quick brown fox",
 	"a1x2" => [1.0 2.0],
 	"sparse_empty" => sparse(Matrix{Float64}(0, 0))
