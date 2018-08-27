@@ -10,8 +10,6 @@ addons:
   apt:
     packages:
         - hdf5-tools
-before_script:
-    - if [ $TRAVIS_OS_NAME = osx ]; then brew install hdf5; fi
 notifications:
     email: false
 after_success:
