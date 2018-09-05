@@ -7,8 +7,6 @@ julia:
     - nightly
 notifications:
     email: false
-git:
-    depth: 9999999
 addons:
   apt:
     packages:
@@ -16,4 +14,4 @@ addons:
 before_script:
     - if [ $TRAVIS_OS_NAME = osx ]; then brew install gcc; brew link --overwrite gcc; brew install hdf5; fi
 after_success:
-    - julia -e 'using Pkg, MAT; cd(joinpath(dirname(pathof(MAT)), "..")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder()); Coveralls.submit(process_folder())'
+  - julia -e 'import Pkg; Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder()); Codecov.submit(Codecov.process_folder())'
