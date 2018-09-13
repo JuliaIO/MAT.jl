@@ -346,7 +346,7 @@ function m_writearray(parent::HDF5Parent, name::String, adata::Array{Complex{T}}
         obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id)
         dset = HDF5Dataset(obj_id, file(parent))
         try
-            arr = reinterpret(T, adata, tuple(2, size(adata)...))
+            arr = reshape(reinterpret(T, vec(adata)), tuple(2, size(adata)...))
             HDF5.writearray(dset, dtype.id, arr)
         catch e
             close(dset)
