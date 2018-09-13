@@ -54,7 +54,9 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     rawfid = open(filename, "r")
 
     # Check for MAT v4 file
-    magic = read!(rawfid, Vector{UInt8}(4))
+    # magic = read!(rawfid, Vector{UInt8}(4))
+    magic = read!(rawfid, Array{UInt8, 1}(undef, 4))
+
     for i = 1:length(magic)
         if magic[i] == 0
             close(rawfid)
@@ -77,7 +79,8 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     # Check for HDF5 file
     for offset = 512:512:fs-8
         seek(rawfid, offset)
-        if read!(rawfid, Vector{UInt8}(8)) == HDF5_HEADER
+        # if read!(rawfid, Vector{UInt8}(8)) == HDF5_HEADER
+        if read!(rawfid, Array{UInt8, 1}(undef, 8)) == HDF5_HEADER
             close(rawfid)
             return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff)
         end
