@@ -125,17 +125,10 @@ function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{Array{T}}) 
     memtype = build_datatype_complex(T)
     sz = size(dset)
     st = sizeof(T)
-    buf = Array{UInt8}(undef, (2 * st, sz...))
-    HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, buf)
+    buf = Array{Complex{T}}(undef, sz)
+    HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, vec(buf))
 
-    if T == Float32
-        d = collect(reshape(reinterpret(ComplexF32, buf), sz...))
-    elseif T == Float64
-        d = collect(reshape(reinterpret(ComplexF64, buf), sz...))
-    else
-        d = copy(selectdim(reinterpret(T, buf), 1, 1)) + im * copy(selectdim(reinterpret(T, buf), 1, 2))
-    end
-    length(d) == 1 ? d[1] : d
+    length(buf) == 1 ? buf[1] : buf
 end
 
 function m_read(dset::HDF5Dataset)
