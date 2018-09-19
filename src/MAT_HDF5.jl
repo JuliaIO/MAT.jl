@@ -128,7 +128,7 @@ function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{Array{T}}) 
     buf = Array{Complex{T}}(undef, sz)
     HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, vec(buf))
 
-    length(buf) == 1 ? buf[1] : buf
+    size(buf) == (1,) ? buf[1] : buf
 end
 
 function m_read(dset::HDF5Dataset)
