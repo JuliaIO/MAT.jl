@@ -33,6 +33,8 @@ test_write(Dict(
 ))
 
 test_write(Dict(
+	"ComplexInt" => Complex{Int}[1 -1 1+1im 1-1im -1+1im -1-1im 1im],
+	"ComplexF32" => ComplexF32[1.0 -1.0 1.0+1.0im 1.0-1.0im -1.0+1.0im -1.0-1.0im 1.0im],
 	"ComplexF64" => [1.0 -1.0 1.0+1.0im 1.0-1.0im -1.0+1.0im -1.0-1.0im 1.0im],
 	"ComplexPair" => [1 2-3im 4+5im]
 ))
