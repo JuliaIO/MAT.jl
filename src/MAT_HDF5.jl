@@ -598,7 +598,9 @@ function read(obj::HDF5Object, ::Type{Bool})
 end
 function read(obj::HDF5Object, ::Type{Array{Bool}})
     tf = read(obj, Array{UInt8})
-    Array{Bool}(tf .> 0)
+    r = Array{Bool}(undef, size(tf))
+    r .= tf .> 0
+    return r
 end
 
 ## Utilities for handling complex numbers
