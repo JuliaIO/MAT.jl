@@ -30,13 +30,8 @@ using Libz, BufferedStreams, HDF5, SparseArrays
 import Base: read, write, close
 import HDF5: names, exists
 
-if VERSION < v"0.6.0-dev.1632"
-    round_uint8(data) = round(UInt8, data)
-    complex_array(a, b) = complex(a, b)
-else
-    round_uint8(data) = round.(UInt8, data)
-    complex_array(a, b) = complex.(a, b)
-end
+round_uint8(data) = round.(UInt8, data)
+complex_array(a, b) = complex.(a, b)
 
 mutable struct Matlabv5File <: HDF5.DataFile
     ios::IOStream
@@ -329,8 +324,7 @@ function read_matrix(f::IO, swap_bytes::Bool)
         if (flags[1] & (1 << 11)) != 0 # complex
             data = complex_array(data, read_data(f, swap_bytes, convert_type, dimensions))
         elseif (flags[1] & (1 << 9)) != 0 # logical
-            data = reinterpret.(Bool, round_uint8(data))
-            data = typeof(data) === Bool ? data[1] : collect(data)
+            data = data isa Array ? convert(Array{Bool}, data) : convert(Bool, data[1])
         end
     end
 
