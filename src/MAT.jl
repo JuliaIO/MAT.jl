@@ -26,7 +26,7 @@ VERSION >= v"0.4.0-dev+6521" && __precompile__()
 
 module MAT
 
-using HDF5, Compat
+using HDF5, Compat, SparseArrays
 
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")
@@ -53,7 +53,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     rawfid = open(filename, "r")
 
     # Check for MAT v4 file
-    magic = read!(rawfid, Vector{UInt8}(4))
+    magic = read!(rawfid, Vector{UInt8}(undef, 4))
     for i = 1:length(magic)
         if magic[i] == 0
             close(rawfid)
@@ -143,7 +143,7 @@ end
 Write a dictionary containing variable names as keys and values as values
 to a Matlab file, opening and closing it automatically.
 """
-function matwrite{S, T}(filename::AbstractString, dict::Associative{S, T})
+function matwrite(filename::AbstractString, dict::AbstractDict{S, T}) where {S, T}
     file = matopen(filename, "w")
     try
         for (k, v) in dict
