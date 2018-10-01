@@ -367,8 +367,7 @@ function m_writearray(parent::HDF5Parent, name::String, adata::Array{Complex{T}}
 end
 
 # Write a scalar or array
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent,
-name::String, data::Union{T, Complex{T}, Array{T}, Array{Complex{T}}}) where T<:HDF5BitsOrBool
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Union{T, Complex{T}, Array{T}, Array{Complex{T}}}) where T<:HDF5BitsOrBool
     if isempty(data)
         m_writeempty(parent, name, data)
         return
