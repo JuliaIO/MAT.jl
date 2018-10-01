@@ -1,4 +1,4 @@
-using MAT, Base.Test
+using MAT, Test, SparseArrays
 
 function check(filename, result)
     matfile = matopen(filename)
@@ -45,7 +45,7 @@ end
 
 global format
 for _format in ["v6", "v7", "v7.3"]
-    format = _format
+    global format = _format
     cd(joinpath(dirname(@__FILE__), format))
 
     result = Dict(
@@ -72,7 +72,7 @@ for _format in ["v6", "v7", "v7.3"]
     end
 
     result = Dict(
-        "imaginary" => Complex128[1 -1 1+im 1-im -1+im -1-im im]
+        "imaginary" => ComplexF64[1 -1 1+im 1-im -1+im -1-im im]
     )
     check("complex.mat", result)
 
