@@ -3,3 +3,4 @@ HDF5
 BufferedStreams 0.2.0
 Libz
 Compat 0.9.5
+SparseArrays

@@ -1,4 +1,4 @@
-using MAT, Base.Test
+using MAT, Test
 
 function check(filename, result)
     matfile = matopen(filename)
@@ -44,8 +44,7 @@ function check(filename, result)
 end
 
 global format
-for _format in ["v6", "v7", "v7.3"]
-    format = _format
+for format in ["v6", "v7", "v7.3"]
     cd(joinpath(dirname(@__FILE__), format))
 
     result = Dict(
@@ -195,12 +194,4 @@ let objtestfile = "obj.mat"
     end
     # check if class name was read correctly
     @test vars["A"]["class"] == "Assoc"
-end
-
-# test reading of empty struct
-let objtestfile = "empty_struct.mat"
-    vars = matread(joinpath(dirname(@__FILE__), objtestfile))
-    @test "a" in keys(vars)
-    @test vars["a"]["size"] == []
-    @test vars["a"]["params"] == []
 end
