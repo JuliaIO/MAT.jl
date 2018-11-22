@@ -90,6 +90,15 @@ function read_bswap(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union{Int, Tuple{Va
     end
     d
 end
+function read_bswap(f::IO, swap_bytes::Bool, d::AbstractArray{T}) where T
+    readbytes!(f, reinterpret(UInt8, d))
+    if swap_bytes
+        for i = 1:length(d)
+            @inbounds d[i] = bswap(d[i])
+        end
+    end
+    d
+end
 
 skip_padding(f::IO, nbytes::Int, hbytes::Int) = if nbytes % hbytes != 0
     skip(f, hbytes-(nbytes % hbytes))
@@ -144,6 +153,24 @@ function read_data(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int32}
     skip_padding(f, nbytes, hbytes)
 
     read_array ? convert(Array{T}, data) : convert(T, data)
+end
+function read_data(f::IO, swap_bytes::Bool, d::AbstractArray{T}) where T
+    (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
+    read_type = READ_TYPES[dtype]
+    dimensions = size(d)
+
+    read_array = any(dimensions .!= 1)
+    if sizeof(read_type)*prod(dimensions) != nbytes
+        error("Invalid element length")
+    end
+    if read_array
+        data = read_bswap(f, swap_bytes, reinterpret(read_type, d))
+    else
+        data = read_bswap(f, swap_bytes, read_type)
+    end
+    skip_padding(f, nbytes, hbytes)
+
+    read_array ? d : convert(T, data)
 end
 
 function read_cell(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
@@ -320,11 +347,14 @@ function read_matrix(f::IO, swap_bytes::Bool)
         data = read_string(f, swap_bytes, dimensions)
     else
         convert_type = CONVERT_TYPES[class]
-        data = read_data(f, swap_bytes, convert_type, dimensions)
         if (flags[1] & (1 << 11)) != 0 # complex
+            data = read_data(f, swap_bytes, convert_type, dimensions)
             data = complex_array(data, read_data(f, swap_bytes, convert_type, dimensions))
         elseif (flags[1] & (1 << 9)) != 0 # logical
-            data = data isa Array ? convert(Array{Bool}, data) : convert(Bool, data[1])
+            d = Array{Bool}(undef, dimensions...)
+            data = read_data(f, swap_bytes, d)
+        else
+            data = read_data(f, swap_bytes, convert_type, dimensions)
         end
     end
 

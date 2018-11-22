@@ -605,9 +605,19 @@ function read(obj::HDF5Object, ::Type{Bool})
     tf = read(obj, UInt8)
     tf > 0
 end
+
+# copied from HDF5.jl/src/HDF5.jl#L1306
 function read(obj::HDF5Object, ::Type{Array{Bool}})
-    tf = read(obj, Array{UInt8})
-    Array{Bool}(tf .> 0)
+    if HDF5.isnull(obj)
+        return Bool[]
+    end
+
+    dims = size(obj)
+    tf = Array{Bool}(undef, dims)
+
+    HDF5.readarray(obj, HDF5.hdf5_type_id(UInt8), reinterpret(UInt8, tf))
+
+    return tf
 end
 
 ## Utilities for handling complex numbers
