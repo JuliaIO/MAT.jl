@@ -196,3 +196,11 @@ let objtestfile = "obj.mat"
     # check if class name was read correctly
     @test vars["A"]["class"] == "Assoc"
 end
+
+# test reading of empty struct
+let objtestfile = "empty_struct.mat"
+    vars = matread(joinpath(dirname(@__FILE__), objtestfile))
+    @test "a" in keys(vars)
+    @test vars["a"]["size"] == []
+    @test vars["a"]["params"] == []
+end

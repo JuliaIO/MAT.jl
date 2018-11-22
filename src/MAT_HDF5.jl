@@ -140,6 +140,14 @@ function m_read(dset::HDF5Dataset)
         mattype = a_read(dset, name_type_attr_matlab)
         if mattype == "char"
             return ""
+        elseif mattype == "struct"
+            # Not sure if this check is necessary but it is checked in
+            # `m_read(g::HDF5Group)`
+            if exists(dset, "MATLAB_fields")
+                return Dict{String,Any}(n=>[] for n in a_read(dset, "MATLAB_fields"))
+            else
+                return Dict{String,Any}()
+            end
         else
             T = mattype == "canonical empty" ? Union{} : str2eltype_matlab[mattype]
             return Array{T}(undef, dims...)
@@ -306,7 +314,7 @@ function m_writetypeattr(dset, T)
 end
 
 # Writes an empty scalar or array
-function m_writeempty(parent::HDF5Parent, name::String, data::Array)
+function m_writeempty(parent::HDF5Parent, name::String, data::AbstractArray)
     adata = [size(data)...]
     dset, dtype = d_create(parent, name, adata)
     try
@@ -320,7 +328,7 @@ function m_writeempty(parent::HDF5Parent, name::String, data::Array)
 end
 
 # Write an array to a dataset in a MATLAB file, returning the dataset
-function m_writearray(parent::HDF5Parent, name::String, adata::Array{T}) where {T<:HDF5BitsOrBool}
+function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{T}) where {T<:HDF5BitsOrBool}
     dset, dtype = d_create(parent, name, adata)
     try
         HDF5.writearray(dset, dtype.id, adata)
@@ -332,14 +340,15 @@ function m_writearray(parent::HDF5Parent, name::String, adata::Array{T}) where {
         close(dtype)
     end
 end
-function m_writearray(parent::HDF5Parent, name::String, adata::Array{Complex{T}}) where {T<:HDF5BitsOrBool}
+function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{Complex{T}}) where {T<:HDF5BitsOrBool}
     dtype = build_datatype_complex(T)
     try
         stype = dataspace(adata)
         obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id)
         dset = HDF5Dataset(obj_id, file(parent))
         try
-            HDF5.writearray(dset, dtype.id, vec(adata))
+            arr = reshape(reinterpret(T, adata), tuple(2, size(adata)...))
+            HDF5.writearray(dset, dtype.id, arr)
         catch e
             close(dset)
             rethrow(e)
@@ -596,11 +605,19 @@ function read(obj::HDF5Object, ::Type{Bool})
     tf = read(obj, UInt8)
     tf > 0
 end
+
+# copied from HDF5.jl/src/HDF5.jl#L1306
 function read(obj::HDF5Object, ::Type{Array{Bool}})
-    tf = read(obj, Array{UInt8})
-    r = Array{Bool}(undef, size(tf))
-    r .= tf .> 0
-    return r
+    if HDF5.isnull(obj)
+        return Bool[]
+    end
+
+    dims = size(obj)
+    tf = Array{Bool}(undef, dims)
+
+    HDF5.readarray(obj, HDF5.hdf5_type_id(UInt8), reinterpret(UInt8, tf))
+
+    return tf
 end
 
 ## Utilities for handling complex numbers
