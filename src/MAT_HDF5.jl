@@ -294,7 +294,7 @@ elseif length(s) > 63
 end
 
 toarray(x::Array) = x
-toarray(x::Array{Bool}) = reinterpret.(UInt8, x)
+toarray(x::Array{Bool}) = reinterpret(UInt8, x)
 toarray(x::Bool) = UInt8[x]
 toarray(x) = [x]
 
@@ -314,7 +314,7 @@ function m_writetypeattr(dset, T)
 end
 
 # Writes an empty scalar or array
-function m_writeempty(parent::HDF5Parent, name::String, data::Array)
+function m_writeempty(parent::HDF5Parent, name::String, data::AbstractArray)
     adata = [size(data)...]
     dset, dtype = d_create(parent, name, adata)
     try
@@ -328,7 +328,7 @@ function m_writeempty(parent::HDF5Parent, name::String, data::Array)
 end
 
 # Write an array to a dataset in a MATLAB file, returning the dataset
-function m_writearray(parent::HDF5Parent, name::String, adata::Array{T}) where {T<:HDF5BitsOrBool}
+function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{T}) where {T<:HDF5BitsOrBool}
     dset, dtype = d_create(parent, name, adata)
     try
         HDF5.writearray(dset, dtype.id, adata)
@@ -340,14 +340,15 @@ function m_writearray(parent::HDF5Parent, name::String, adata::Array{T}) where {
         close(dtype)
     end
 end
-function m_writearray(parent::HDF5Parent, name::String, adata::Array{Complex{T}}) where {T<:HDF5BitsOrBool}
+function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{Complex{T}}) where {T<:HDF5BitsOrBool}
     dtype = build_datatype_complex(T)
     try
         stype = dataspace(adata)
         obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id)
         dset = HDF5Dataset(obj_id, file(parent))
         try
-            HDF5.writearray(dset, dtype.id, vec(adata))
+            arr = reshape(reinterpret(T, adata), tuple(2, size(adata)...))
+            HDF5.writearray(dset, dtype.id, arr)
         catch e
             close(dset)
             rethrow(e)
@@ -606,9 +607,7 @@ function read(obj::HDF5Object, ::Type{Bool})
 end
 function read(obj::HDF5Object, ::Type{Array{Bool}})
     tf = read(obj, Array{UInt8})
-    r = Array{Bool}(undef, size(tf))
-    r .= tf .> 0
-    return r
+    Array{Bool}(tf .> 0)
 end
 
 ## Utilities for handling complex numbers
