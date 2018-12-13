@@ -1,4 +1,10 @@
-using MAT, Base.Test
+using MAT
+
+@static if VERSION < v"0.7-"
+    using Base.Test
+else
+    using Test
+end
 
 function check(filename, result)
     matfile = matopen(filename)
@@ -45,7 +51,7 @@ end
 
 global format
 for _format in ["v6", "v7", "v7.3"]
-    format = _format
+    global format = _format
     cd(joinpath(dirname(@__FILE__), format))
 
     result = Dict(
@@ -72,7 +78,7 @@ for _format in ["v6", "v7", "v7.3"]
     end
 
     result = Dict(
-        "imaginary" => Complex128[1 -1 1+im 1-im -1+im -1-im im]
+        "imaginary" => ComplexF64[1 -1 1+im 1-im -1+im -1-im im]
     )
     check("complex.mat", result)
 
@@ -89,7 +95,7 @@ for _format in ["v6", "v7", "v7.3"]
         "a1x2" => [1.0 2.0],
         "a2x1" => zeros(2, 1)+[1.0, 2.0],
         "a2x2" => [1.0 3.0; 4.0 2.0],
-        "a2x2x2" => cat(3, [1.0 3.0; 4.0 2.0], [1.0 2.0; 3.0 4.0]),
+        "a2x2x2" => cat([1.0 3.0; 4.0 2.0], [1.0 2.0; 3.0 4.0], dims=3),
         "empty" => zeros(0, 0),
         "string" => "string"
     )
@@ -127,8 +133,8 @@ for _format in ["v6", "v7", "v7.3"]
     check("empty_cells.mat", result)
 
     result = Dict(
-        "sparse_empty" => sparse(Matrix{Float64}(0, 0)),
-        "sparse_eye" => speye(20),
+        "sparse_empty" => sparse(Matrix{Float64}(undef, 0, 0)),
+        "sparse_eye" => sparse(1.0I, 20, 20),
         "sparse_logical" => SparseMatrixCSC{Bool,Int64}(5, 5, [1:6;], [1:5;], fill(true, 5)),
         "sparse_random" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]),
         "sparse_complex" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]*(1. + 1.0im)),

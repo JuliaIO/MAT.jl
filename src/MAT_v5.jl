@@ -152,7 +152,7 @@ function read_data(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int32}
 end
 
 function read_cell(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
-    data = Array{Any}(convert(Vector{Int}, dimensions)...)
+    data = Array{Any}(undef, convert(Vector{Int}, dimensions)...)
     for i = 1:length(data)
         (ignored_name, data[i]) = read_matrix(f, swap_bytes)
     end
