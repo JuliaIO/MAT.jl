@@ -156,7 +156,7 @@ function m_read(dset::HDF5Dataset)
             end
         else
             T = mattype == "canonical empty" ? Union{} : str2eltype_matlab[mattype]
-            return Array{T}(dims...)
+            return Array{T}(undef, dims...)
         end
     end
 
@@ -165,7 +165,7 @@ function m_read(dset::HDF5Dataset)
     if mattype == "cell"
         # Cell arrays, represented as an array of refs
         refs = read(dset, Array{HDF5ReferenceObj})
-        out = Array{Any}(size(refs))
+        out = Array{Any}(undef, size(refs))
         f = file(dset)
         for i = 1:length(refs)
             dset = f[refs[i]]
@@ -466,7 +466,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::
             close(a)
         end
         # Write the items to the reference group
-        refs = Array{HDF5ReferenceObj}(size(data))
+        refs = Array{HDF5ReferenceObj}(undef, size(data))
         for i = 1:length(data)
             mfile.refcounter += 1
             itemname = string(mfile.refcounter)
@@ -492,7 +492,7 @@ end
 
 # Check that keys are valid for a struct, and convert them to an array of ASCIIStrings
 function check_struct_keys(k::Vector)
-    asckeys = Vector{String}(length(k))
+    asckeys = Vector{String}(undef, length(k))
     for i = 1:length(k)
         key = k[i]
         if !isa(key, AbstractString)
