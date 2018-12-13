@@ -32,6 +32,12 @@ using HDF5
 using Compat
 using Compat.SparseArrays
 
+@static if VERSION < v"0.7-"
+    _finalizer(f, x) = finalizer(x, f)
+else
+    _finalizer = finalizer
+end
+
 import Base: read, write, close
 import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
 
@@ -47,7 +53,7 @@ mutable struct MatlabHDF5File <: HDF5.DataFile
     function MatlabHDF5File(plain, toclose::Bool=true, writeheader::Bool=false, refcounter::Int=0)
         f = new(plain, toclose, writeheader, refcounter)
         if toclose
-            finalizer(close, f)
+            _finalizer(close, f)
         end
         f
     end
