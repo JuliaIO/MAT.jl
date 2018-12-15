@@ -32,6 +32,12 @@ using HDF5
 using Compat
 using Compat.SparseArrays
 
+@static if VERSION < v"0.7-"
+    _finalizer(f, x) = finalizer(x, f)
+else
+    _finalizer = finalizer
+end
+
 import Base: read, write, close
 import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
 
@@ -47,7 +53,7 @@ mutable struct MatlabHDF5File <: HDF5.DataFile
     function MatlabHDF5File(plain, toclose::Bool=true, writeheader::Bool=false, refcounter::Int=0)
         f = new(plain, toclose, writeheader, refcounter)
         if toclose
-            finalizer(f, close)
+            _finalizer(close, f)
         end
         f
     end
@@ -130,9 +136,9 @@ function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{Array{T}}) 
     HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, buf)
 
     if T == Float32
-        d = reinterpret(Complex64, dbuf, sz)
+        d = reinterpret(ComplexF32, dbuf, sz)
     elseif T == Float64
-        d = reinterpret(Complex128, dbuf, sz)
+        d = reinterpret(ComplexF64, dbuf, sz)
     else
         d = slicedim(dbuf, 1, 1) + im * slicedim(dbuf, 1, 2)
     end
@@ -156,7 +162,7 @@ function m_read(dset::HDF5Dataset)
             end
         else
             T = mattype == "canonical empty" ? Union{} : str2eltype_matlab[mattype]
-            return Array{T}(dims...)
+            return Array{T}(undef, dims...)
         end
     end
 
@@ -165,7 +171,7 @@ function m_read(dset::HDF5Dataset)
     if mattype == "cell"
         # Cell arrays, represented as an array of refs
         refs = read(dset, Array{HDF5ReferenceObj})
-        out = Array{Any}(size(refs))
+        out = Array{Any}(undef, size(refs))
         f = file(dset)
         for i = 1:length(refs)
             dset = f[refs[i]]
@@ -466,7 +472,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::
             close(a)
         end
         # Write the items to the reference group
-        refs = Array{HDF5ReferenceObj}(size(data))
+        refs = Array{HDF5ReferenceObj}(undef, size(data))
         for i = 1:length(data)
             mfile.refcounter += 1
             itemname = string(mfile.refcounter)
@@ -492,7 +498,7 @@ end
 
 # Check that keys are valid for a struct, and convert them to an array of ASCIIStrings
 function check_struct_keys(k::Vector)
-    asckeys = Vector{String}(length(k))
+    asckeys = Vector{String}(undef, length(k))
     for i = 1:length(k)
         key = k[i]
         if !isa(key, AbstractString)

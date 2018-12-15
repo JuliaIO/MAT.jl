@@ -152,7 +152,7 @@ function read_data(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int32}
 end
 
 function read_cell(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
-    data = Array{Any}(convert(Vector{Int}, dimensions)...)
+    data = Array{Any}(undef, convert(Vector{Int}, dimensions)...)
     for i = 1:length(data)
         (ignored_name, data[i]) = read_matrix(f, swap_bytes)
     end
@@ -168,11 +168,11 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
     n_fields = div(length(field_names), field_length)
 
     # Get field names as strings
-    field_name_strings = Vector{String}(n_fields)
+    field_name_strings = Vector{String}(undef, n_fields)
     n_el = prod(dimensions)
     for i = 1:n_fields
         sname = field_names[(i-1)*field_length+1:i*field_length]
-        index = findfirst(sname, 0)
+        index = something(findfirst(iszero, sname), 0)
         field_name_strings[i] = String(index == 0 ? sname : sname[1:index-1])
     end
 
@@ -190,7 +190,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
     else
         # Read multiple structs into a dict of arrays
         for field_name in field_name_strings
-            data[field_name] = Array{Any}(dimensions...)
+            data[field_name] = Array{Any}(undef, dimensions...)
         end
         for i = 1:n_el
             for field_name in field_name_strings
@@ -257,7 +257,7 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         if dimensions[1] <= 1
             data = String(chars)
         else
-            data = Vector{String}(dimensions[1])
+            data = Vector{String}(undef, dimensions[1])
             for i = 1:dimensions[1]
                 data[i] = rstrip(String(chars[i:dimensions[1]:end]))
             end
@@ -310,7 +310,7 @@ function read_matrix(f::IO, swap_bytes::Bool)
         #     a = {[], [], []}
         # then MATLAB does not save the empty cells as zero-byte matrices. To avoid
         # surprises, we produce an empty array in both cases.
-        return ("", Matrix{Union{}}(0, 0))
+        return ("", Matrix{Union{}}(undef, 0, 0))
     end
 
     flags = read_element(f, swap_bytes, UInt32)
