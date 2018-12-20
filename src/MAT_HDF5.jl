@@ -596,9 +596,9 @@ function read(obj::HDF5Object, ::Type{MatlabString})
         data = reshape(data, sz[2:end])
     end
     if ndims(data) == 1
-        return convert(String, convert(Vector{Char}, data))
+        return String(convert(Vector{Char}, data))
     elseif ndims(data) == 2
-        return datap = String[rstrip(convert(String, convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
+        return datap = String[rstrip(String(convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
     else
         return data
     end
