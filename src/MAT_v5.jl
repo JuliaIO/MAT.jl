@@ -27,6 +27,7 @@
 
 module MAT_v5
 using Libz, BufferedStreams, HDF5, Compat
+using Compat.SparseArrays
 import Base: read, write, close
 import HDF5: names, exists
 
