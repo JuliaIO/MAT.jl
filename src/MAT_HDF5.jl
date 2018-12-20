@@ -618,8 +618,13 @@ function read(obj::HDF5Object, ::Type{Bool})
     tf > 0
 end
 function read(obj::HDF5Object, ::Type{Array{Bool}})
-    tf = read(obj, Array{UInt8})
-    reinterpret(Bool, tf)
+    if HDF5.isnull(obj)
+        return Bool[]
+    end
+    # Use the low-level HDF5 API to put the data directly into a Bool array
+    tf = Array{Bool}(undef, size(obj))
+    HDF5.h5d_read(obj.id, HDF5.hdf5_type_id(UInt8), tf, obj.xfer)
+    tf
 end
 
 ## Utilities for handling complex numbers
