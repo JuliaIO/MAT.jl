@@ -137,7 +137,7 @@ end
 function read_data(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int32}) where {T}
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     read_type = READ_TYPES[dtype]
-    if (read_type == UInt8) && (T === Bool)
+    if (read_type === UInt8) && (T === Bool)
         read_type = Bool
     end
 
