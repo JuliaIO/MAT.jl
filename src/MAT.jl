@@ -27,6 +27,7 @@ VERSION >= v"0.4.0-dev+6521" && __precompile__()
 module MAT
 
 using HDF5, Compat
+using Compat.SparseArrays
 
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")

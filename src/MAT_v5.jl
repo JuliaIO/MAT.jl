@@ -27,6 +27,7 @@
 
 module MAT_v5
 using Libz, BufferedStreams, HDF5, Compat
+using Compat.SparseArrays
 import Base: read, write, close
 import HDF5: names, exists
 
@@ -136,6 +137,9 @@ end
 function read_data(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int32}) where {T}
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     read_type = READ_TYPES[dtype]
+    if (read_type === UInt8) && (T === Bool)
+        read_type = Bool
+    end
 
     read_array = any(dimensions .!= 1)
     if sizeof(read_type)*prod(dimensions) != nbytes
@@ -328,12 +332,14 @@ function read_matrix(f::IO, swap_bytes::Bool)
     elseif class == mxCHAR_CLASS && length(dimensions) <= 2
         data = read_string(f, swap_bytes, dimensions)
     else
-        convert_type = CONVERT_TYPES[class]
-        data = read_data(f, swap_bytes, convert_type, dimensions)
-        if (flags[1] & (1 << 11)) != 0 # complex
-            data = complex_array(data, read_data(f, swap_bytes, convert_type, dimensions))
-        elseif (flags[1] & (1 << 9)) != 0 # logical
-            data = reinterpret(Bool, round_uint8(data))
+        if (flags[1] & (1 << 9)) != 0 # logical
+            data = read_data(f, swap_bytes, Bool, dimensions)
+        else
+            convert_type = CONVERT_TYPES[class]
+            data = read_data(f, swap_bytes, convert_type, dimensions)
+            if (flags[1] & (1 << 11)) != 0 # complex
+                data = complex_array(data, read_data(f, swap_bytes, convert_type, dimensions))
+            end
         end
     end
 

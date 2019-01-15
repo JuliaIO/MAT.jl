@@ -130,19 +130,9 @@ function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{Array{T}}) 
     end
     memtype = build_datatype_complex(T)
     sz = size(dset)
-    dbuf = Array{T}(2, sz...)
-    st = sizeof(T)
-    buf = reinterpret(UInt8, dbuf, (2 * st, sz...))
-    HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, buf)
-
-    if T == Float32
-        d = reinterpret(ComplexF32, dbuf, sz)
-    elseif T == Float64
-        d = reinterpret(ComplexF64, dbuf, sz)
-    else
-        d = slicedim(dbuf, 1, 1) + im * slicedim(dbuf, 1, 2)
-    end
-    length(d) == 1 ? d[1] : d
+    dbuf = Array{Complex{T}}(undef, sz...)
+    HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, vec(dbuf))
+    length(dbuf) == 1 ? dbuf[1] : dbuf
 end
 
 function m_read(dset::HDF5Dataset)
@@ -606,9 +596,9 @@ function read(obj::HDF5Object, ::Type{MatlabString})
         data = reshape(data, sz[2:end])
     end
     if ndims(data) == 1
-        return convert(String, convert(Vector{Char}, data))
+        return String(convert(Vector{Char}, data))
     elseif ndims(data) == 2
-        return datap = String[rstrip(convert(String, convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
+        return datap = String[rstrip(String(convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
     else
         return data
     end
@@ -618,8 +608,13 @@ function read(obj::HDF5Object, ::Type{Bool})
     tf > 0
 end
 function read(obj::HDF5Object, ::Type{Array{Bool}})
-    tf = read(obj, Array{UInt8})
-    reinterpret(Bool, tf)
+    if HDF5.isnull(obj)
+        return Bool[]
+    end
+    # Use the low-level HDF5 API to put the data directly into a Bool array
+    tf = Array{Bool}(undef, size(obj))
+    HDF5.h5d_read(obj.id, HDF5.hdf5_type_id(UInt8), tf, obj.xfer)
+    tf
 end
 
 ## Utilities for handling complex numbers
