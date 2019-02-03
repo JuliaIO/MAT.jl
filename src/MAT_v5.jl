@@ -26,18 +26,12 @@
 # http://www.mathworks.com/help/pdf_doc/matlab/matfile_format.pdf
 
 module MAT_v5
-using Libz, BufferedStreams, HDF5, Compat
-using Compat.SparseArrays
+using Libz, BufferedStreams, HDF5, SparseArrays
 import Base: read, write, close
 import HDF5: names, exists
 
-if VERSION < v"0.6.0-dev.1632"
-    round_uint8(data) = round(UInt8, data)
-    complex_array(a, b) = complex(a, b)
-else
-    round_uint8(data) = round.(UInt8, data)
-    complex_array(a, b) = complex.(a, b)
-end
+round_uint8(data) = round.(UInt8, data)
+complex_array(a, b) = complex.(a, b)
 
 mutable struct Matlabv5File <: HDF5.DataFile
     ios::IOStream
@@ -85,10 +79,19 @@ const CONVERT_TYPES = Type[
     Union{}, Float64, Float32, Int8, UInt8,
     Int16, UInt16, Int32, UInt32, Int64, UInt64]
 
-read_bswap(f::IO, swap_bytes::Bool, ::Type{T}) where {T} =
+read_bswap(f::IO, swap_bytes::Bool, ::Type{T}) where T =
     swap_bytes ? bswap(read(f, T)) : read(f, T)
-function read_bswap(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union{Int, Tuple{Vararg{Int}}}) where {T}
+function read_bswap(f::IO, swap_bytes::Bool, ::Type{T}, dim::Union{Int, Tuple{Vararg{Int}}}) where T
     d = read!(f, Array{T}(undef, dim))
+    if swap_bytes
+        for i = 1:length(d)
+            @inbounds d[i] = bswap(d[i])
+        end
+    end
+    d
+end
+function read_bswap(f::IO, swap_bytes::Bool, d::AbstractArray{T}) where T
+    readbytes!(f, reinterpret(UInt8, d))
     if swap_bytes
         for i = 1:length(d)
             @inbounds d[i] = bswap(d[i])
@@ -115,7 +118,7 @@ function read_header(f::IO, swap_bytes::Bool)
 end
 
 # Read data element as a vector of a given type
-function read_element(f::IO, swap_bytes::Bool, ::Type{T}) where {T}
+function read_element(f::IO, swap_bytes::Bool, ::Type{T}) where T
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     data = read_bswap(f, swap_bytes, T, Int(div(nbytes, sizeof(T))))
     skip_padding(f, nbytes, hbytes)
@@ -134,7 +137,7 @@ end
 # Read data element as encoded type with given dimensions, converting
 # to another type if necessary and collapsing one-element matrices to
 # scalars
-function read_data(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int32}) where {T}
+function read_data(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int32}) where T
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     read_type = READ_TYPES[dtype]
     if (read_type === UInt8) && (T === Bool)
@@ -153,6 +156,24 @@ function read_data(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int32}
     skip_padding(f, nbytes, hbytes)
 
     read_array ? convert(Array{T}, data) : convert(T, data)
+end
+function read_data(f::IO, swap_bytes::Bool, d::AbstractArray{T}) where T
+    (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
+    read_type = READ_TYPES[dtype]
+    dimensions = size(d)
+
+    read_array = any(dimensions .!= 1)
+    if sizeof(read_type)*prod(dimensions) != nbytes
+        error("Invalid element length")
+    end
+    if read_array
+        data = read_bswap(f, swap_bytes, reinterpret(read_type, d))
+    else
+        data = read_bswap(f, swap_bytes, read_type)
+    end
+    skip_padding(f, nbytes, hbytes)
+
+    read_array ? d : convert(T, data)
 end
 
 function read_cell(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
@@ -244,11 +265,7 @@ function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::
     SparseMatrixCSC(m, n, jc, ir, pr)
 end
 
-if VERSION >= v"0.4.0-dev+1039"
-    truncate_to_uint8(x) = x % UInt8
-else
-    truncate_to_uint8(x) = convert(UInt8, x)
-end
+truncate_to_uint8(x) = x % UInt8
 
 function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)

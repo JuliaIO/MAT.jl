@@ -1,10 +1,4 @@
-using MAT
-
-@static if VERSION < v"0.7-"
-    using Base.Test
-else
-    using Test
-end
+using MAT, Test
 
 function check(filename, result)
     matfile = matopen(filename)
@@ -95,7 +89,7 @@ for _format in ["v6", "v7", "v7.3"]
         "a1x2" => [1.0 2.0],
         "a2x1" => zeros(2, 1)+[1.0, 2.0],
         "a2x2" => [1.0 3.0; 4.0 2.0],
-        "a2x2x2" => Compat.cat([1.0 3.0; 4.0 2.0], [1.0 2.0; 3.0 4.0], dims=3),
+        "a2x2x2" => cat([1.0 3.0; 4.0 2.0], [1.0 2.0; 3.0 4.0]; dims=3),
         "empty" => zeros(0, 0),
         "string" => "string"
     )
@@ -123,7 +117,7 @@ for _format in ["v6", "v7", "v7.3"]
             true false false
             false true false
             true false false
-        ]
+           ]
     )
     check("logical.mat", result)
 
