@@ -4,13 +4,14 @@ os:
     - osx
 julia:
     - 1.0
+    - 1.1
     - nightly
 addons:
-  apt:
-    packages:
-        - hdf5-tools
+#  apt:
+#    packages:
+#        - hdf5-tools
 before_script:
-    - if [ $TRAVIS_OS_NAME = osx ]; then brew install gcc; brew link --overwrite gcc; brew install hdf5; fi
+#    - if [ $TRAVIS_OS_NAME = osx ]; then brew install gcc; brew link --overwrite gcc; brew install hdf5; fi
 notifications:
     email: false
 after_success:
