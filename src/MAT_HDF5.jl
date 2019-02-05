@@ -292,7 +292,7 @@ elseif length(s) > 63
 end
 
 toarray(x::Array) = x
-toarray(x::Array{Bool}) = reinterpret.(UInt8, x)
+toarray(x::Array{Bool}) = reinterpret(UInt8, x)
 toarray(x::Bool) = UInt8[x]
 toarray(x) = [x]
 
