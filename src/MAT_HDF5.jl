@@ -603,7 +603,7 @@ function read(obj::HDF5Object, ::Type{Bool})
     tf = read(obj, UInt8)
     tf > 0
 end
-function read(obj::HDF5Dataset, ::Type{Array{Bool,N} where N})
+function read(obj::HDF5Dataset, ::Type{Array{Bool}})
     if HDF5.isnull(obj)
         return Bool[]
     end
