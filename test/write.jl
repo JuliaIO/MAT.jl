@@ -1,6 +1,6 @@
 using MAT
 
-tmpfile = string(tempname, ".mat")
+tmpfile = string(tempname(), ".mat")
 
 function test_write(data)
 	matwrite(tmpfile, data)
