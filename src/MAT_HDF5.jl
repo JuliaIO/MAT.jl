@@ -28,15 +28,7 @@
 
 module MAT_HDF5
 
-using HDF5
-using Compat
-using Compat.SparseArrays
-
-@static if VERSION < v"0.7-"
-    _finalizer(f, x) = finalizer(x, f)
-else
-    _finalizer = finalizer
-end
+using HDF5, SparseArrays
 
 import Base: read, write, close
 import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
@@ -53,7 +45,7 @@ mutable struct MatlabHDF5File <: HDF5.DataFile
     function MatlabHDF5File(plain, toclose::Bool=true, writeheader::Bool=false, refcounter::Int=0)
         f = new(plain, toclose, writeheader, refcounter)
         if toclose
-            _finalizer(close, f)
+            finalizer(close, f)
         end
         f
     end
@@ -70,7 +62,11 @@ function close(f::MatlabHDF5File)
         if f.writeheader
             magic = zeros(UInt8, 512)
             identifier = "MATLAB 7.3 MAT-file" # minimal but sufficient
-            magic[1:length(identifier)] = Vector{UInt8}(identifier)
+            GC.@preserve magic identifier begin
+                magicptr = pointer(magic)
+                idptr = pointer(identifier)
+                unsafe_copyto!(magicptr, idptr, length(identifier))
+            end
             magic[126] = 0x02
             magic[127] = 0x49
             magic[128] = 0x4d
@@ -123,7 +119,7 @@ const sparse_attr_matlab = "MATLAB_sparse"
 const int_decode_attr_matlab = "MATLAB_int_decode"
 
 ### Reading
-function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{Array{T}}) where {T}
+function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{Array{T}}) where T
     if !check_datatype_complex(dtype)
         close(dtype)
         error("Unrecognized compound data type when reading ", name(dset))
@@ -301,7 +297,7 @@ toarray(x::Bool) = UInt8[x]
 toarray(x) = [x]
 
 # Write the MATLAB type string for dset
-m_writetypeattr(dset, ::Type{Complex{T}}) where {T} = m_writetypeattr(dset, T)
+m_writetypeattr(dset, ::Type{Complex{T}}) where T = m_writetypeattr(dset, T)
 function m_writetypeattr(dset, T)
     if !haskey(type2str_matlab, T)
         error("Type ", T, " is not (yet) supported")
@@ -316,7 +312,7 @@ function m_writetypeattr(dset, T)
 end
 
 # Writes an empty scalar or array
-function m_writeempty(parent::HDF5Parent, name::String, data::Array)
+function m_writeempty(parent::HDF5Parent, name::String, data::AbstractArray)
     adata = [size(data)...]
     dset, dtype = d_create(parent, name, adata)
     try
@@ -330,7 +326,7 @@ function m_writeempty(parent::HDF5Parent, name::String, data::Array)
 end
 
 # Write an array to a dataset in a MATLAB file, returning the dataset
-function m_writearray(parent::HDF5Parent, name::String, adata::Array{T}) where {T<:HDF5BitsOrBool}
+function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{T}) where {T<:HDF5BitsOrBool}
     dset, dtype = d_create(parent, name, adata)
     try
         HDF5.writearray(dset, dtype.id, adata)
@@ -342,14 +338,14 @@ function m_writearray(parent::HDF5Parent, name::String, adata::Array{T}) where {
         close(dtype)
     end
 end
-function m_writearray(parent::HDF5Parent, name::String, adata::Array{Complex{T}}) where {T<:HDF5BitsOrBool}
+function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{Complex{T}}) where {T<:HDF5BitsOrBool}
     dtype = build_datatype_complex(T)
     try
         stype = dataspace(adata)
         obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id)
         dset = HDF5Dataset(obj_id, file(parent))
         try
-            arr = reinterpret(T, adata, tuple(2, size(adata)...))
+            arr = reshape(reinterpret(T, adata), tuple(2, size(adata)...))
             HDF5.writearray(dset, dtype.id, arr)
         catch e
             close(dset)
@@ -378,16 +374,16 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::
 end
 
 # Write sparse arrays
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::SparseMatrixCSC{T}) where {T}
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::SparseMatrixCSC{T}) where T
     g = g_create(parent, name)
     try
         m_writetypeattr(g, T)
         a_write(g, sparse_attr_matlab, UInt64(size(data, 1)))
         if !isempty(data.nzval)
             close(m_writearray(g, "data", toarray(data.nzval)))
-            close(m_writearray(g, "ir", add!(isa(data.rowval, Vector{UInt64}) ? copy(data.rowval) : convert(Vector{UInt64}, data.rowval), reinterpret(UInt64, convert(Int64, -1)))))
+            close(m_writearray(g, "ir", add!(isa(data.rowval, Vector{UInt64}) ? copy(data.rowval) : convert(Vector{UInt64}, data.rowval), typemax(UInt64))))
         end
-        close(m_writearray(g, "jc", add!(isa(data.colptr, Vector{UInt64}) ? copy(data.colptr) : convert(Vector{UInt64}, data.colptr), reinterpret(UInt64, convert(Int64, -1)))))
+        close(m_writearray(g, "jc", add!(isa(data.colptr, Vector{UInt64}) ? copy(data.colptr) : convert(Vector{UInt64}, data.colptr), typemax(UInt64))))
     finally
         close(g)
     end
@@ -431,7 +427,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, str::A
 end
 
 # Write cell arrays
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Array{T}) where {T}
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Array{T}) where T
     pathrefs = "/#refs#"
     fid = file(parent)
     local g
@@ -538,7 +534,7 @@ end
 
 ## Type conversion operations ##
 
-struct MatlabString; end
+struct MatlabString end
 
 const str2type_matlab = Dict(
     "canonical empty" => nothing,
@@ -607,14 +603,14 @@ function read(obj::HDF5Object, ::Type{Bool})
     tf = read(obj, UInt8)
     tf > 0
 end
-function read(obj::HDF5Object, ::Type{Array{Bool}})
+function read(obj::HDF5Dataset, ::Type{Array{Bool}})
     if HDF5.isnull(obj)
         return Bool[]
     end
     # Use the low-level HDF5 API to put the data directly into a Bool array
     tf = Array{Bool}(undef, size(obj))
     HDF5.h5d_read(obj.id, HDF5.hdf5_type_id(UInt8), tf, obj.xfer)
-    tf
+    return tf
 end
 
 ## Utilities for handling complex numbers
