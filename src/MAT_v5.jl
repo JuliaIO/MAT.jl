@@ -71,6 +71,8 @@ const mxINT32_CLASS = 12
 const mxUINT32_CLASS = 13
 const mxINT64_CLASS = 14
 const mxUINT64_CLASS = 15
+const mxFUNCTION_CLASS = 16
+const mxOPAQUE_CLASS = 17
 const READ_TYPES = Type[
     Int8, UInt8, Int16, UInt16, Int32, UInt32, Float32, Union{},
     Float64, Union{}, Union{}, Int64, UInt64]
@@ -317,10 +319,19 @@ function read_matrix(f::IO, swap_bytes::Bool)
     end
 
     flags = read_element(f, swap_bytes, UInt32)
+    class = flags[1] & 0xFF
+
+    if class == mxOPAQUE_CLASS
+        s0 = read_data(f, swap_bytes)
+        s1 = read_data(f, swap_bytes)
+        s2 = read_data(f, swap_bytes)
+        arr = read_matrix(f, swap_bytes)
+        return ("__opaque__", Dict("s0"=>s0, "s1"=>s1, "s2"=>s2, "arr"=>arr))
+    end
+
     dimensions = read_element(f, swap_bytes, Int32)
     name = String(read_element(f, swap_bytes, UInt8))
 
-    class = flags[1] & 0xFF
     local data
     if class == mxCELL_CLASS
         data = read_cell(f, swap_bytes, dimensions)
@@ -330,6 +341,10 @@ function read_matrix(f::IO, swap_bytes::Bool)
         data = read_sparse(f, swap_bytes, dimensions, flags)
     elseif class == mxCHAR_CLASS && length(dimensions) <= 2
         data = read_string(f, swap_bytes, dimensions)
+    elseif class == mxCHAR_CLASS && length(dimensions) <= 2
+        data = read_string(f, swap_bytes, dimensions)
+    elseif class == mxFUNCTION_CLASS
+        data = read_matrix(f, swap_bytes)
     else
         if (flags[1] & (1 << 9)) != 0 # logical
             data = read_data(f, swap_bytes, Bool, dimensions)
