@@ -341,8 +341,6 @@ function read_matrix(f::IO, swap_bytes::Bool)
         data = read_sparse(f, swap_bytes, dimensions, flags)
     elseif class == mxCHAR_CLASS && length(dimensions) <= 2
         data = read_string(f, swap_bytes, dimensions)
-    elseif class == mxCHAR_CLASS && length(dimensions) <= 2
-        data = read_string(f, swap_bytes, dimensions)
     elseif class == mxFUNCTION_CLASS
         data = read_matrix(f, swap_bytes)
     else
