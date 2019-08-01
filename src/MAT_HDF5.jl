@@ -28,7 +28,7 @@
 
 module MAT_HDF5
 
-using HDF5
+using HDF5, SparseArrays
 
 import Base: read, write, close
 import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
@@ -36,7 +36,7 @@ import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
 const HDF5Parent = Union{HDF5File, HDF5Group}
 const HDF5BitsOrBool = Union{HDF5BitsKind,Bool}
 
-type MatlabHDF5File <: HDF5.DataFile
+mutable struct MatlabHDF5File <: HDF5.DataFile
     plain::HDF5File
     toclose::Bool
     writeheader::Bool
@@ -46,7 +46,7 @@ type MatlabHDF5File <: HDF5.DataFile
     function MatlabHDF5File(plain, toclose::Bool=true, writeheader::Bool=false, refcounter::Int=0,compress::Bool=false)
         f = new(plain, toclose, writeheader, refcounter,compress)
         if toclose
-            finalizer(f, close)
+            finalizer(close, f)
         end
         f
     end
@@ -63,7 +63,11 @@ function close(f::MatlabHDF5File)
         if f.writeheader
             magic = zeros(UInt8, 512)
             identifier = "MATLAB 7.3 MAT-file" # minimal but sufficient
-            magic[1:length(identifier)] = Vector{UInt8}(identifier)
+            GC.@preserve magic identifier begin
+                magicptr = pointer(magic)
+                idptr = pointer(identifier)
+                unsafe_copyto!(magicptr, idptr, length(identifier))
+            end
             magic[126] = 0x02
             magic[127] = 0x49
             magic[128] = 0x4d
@@ -116,26 +120,16 @@ const sparse_attr_matlab = "MATLAB_sparse"
 const int_decode_attr_matlab = "MATLAB_int_decode"
 
 ### Reading
-function read_complex{T}(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{Array{T}})
+function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{Array{T}}) where T
     if !check_datatype_complex(dtype)
         close(dtype)
         error("Unrecognized compound data type when reading ", name(dset))
     end
     memtype = build_datatype_complex(T)
     sz = size(dset)
-    dbuf = Array{T}(2, sz...)
-    st = sizeof(T)
-    buf = reinterpret(UInt8, dbuf, (2 * st, sz...))
-    HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, buf)
-
-    if T == Float32
-        d = reinterpret(Complex64, dbuf, sz)
-    elseif T == Float64
-        d = reinterpret(Complex128, dbuf, sz)
-    else
-        d = slicedim(dbuf, 1, 1) + im * slicedim(dbuf, 1, 2)
-    end
-    length(d) == 1 ? d[1] : d
+    dbuf = Array{Complex{T}}(undef, sz...)
+    HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, vec(dbuf))
+    length(dbuf) == 1 ? dbuf[1] : dbuf
 end
 
 function m_read(dset::HDF5Dataset)
@@ -145,9 +139,17 @@ function m_read(dset::HDF5Dataset)
         mattype = a_read(dset, name_type_attr_matlab)
         if mattype == "char"
             return ""
+        elseif mattype == "struct"
+            # Not sure if this check is necessary but it is checked in
+            # `m_read(g::HDF5Group)`
+            if exists(dset, "MATLAB_fields")
+                return Dict{String,Any}(n=>[] for n in a_read(dset, "MATLAB_fields"))
+            else
+                return Dict{String,Any}()
+            end
         else
             T = mattype == "canonical empty" ? Union{} : str2eltype_matlab[mattype]
-            return Array{T}(dims...)
+            return Array{T}(undef, dims...)
         end
     end
 
@@ -156,7 +158,7 @@ function m_read(dset::HDF5Dataset)
     if mattype == "cell"
         # Cell arrays, represented as an array of refs
         refs = read(dset, Array{HDF5ReferenceObj})
-        out = Array{Any}(size(refs))
+        out = Array{Any}(undef, size(refs))
         f = file(dset)
         for i = 1:length(refs)
             dset = f[refs[i]]
@@ -296,7 +298,7 @@ toarray(x::Bool) = UInt8[x]
 toarray(x) = [x]
 
 # Write the MATLAB type string for dset
-m_writetypeattr{T}(dset, ::Type{Complex{T}}) = m_writetypeattr(dset, T)
+m_writetypeattr(dset, ::Type{Complex{T}}) where T = m_writetypeattr(dset, T)
 function m_writetypeattr(dset, T)
     if !haskey(type2str_matlab, T)
         error("Type ", T, " is not (yet) supported")
@@ -311,7 +313,7 @@ function m_writetypeattr(dset, T)
 end
 
 # Writes an empty scalar or array
-function m_writeempty(parent::HDF5Parent, name::String, data::Array)
+function m_writeempty(parent::HDF5Parent, name::String, data::AbstractArray)
     adata = [size(data)...]
     dset, dtype = d_create(parent, name, adata)
     try
@@ -325,7 +327,7 @@ function m_writeempty(parent::HDF5Parent, name::String, data::Array)
 end
 
 # Write an array to a dataset in a MATLAB file, returning the dataset
-function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::String, adata::Array{T},compress::Bool)
+function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{T},compress::Bool) where {T<:HDF5BitsOrBool}
     dset, dtype = compress ? d_create(parent, name, adata,"chunk",HDF5.heuristic_chunk(adata),"compress",3) : d_create(parent, name, adata)
     try
         HDF5.writearray(dset, dtype.id, adata)
@@ -337,7 +339,8 @@ function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::String, adata
         close(dtype)
     end
 end
-function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::String, adata::Array{Complex{T}},compress::Bool)
+
+function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{Complex{T}},compress:Bool) where {T<:HDF5BitsOrBool}
     dtype = build_datatype_complex(T)
     try
         stype = dataspace(adata)
@@ -352,7 +355,7 @@ function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::String, adata
         end
         dset = HDF5Dataset(obj_id, file(parent))
         try
-            arr = reinterpret(T, adata, tuple(2, size(adata)...))
+            arr = reshape(reinterpret(T, adata), tuple(2, size(adata)...))
             HDF5.writearray(dset, dtype.id, arr)
         catch e
             close(dset)
@@ -367,7 +370,7 @@ function m_writearray{T<:HDF5BitsOrBool}(parent::HDF5Parent, name::String, adata
 end
 
 # Write a scalar or array
-function m_write{T<:HDF5BitsOrBool}(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Union{T, Complex{T}, Array{T}, Array{Complex{T}}})
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Union{T, Complex{T}, Array{T}, Array{Complex{T}}}) where {T<:HDF5BitsOrBool}
     if isempty(data)
         m_writeempty(parent, name, data)
         return
@@ -381,16 +384,16 @@ function m_write{T<:HDF5BitsOrBool}(mfile::MatlabHDF5File, parent::HDF5Parent, n
 end
 
 # Write sparse arrays
-function m_write{T}(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::SparseMatrixCSC{T})
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::SparseMatrixCSC{T}) where T
     g = g_create(parent, name)
     try
         m_writetypeattr(g, T)
         a_write(g, sparse_attr_matlab, UInt64(size(data, 1)))
         if !isempty(data.nzval)
             close(m_writearray(g, "data", toarray(data.nzval),mfile.compress))
-            close(m_writearray(g, "ir", add!(isa(data.rowval, Vector{UInt64}) ? copy(data.rowval) : convert(Vector{UInt64}, data.rowval), reinterpret(UInt64, convert(Int64, -1))),mfile.compress))
+            close(m_writearray(g, "ir", add!(isa(data.rowval, Vector{UInt64}) ? copy(data.rowval) : convert(Vector{UInt64}, data.rowval), typemax(UInt64)),mfile.compress))
         end
-        close(m_writearray(g, "jc", add!(isa(data.colptr, Vector{UInt64}) ? copy(data.colptr) : convert(Vector{UInt64}, data.colptr), reinterpret(UInt64, convert(Int64, -1))),mfile.compress))
+        close(m_writearray(g, "jc", add!(isa(data.colptr, Vector{UInt64}) ? copy(data.colptr) : convert(Vector{UInt64}, data.colptr), typemax(UInt64)),mfile.compress))
     finally
         close(g)
     end
@@ -434,7 +437,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, str::A
 end
 
 # Write cell arrays
-function m_write{T}(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Array{T})
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Array{T}) where T
     pathrefs = "/#refs#"
     fid = file(parent)
     local g
@@ -465,7 +468,7 @@ function m_write{T}(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat
             close(a)
         end
         # Write the items to the reference group
-        refs = Array{HDF5ReferenceObj}(size(data))
+        refs = Array{HDF5ReferenceObj}(undef, size(data))
         for i = 1:length(data)
             mfile.refcounter += 1
             itemname = string(mfile.refcounter)
@@ -491,7 +494,7 @@ end
 
 # Check that keys are valid for a struct, and convert them to an array of ASCIIStrings
 function check_struct_keys(k::Vector)
-    asckeys = Vector{String}(length(k))
+    asckeys = Vector{String}(undef, length(k))
     for i = 1:length(k)
         key = k[i]
         if !isa(key, AbstractString)
@@ -514,7 +517,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, k::Vec
 end
 
 # Write Associative as a struct
-m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::Associative) =
+m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::AbstractDict) =
     m_write(mfile, parent, name, check_struct_keys(collect(keys(s))), collect(values(s)))
 
 # Write generic CompositeKind as a struct
@@ -541,7 +544,7 @@ end
 
 ## Type conversion operations ##
 
-type MatlabString; end
+struct MatlabString end
 
 const str2type_matlab = Dict(
     "canonical empty" => nothing,
@@ -599,9 +602,9 @@ function read(obj::HDF5Object, ::Type{MatlabString})
         data = reshape(data, sz[2:end])
     end
     if ndims(data) == 1
-        return convert(String, convert(Vector{Char}, data))
+        return String(convert(Vector{Char}, data))
     elseif ndims(data) == 2
-        return datap = String[rstrip(convert(String, convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
+        return datap = String[rstrip(String(convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
     else
         return data
     end
@@ -610,9 +613,14 @@ function read(obj::HDF5Object, ::Type{Bool})
     tf = read(obj, UInt8)
     tf > 0
 end
-function read(obj::HDF5Object, ::Type{Array{Bool}})
-    tf = read(obj, Array{UInt8})
-    reinterpret(Bool, tf)
+function read(obj::HDF5Dataset, ::Type{Array{Bool}})
+    if HDF5.isnull(obj)
+        return Bool[]
+    end
+    # Use the low-level HDF5 API to put the data directly into a Bool array
+    tf = Array{Bool}(undef, size(obj))
+    HDF5.h5d_read(obj.id, HDF5.hdf5_type_id(UInt8), tf, obj.xfer)
+    return tf
 end
 
 ## Utilities for handling complex numbers
