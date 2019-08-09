@@ -100,8 +100,13 @@ function read_bswap(f::IO, swap_bytes::Bool, d::AbstractArray{T}) where T
     d
 end
 
-skip_padding(f::IO, nbytes::Int, hbytes::Int) = if nbytes % hbytes != 0
-    skip(f, hbytes-(nbytes % hbytes))
+function skip_padding(f::IO, nbytes::Int, hbytes::Int)
+    if nbytes % hbytes != 0
+        skip(f, hbytes-(nbytes % hbytes))
+        return hbytes-(nbytes % hbytes)
+    else
+        return 0
+    end
 end
 
 # Read data type and number of bytes at the start of a data element
@@ -121,8 +126,9 @@ end
 function read_element(f::IO, swap_bytes::Bool, ::Type{T}) where T
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     data = read_bswap(f, swap_bytes, T, Int(div(nbytes, sizeof(T))))
-    skip_padding(f, nbytes, hbytes)
-    data
+    skipped_bytes = skip_padding(f, nbytes, hbytes)
+    bytes_read = nbytes + hbytes + skipped_bytes
+    return data, bytes_read
 end
 
 # Read data element as encoded type
@@ -168,10 +174,11 @@ end
 
 function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_object::Bool)
     if is_object
-        class = String(read_element(f, swap_bytes, UInt8))
+        class = String(read_element(f, swap_bytes, UInt8)[1])
     end
-    field_length = read_element(f, swap_bytes, Int32)[1]
-    field_names = read_element(f, swap_bytes, UInt8)
+    field_lengths, _ = read_element(f, swap_bytes, Int32)
+    field_length = field_lengths[1]
+    field_names, _ = read_element(f, swap_bytes, UInt8)
     n_fields = div(length(field_names), field_length)
 
     # Get field names as strings
@@ -232,11 +239,11 @@ function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::
 
     m = isempty(dimensions) ? 0 : dimensions[1]
     n = length(dimensions) <= 1 ? 0 : dimensions[2]
-    ir = plusone!(convert(Vector{Int}, read_element(f, swap_bytes, Int32)))
-    jc = plusone!(convert(Vector{Int}, read_element(f, swap_bytes, Int32)))
+    ir = plusone!(convert(Vector{Int}, read_element(f, swap_bytes, Int32)[1]))
+    jc = plusone!(convert(Vector{Int}, read_element(f, swap_bytes, Int32)[1]))
     if (flags[1] & (1 << 9)) != 0 # logical
         # WTF. For some reason logical sparse matrices are tagged as doubles.
-        pr = read_element(f, swap_bytes, Bool)
+        pr = read_element(f, swap_bytes, Bool)[1]
     else
         pr = read_data(f, swap_bytes)
         if (flags[1] & (1 << 11)) != 0 # complex
@@ -316,9 +323,10 @@ function read_matrix(f::IO, swap_bytes::Bool)
         return ("", Matrix{Union{}}(undef, 0, 0))
     end
 
-    flags = read_element(f, swap_bytes, UInt32)
-    dimensions = read_element(f, swap_bytes, Int32)
-    name = String(read_element(f, swap_bytes, UInt8))
+    flags, f_bytes = read_element(f, swap_bytes, UInt32)
+    dimensions, d_bytes = read_element(f, swap_bytes, Int32)
+    raw_name, n_bytes = read_element(f, swap_bytes, UInt8)
+    name = String(raw_name)
 
     class = flags[1] & 0xFF
     local data
@@ -330,6 +338,11 @@ function read_matrix(f::IO, swap_bytes::Bool)
         data = read_sparse(f, swap_bytes, dimensions, flags)
     elseif class == mxCHAR_CLASS && length(dimensions) <= 2
         data = read_string(f, swap_bytes, dimensions)
+    elseif class > length(CONVERT_TYPES) # undocumented classes
+        @warn "Class not convertable - skipping field - set value to missing"
+        remaining_bytes = nbytes - f_bytes - d_bytes - n_bytes
+        skip(f, remaining_bytes)
+        data = missing
     else
         if (flags[1] & (1 << 9)) != 0 # logical
             data = read_data(f, swap_bytes, Bool, dimensions)
@@ -378,7 +391,7 @@ function getvarnames(matfile::Matlabv5File)
 
             read_element(f, matfile.swap_bytes, UInt32)
             read_element(f, matfile.swap_bytes, Int32)
-            varnames[String(read_element(f, matfile.swap_bytes, UInt8))] = offset
+            varnames[String(read_element(f, matfile.swap_bytes, UInt8)[1])] = offset
 
             seek(matfile.ios, offset+nbytes+hbytes)
         end

@@ -1,8 +1,9 @@
 using MAT, Test
 
-function check(filename, result)
+function check(filename, result; skip_keys=String[])
     matfile = matopen(filename)
     for (k, v) in result
+        k in skip_keys && continue
         @test exists(matfile, k)
         got = read(matfile, k)
         if !isequal(got, v) || (typeof(got) != typeof(v) && (!isa(got, String) || !(isa(v, String))))
@@ -20,24 +21,28 @@ function check(filename, result)
                 """)
         end
     end
-    @test union!(Set(), names(matfile)) == union!(Set(), keys(result))
+    if isempty(skip_keys)
+        @test union!(Set(), names(matfile)) == union!(Set(), keys(result))
+    end
     close(matfile)
 
-    mat = matread(filename)
-    if !isequal(mat, result)
-        error("""
-            Data mismatch reading $filename ($format)
+    if isempty(skip_keys)
+        mat = matread(filename)
+        if !isequal(mat, result)
+            error("""
+                Data mismatch reading $filename ($format)
 
-            Got:
+                Got:
 
-            $(repr(mat))
+                $(repr(mat))
 
-            Expected:
+                Expected:
 
-            $(repr(result))
-            """)
-        close(matfile)
-        return false
+                $(repr(result))
+                """)
+            close(matfile)
+            return false
+        end
     end
 
     return true
@@ -135,6 +140,18 @@ for _format in ["v6", "v7", "v7.3"]
         "sparse_zeros" => SparseMatrixCSC(20, 20, ones(Int, 21), Int[], Float64[])
     )
     check("sparse.mat", result)
+
+    result = Dict(
+        "t" => Dict(
+            "int" => 66.0,
+            "struct" => Dict{String,Any}(
+                "b"=>[5.0 6.0 7.0],
+                "a"=>[1.0 2.0 3.0]),
+            "skip_field" => missing
+        )
+    )
+
+    check("skip_field.mat", result, skip_keys=["", "#subsystem#"])
 
     matfile = matopen("partial.mat")
     var1 = read(matfile, "var1")

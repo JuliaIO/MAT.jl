@@ -172,6 +172,11 @@ function m_read(dset::HDF5Dataset)
 
     # Regular arrays of values
     # Convert to Julia type
+    if !haskey(str2type_matlab, mattype)
+        @warn "Class not convertable - skipping field - set value to missing"
+        return missing
+    end
+
     T = str2type_matlab[mattype]
 
     # Check for a COMPOUND data set, and if so handle complex numbers specially
@@ -207,6 +212,11 @@ function m_read(g::HDF5Group)
                 # This matrix is not empty.
                 ir = add!(convert(Vector{Int}, read(g, "ir")), 1)
                 dset = g["data"]
+                if !haskey(str2type_matlab, mattype)
+                    @warn "Class not convertable - skipping field - set value to missing"
+                    return missing
+                end
+
                 T = str2type_matlab[mattype]
                 try
                     dtype = datatype(dset)
@@ -258,6 +268,9 @@ function read(f::MatlabHDF5File, name::String)
     obj = f.plain[name]
     try
         val = m_read(obj)
+    catch
+        @warn "Field not readable - skipping field - set value to missing"
+        val = missing
     finally
         close(obj)
     end
