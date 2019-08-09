@@ -14,7 +14,17 @@ function test_write(data)
 	end
 
 	if !isequal(result, data)
-		error("Data mismatch")
+		error("""
+            Data mismatch
+
+            Got:
+
+            $(repr(result))
+
+            Expected:
+
+            $(repr(data))
+            """)
 	end
 end
 
