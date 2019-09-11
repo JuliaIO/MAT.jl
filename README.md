@@ -6,10 +6,12 @@ This library can read MATLAB `.mat` files, both in the older v5/v6/v7 format, as
 
 ## Installation
 
-Within Julia, use the package manager:
+This is installed using the standard tools of the [package manager](https://julialang.github.io/Pkg.jl/v1/getting-started/):
+
 ```julia
-Pkg.add("MAT")
+pkg> add MAT
 ```
+where you get the `pkg>` prompt by hitting `]` as the first character of the line. (Exit `pkg` mode by hitting backspace or Ctrl-C as the first character of the line.)
 
 See also the requirements for the [HDF5](https://github.com/timholy/HDF5.jl/) module, used for "v7.3" files and for writing \*.mat files.
 
