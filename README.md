@@ -23,7 +23,7 @@ To load the module:
 using MAT
 ```
 
-To read a single variable from a MAT file:
+To read a single variable from a MAT file (compressed files are detected and handled automatically):
 
 ```julia
 file = matopen("matfile.mat")
@@ -45,13 +45,13 @@ To read all variables from a MAT file as a Dict:
 vars = matread("matfile.mat")
 ```
 
-To write a Dict to a MAT file, using its keys as variable names:
+To write a Dict to a MAT file, using its keys as variable names (the third `compress` argument is optional, and `false` by default):
 
 ```julia
 matwrite("matfile.mat", Dict(
 	"myvar1" => 0,
 	"myvar2" => 1
-))
+), true)
 ```
 
 To get a list of variable names in a MAT file:

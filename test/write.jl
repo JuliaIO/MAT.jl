@@ -2,8 +2,8 @@ using MAT
 
 tmpfile = string(tempname(), ".mat")
 
-function test_write(data)
-    matwrite(tmpfile, data)
+function test_write(data, compress)
+    matwrite(tmpfile, data, compress)
 
     fid = matopen(tmpfile, "r")
     local result
@@ -15,6 +15,22 @@ function test_write(data)
 
     if !isequal(result, data)
         error("Data mismatch")
+    end
+end
+
+function test_write(data)
+    test_write(data, false)
+    test_write(data, true)
+end
+
+function test_compression_effective(data)
+    test_write(data, false)
+    sizeUncompressed = stat(tmpfile).size
+    test_write(data, true)
+    sizeCompressed = stat(tmpfile).size
+
+    if sizeCompressed >= sizeUncompressed
+        error("Compression was not effective")
     end
 end
 
@@ -109,3 +125,7 @@ sd = SortedDict(Dict(
     "sparse_empty" => sparse(Matrix{Float64}(undef, 0, 0))
 ))
 test_write(sd)
+
+# note: compression is NOT effective when the dict contains many duplicate entries
+# which are not compressible by themselves!
+test_compression_effective(Dict("data" => fill(1.0, 1000)))

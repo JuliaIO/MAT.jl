@@ -35,11 +35,11 @@ export matopen, matread, matwrite, names, exists, @read, @write
 
 # Open a MATLAB file
 const HDF5_HEADER = UInt8[0x89, 0x48, 0x44, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]
-function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool)
+function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool)
     # When creating new files, create as HDF5 by default
     fs = filesize(filename)
     if cr && (tr || fs == 0)
-        return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff)
+        return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff, compress)
     elseif fs == 0
         error("File \"$filename\" does not exist and create was not specified")
     end
@@ -76,7 +76,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         seek(rawfid, offset)
         if read!(rawfid, Vector{UInt8}(undef, 8)) == HDF5_HEADER
             close(rawfid)
-            return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff)
+            return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff, compress)
         end
     end
 
@@ -85,9 +85,10 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
 end
 
 function matopen(fname::AbstractString, mode::AbstractString)
-    mode == "r"  ? matopen(fname, true , false, false, false, false) :
-    mode == "r+" ? matopen(fname, true , true , false, false, false) :
-    mode == "w"  ? matopen(fname, false, true , true , true , false) :
+    mode == "r"  ? matopen(fname, true , false, false, false, false, false) :
+    mode == "r+" ? matopen(fname, true , true , false, false, false, false) :
+    mode == "w"  ? matopen(fname, false, true , true , true , false, false) :
+    mode == "wz" ? matopen(fname, false, true , true , true , false, true ) :
 #     mode == "w+" ? matopen(fname, true , true , true , true , false) :
 #     mode == "a"  ? matopen(fname, false, true , true , false, true ) :
 #     mode == "a+" ? matopen(fname, true , true , true , false, true ) :
@@ -136,13 +137,13 @@ end
 
 # Write a dict to a MATLAB file
 """
-    matwrite(filename, d::Dict)
+    matwrite(filename, d::Dict, compress::Bool=false)
 
 Write a dictionary containing variable names as keys and values as values
 to a Matlab file, opening and closing it automatically.
 """
-function matwrite(filename::AbstractString, dict::AbstractDict{S, T}) where {S, T}
-    file = matopen(filename, "w")
+function matwrite(filename::AbstractString, dict::AbstractDict{S, T}, compress::Bool=false) where {S, T}
+    file = matopen(filename, compress ? "wz" : "w")
     try
         for (k, v) in dict
             local kstring
@@ -158,3 +159,4 @@ function matwrite(filename::AbstractString, dict::AbstractDict{S, T}) where {S, 
     end
 end
 end
+
