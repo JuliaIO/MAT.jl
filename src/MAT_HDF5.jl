@@ -389,6 +389,10 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::
     end
 end
 
+# Write BitArray as Array{Bool}. Would be better not to require the conversion, but this is easy
+m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::BitArray) =
+    m_write(mfile, parent, name, convert(Array{Bool}, s))
+
 # Write a string
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, str::AbstractString)
     if isempty(str)
