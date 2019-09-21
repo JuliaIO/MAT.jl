@@ -204,3 +204,11 @@ let objtestfile = "empty_struct.mat"
     @test vars["a"]["size"] == []
     @test vars["a"]["params"] == []
 end
+
+# test reading of a Matlab figure
+let objtestfile = "figure.fig"
+    vars = matread(joinpath(dirname(@__FILE__), objtestfile))
+    @test "hgS_070000" in keys(vars)
+    @test vars["hgS_070000"]["handle"] == 1.0
+    @test vars["hgS_070000"]["type"] == "figure"
+end
