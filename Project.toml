@@ -1,0 +1,23 @@
+name = "MAT"
+uuid = "23992714-dd62-5051-b70f-ba57cb901cac"
+version = "0.5.1"
+
+[deps]
+BufferedStreams = "e1450e63-4bb3-523b-b2a4-4ffa8c0fd77d"
+HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+Libz = "2ec943e9-cfe8-584d-b93d-64dcb6d567b7"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+
+[compat]
+BufferedStreams = "≥ 0.2.0"
+HDF5 = "≥ 0.11.0"
+julia = "0.7, 1"
+
+[extras]
+DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["DataStructures", "LinearAlgebra", "SparseArrays", "Test"]
