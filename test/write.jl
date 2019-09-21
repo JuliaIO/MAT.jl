@@ -2,8 +2,8 @@ using MAT
 
 tmpfile = string(tempname(), ".mat")
 
-function test_write(data, compress)
-    matwrite(tmpfile, data, compress)
+function test_write(data; kwargs...)
+    matwrite(tmpfile, data; kwargs...)
 
     fid = matopen(tmpfile, "r")
     local result
@@ -19,14 +19,14 @@ function test_write(data, compress)
 end
 
 function test_write(data)
-    test_write(data, false)
-    test_write(data, true)
+    test_write(data; compress = false)
+    test_write(data; compress = true)
 end
 
 function test_compression_effective(data)
-    test_write(data, false)
+    test_write(data; compress = false)
     sizeUncompressed = stat(tmpfile).size
-    test_write(data, true)
+    test_write(data; compress = true)
     sizeCompressed = stat(tmpfile).size
 
     if sizeCompressed >= sizeUncompressed

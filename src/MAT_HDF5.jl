@@ -374,7 +374,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::
         m_writeempty(parent, name, data)
         return
     end
-    dset = m_writearray(parent, name, toarray(data),mfile.compress)
+    dset = m_writearray(parent, name, toarray(data), mfile.compress)
     try
         m_writetypeattr(dset, T)
     finally

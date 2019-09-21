@@ -45,13 +45,14 @@ To read all variables from a MAT file as a Dict:
 vars = matread("matfile.mat")
 ```
 
-To write a Dict to a MAT file, using its keys as variable names (the third `compress` argument is optional, and `false` by default):
+To write a Dict to a MAT file, using its keys as variable names.
+The `compress` argument is optional, and compression is off by default:
 
 ```julia
 matwrite("matfile.mat", Dict(
 	"myvar1" => 0,
 	"myvar2" => 1
-), true)
+); compress = true)
 ```
 
 To get a list of variable names in a MAT file:

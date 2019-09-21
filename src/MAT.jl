@@ -84,21 +84,20 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     error("\"$filename\" is not a MAT file")
 end
 
-function matopen(fname::AbstractString, mode::AbstractString)
+function matopen(fname::AbstractString, mode::AbstractString; compress::Bool = false)
     mode == "r"  ? matopen(fname, true , false, false, false, false, false) :
-    mode == "r+" ? matopen(fname, true , true , false, false, false, false) :
-    mode == "w"  ? matopen(fname, false, true , true , true , false, false) :
-    mode == "wz" ? matopen(fname, false, true , true , true , false, true ) :
-#     mode == "w+" ? matopen(fname, true , true , true , true , false) :
-#     mode == "a"  ? matopen(fname, false, true , true , false, true ) :
-#     mode == "a+" ? matopen(fname, true , true , true , false, true ) :
+    mode == "r+" ? matopen(fname, true , true , false, false, false, compress) :
+    mode == "w"  ? matopen(fname, false, true , true , true , false, compress) :
+#     mode == "w+" ? matopen(fname, true , true , true , true , false, compress) :
+#     mode == "a"  ? matopen(fname, false, true , true , false, true, compress) :
+#     mode == "a+" ? matopen(fname, true , true , true , false, true, compress) :
     error("invalid open mode: ", mode)
 end
 
-matopen(fname::AbstractString) = matopen(fname, "r")
+matopen(fname::AbstractString; kwargs...) = matopen(fname, "r"; kwargs...)
 
-function matopen(f::Function, args...)
-    fid = matopen(args...)
+function matopen(f::Function, args...; kwargs...)
+    fid = matopen(args...; kwargs...)
     try
         f(fid)
     finally
@@ -107,11 +106,14 @@ function matopen(f::Function, args...)
 end
 
 """
-    matopen(filename [, mode]) -> handle
-    matopen(f::Function, filename [, mode]) -> f(handle)
+    matopen(filename [, mode]; compress = false) -> handle
+    matopen(f::Function, filename [, mode]; compress = false) -> f(handle)
 
 Mode defaults to "r" for read.  It can also be "w" for write, or "r+" for
 read or write without creation or truncation.
+
+Compression on reading is detected/handled automatically; the compress
+keyword argument only affects write operations.
 
 Use with `read`, `write`, `close`, `names`, and `exists`.
 """
@@ -137,13 +139,13 @@ end
 
 # Write a dict to a MATLAB file
 """
-    matwrite(filename, d::Dict, compress::Bool=false)
+    matwrite(filename, d::Dict; compress::Bool = false)
 
 Write a dictionary containing variable names as keys and values as values
 to a Matlab file, opening and closing it automatically.
 """
-function matwrite(filename::AbstractString, dict::AbstractDict{S, T}, compress::Bool=false) where {S, T}
-    file = matopen(filename, compress ? "wz" : "w")
+function matwrite(filename::AbstractString, dict::AbstractDict{S, T}; compress::Bool = false) where {S, T}
+    file = matopen(filename, "w"; compress = compress)
     try
         for (k, v) in dict
             local kstring
