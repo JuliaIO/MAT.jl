@@ -9,10 +9,10 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 CodecZlib = "944b1d66-785c-5afd-91f1-9de20f533193"
 
 [compat]
-BufferedStreams = "≥ 0.2.0"
-HDF5 = "≥ 0.11.0"
+BufferedStreams = "0.4.1, 1"
+HDF5 = "0.11, 0.12"
+CodecZlib = "0.5, 0.6"
 julia = "0.7, 1"
-CodecZlib = "≥ 0.5.0" 
 
 [extras]
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
