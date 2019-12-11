@@ -28,8 +28,9 @@ using HDF5, SparseArrays
 
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")
+include("MAT_v4.jl")
 
-using .MAT_HDF5, .MAT_v5
+using .MAT_HDF5, .MAT_v5, .MAT_v4
 
 export matopen, matread, matwrite, names, exists, @read, @write
 
@@ -44,19 +45,28 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         error("File \"$filename\" does not exist and create was not specified")
     end
 
-    # Test whether this is a MAT file
-    if fs < 128
-        error("File \"$filename\" is too small to be a supported MAT file")
-    end
     rawfid = open(filename, "r")
 
     # Check for MAT v4 file
-    magic = read!(rawfid, Vector{UInt8}(undef, 4))
-    for i = 1:length(magic)
-        if magic[i] == 0
+    M, O, P, T, mrows, ncols, imagf, namlen = MAT_v4.read_header(rawfid, false)
+    if 0<=M<=4 && O == 0 && 0<=P<=5 && 0<=T<=2 && mrows>=0 && ncols>=0 && 0<=imagf<=1 && namlen>0
+        close(rawfid)
+        swap_bytes = false
+        return MAT_v4.matopen(rawfid, swap_bytes)
+    else
+        seek(rawfid, 0)   
+        M, O, P, T, mrows, ncols, imagf, namlen = MAT_v4.read_header(rawfid, true)
+        if 0<=M<=4 && O == 0 && 0<=P<=5 && 0<=T<=2 && mrows>=0 && ncols>=0 && 0<=imagf<=1 && namlen>0
             close(rawfid)
-            error("\"$filename\" is not a MAT file, or is an unsupported (v4) MAT file")
+            swap_bytes = true
+            return MAT_v4.matopen(rawfid, swap_bytes)
         end
+    end
+
+    # Test whether this is a MAT file
+    if fs < 128
+        close(rawfid)
+        error("File \"$filename\" is too small to be a supported MAT file")
     end
 
     # Check for MAT v5 file
