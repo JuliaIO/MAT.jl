@@ -55,6 +55,15 @@ matwrite("matfile.mat", Dict(
 ); compress = true)
 ```
 
+To write in MATLAB v4 format:
+
+```julia
+matwrite4("matfile.mat", Dict(
+	"myvar1" => 0,
+	"myvar2" => 1
+))
+```
+
 To get a list of variable names in a MAT file:
 
 ```julia
@@ -75,9 +84,9 @@ close(file)
 
 ## Caveats
 
-* All files are written in MATLAB v7.3 format.
-* MATLAB v4 files are not currently supported.
+* All files are written in MATLAB v7.3 format by default.
+* Writing in MATLAB v4 format is provided by the matwrite4 function.
 
 ## Credits
 
-The MAT_HDF5 module, which provides read/write support for MATLAB v7.3 files, was written primarily by [Tim Holy](https://github.com/timholy/). The MAT_v5 module, which provides read support for MATLAB v5/v6/v7 files, was written primarily by [Simon Kornblith](https://github.com/simonster/).
+The MAT_HDF5 module, which provides read/write support for MATLAB v7.3 files, was written primarily by [Tim Holy](https://github.com/timholy/). The MAT_v5 module, which provides read support for MATLAB v5/v6/v7 files, was written primarily by [Simon Kornblith](https://github.com/simonster/). The MAT_v4 module, which provides read and write support for MATLAB v4 files, was written primarily by [Victor Saase](https://github.com/vsaase/).
