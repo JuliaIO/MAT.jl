@@ -32,7 +32,7 @@ include("MAT_v4.jl")
 
 using .MAT_HDF5, .MAT_v5, .MAT_v4
 
-export matopen, matread, matwrite, names, exists, @read, @write
+export matopen, matread, matwrite, matwrite4, names, exists, @read, @write
 
 # Open a MATLAB file
 const HDF5_HEADER = UInt8[0x89, 0x48, 0x44, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]
@@ -50,14 +50,12 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     # Check for MAT v4 file
     M, O, P, T, mrows, ncols, imagf, namlen = MAT_v4.read_header(rawfid, false)
     if 0<=M<=4 && O == 0 && 0<=P<=5 && 0<=T<=2 && mrows>=0 && ncols>=0 && 0<=imagf<=1 && namlen>0
-        close(rawfid)
         swap_bytes = false
         return MAT_v4.matopen(rawfid, swap_bytes)
     else
         seek(rawfid, 0)   
         M, O, P, T, mrows, ncols, imagf, namlen = MAT_v4.read_header(rawfid, true)
         if 0<=M<=4 && O == 0 && 0<=P<=5 && 0<=T<=2 && mrows>=0 && ncols>=0 && 0<=imagf<=1 && namlen>0
-            close(rawfid)
             swap_bytes = true
             return MAT_v4.matopen(rawfid, swap_bytes)
         end
@@ -170,5 +168,23 @@ function matwrite(filename::AbstractString, dict::AbstractDict{S, T}; compress::
         close(file)
     end
 end
+
+function matwrite4(filename::AbstractString, dict::AbstractDict{S, T}) where {S, T}
+    file = open(filename, "w")
+    m = MAT_v4.Matlabv4File(file, false)
+    try
+        for (k, v) in dict
+            local kstring
+            try
+                kstring = ascii(convert(String, k))
+            catch x
+                error("matwrite requires a Dict with ASCII keys")
+            end
+            write(m, kstring, v)
+        end
+    finally
+        close(file)
+    end
 end
 
+end

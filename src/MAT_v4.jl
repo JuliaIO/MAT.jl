@@ -2,7 +2,7 @@
 # Tools for reading MATLAB v4 files in Julia
 #
 # Copyright (C) 2012   Simon Kornblith
-# Copyright (C) 2019   Victor Saase
+# Copyright (C) 2019   Victor Saase (modified from MAT_v5.jl)
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -27,7 +27,7 @@
 # http://www.mathworks.com/help/pdf_doc/matlab/matfile_format.pdf
 
 module MAT_v4
-using CodecZlib, BufferedStreams, HDF5, SparseArrays
+using BufferedStreams, HDF5, SparseArrays
 import Base: read, write, close
 import HDF5: names, exists
 
@@ -86,10 +86,6 @@ function read_bswap(f::IO, swap_bytes::Bool, d::AbstractArray{T}) where T
     d
 end
 
-skip_padding(f::IO, nbytes::Int, hbytes::Int) = if nbytes % hbytes != 0
-    skip(f, hbytes-(nbytes % hbytes))
-end
-
 # Read data type and number of bytes at the start of a data element
 function read_header(f::IO, swap_bytes::Bool)
     dtype = read_bswap(f, swap_bytes, Int32)
@@ -105,187 +101,6 @@ function read_header(f::IO, swap_bytes::Bool)
     namlen = read_bswap(f, swap_bytes, Int32)
     
     M, O, P, T, mrows, ncols, imagf, namlen
-end
-
-# Read data element as a vector of a given type
-function read_element(f::IO, swap_bytes::Bool, ::Type{T}) where T
-    (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
-    data = read_bswap(f, swap_bytes, T, Int(div(nbytes, sizeof(T))))
-    skip_padding(f, nbytes, hbytes)
-    data
-end
-
-# Read data element as encoded type
-function read_data(f::IO, swap_bytes::Bool)
-    (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
-    read_type = READ_TYPES[dtype]
-    data = read_bswap(f, swap_bytes, read_type, Int(div(nbytes, sizeof(read_type))))
-    skip_padding(f, nbytes, hbytes)
-    data
-end
-
-# Read data element as encoded type with given dimensions, converting
-# to another type if necessary and collapsing one-element matrices to
-# scalars
-function read_data(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int32}) where T
-    (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
-    read_type = READ_TYPES[dtype]
-    if (read_type === UInt8) && (T === Bool)
-        read_type = Bool
-    end
-
-    read_array = any(dimensions .!= 1)
-    if sizeof(read_type)*prod(dimensions) != nbytes
-        error("Invalid element length")
-    end
-    if read_array
-        data = read_bswap(f, swap_bytes, read_type, tuple(convert(Vector{Int}, dimensions)...))
-    else
-        data = read_bswap(f, swap_bytes, read_type)
-    end
-    skip_padding(f, nbytes, hbytes)
-
-    read_array ? convert(Array{T}, data) : convert(T, data)
-end
-
-function read_cell(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
-    data = Array{Any}(undef, convert(Vector{Int}, dimensions)...)
-    for i = 1:length(data)
-        (ignored_name, data[i]) = read_matrix(f, swap_bytes)
-    end
-    data
-end
-
-function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_object::Bool)
-    if is_object
-        class = String(read_element(f, swap_bytes, UInt8))
-    end
-    field_length = read_element(f, swap_bytes, Int32)[1]
-    field_names = read_element(f, swap_bytes, UInt8)
-    n_fields = div(length(field_names), field_length)
-
-    # Get field names as strings
-    field_name_strings = Vector{String}(undef, n_fields)
-    n_el = prod(dimensions)
-    for i = 1:n_fields
-        sname = field_names[(i-1)*field_length+1:i*field_length]
-        index = something(findfirst(iszero, sname), 0)
-        field_name_strings[i] = String(index == 0 ? sname : sname[1:index-1])
-    end
-
-    data = Dict{String, Any}()
-    sizehint!(data, n_fields+1)
-    if is_object
-        data["class"] = class
-    end
-
-    if n_el == 1
-        # Read a single struct into a dict
-        for field_name in field_name_strings
-            data[field_name] = read_matrix(f, swap_bytes)[2]
-        end
-    else
-        # Read multiple structs into a dict of arrays
-        for field_name in field_name_strings
-            data[field_name] = Array{Any}(undef, dimensions...)
-        end
-        for i = 1:n_el
-            for field_name in field_name_strings
-                data[field_name][i] = read_matrix(f, swap_bytes)[2]
-            end
-        end
-    end
-
-    data
-end
-
-function plusone!(A)
-    for i = 1:length(A)
-        @inbounds A[i] += 1
-    end
-    A
-end
-
-function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::Vector{UInt32})
-    local m::Int, n::Int
-    if length(dimensions) == 2
-        (m, n) = dimensions
-    elseif length(dimensions) == 1
-        m = dimensions[1]
-        n = 1
-    elseif length(dimensions) == 0
-        m = 0
-        n = 0
-    else
-        error("invalid dimensions encountered for sparse array")
-    end
-
-    m = isempty(dimensions) ? 0 : dimensions[1]
-    n = length(dimensions) <= 1 ? 0 : dimensions[2]
-    ir = plusone!(convert(Vector{Int}, read_element(f, swap_bytes, Int32)))
-    jc = plusone!(convert(Vector{Int}, read_element(f, swap_bytes, Int32)))
-    if (flags[1] & (1 << 9)) != 0 # logical
-        # WTF. For some reason logical sparse matrices are tagged as doubles.
-        pr = read_element(f, swap_bytes, Bool)
-    else
-        pr = read_data(f, swap_bytes)
-        if (flags[1] & (1 << 11)) != 0 # complex
-            pr = complex_array(pr, read_data(f, swap_bytes))
-        end
-    end
-
-    SparseMatrixCSC(m, n, jc, ir, pr)
-end
-
-truncate_to_uint8(x) = x % UInt8
-
-function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
-    (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
-    if dtype <= 2 || dtype == 16
-        # If dtype <= 2, this may give an error on non-ASCII characters, since the string
-        # would be ISO-8859-1 and not UTF-8. However, MATLAB 2012b always saves strings with
-        # a 2-byte encoding in v6 format, and saves UTF-8 in v7 format. Thus, this may never
-        # happen in the wild.
-        chars = read!(f, Vector{UInt8}(undef, nbytes))
-        if dimensions[1] <= 1
-            data = String(chars)
-        else
-            data = Vector{String}(undef, dimensions[1])
-            for i = 1:dimensions[1]
-                data[i] = rstrip(String(chars[i:dimensions[1]:end]))
-            end
-        end
-    elseif dtype <= 4 || dtype == 17
-        # Technically, if dtype == 3 or dtype == 4, this is ISO-8859-1 and not Unicode.
-        # However, the first 256 Unicode code points are derived from ISO-8859-1, so UCS-2
-        # is a superset of 2-byte ISO-8859-1.
-        chars = read_bswap(f, swap_bytes, UInt16, convert(Int, div(nbytes, 2)))
-        bufs = [IOBuffer() for i = 1:dimensions[1]]
-        i = 1
-        while i <= length(chars)
-            for j = 1:dimensions[1]
-                char = convert(Char, chars[i])
-                if 255 < convert(UInt32, char)
-                    # Newer versions of MATLAB seem to write some mongrel UTF-8...
-                    char = String([truncate_to_uint8(chars[i] >> 8), truncate_to_uint8(chars[i])])[1]
-                end
-                write(bufs[j], char)
-                i += 1
-            end
-        end
-
-        if dimensions[1] == 0
-            data = ""
-        elseif dimensions[1] == 1
-            data = String(take!(bufs[1]))
-        else
-            data = String[rstrip(String(take!(buf))) for buf in bufs]
-        end
-    else
-        error("Unsupported string type")
-    end
-    skip_padding(f, nbytes, hbytes)
-    data
 end
 
 # Read matrix data
@@ -304,7 +119,7 @@ function read_matrix(f::IO, swap_bytes::Bool)
     name = String(read_bswap(f, M==mBIG_ENDIAN, Vector{UInt8}(undef, namlen))[1:end-1])
     if T == tNUMERIC || T == tSPARSE
         real_data = read_bswap(f, M==mBIG_ENDIAN, Vector{pTYPE[P]}(undef, ncols*mrows))
-        if imagf == imagfCOMPLEX
+        if T == tNUMERIC && imagf == imagfCOMPLEX
             imag_data = read_bswap(f, M==mBIG_ENDIAN, Vector{pTYPE[P]}(undef, ncols*mrows))
             data = complex.(real_data, imag_data)
         else
@@ -328,6 +143,7 @@ function read_matrix(f::IO, swap_bytes::Bool)
         else
             data = String(UInt8.(read_bswap(f, M==mBIG_ENDIAN, Vector{pTYPE[P]}(undef, ncols))))
         end
+        return (name, data)
     end
 end
 
@@ -346,21 +162,23 @@ function read(matfile::Matlabv4File)
     vars
 end
 
-# Read only variable names from an HDF5 file
+# Read only variable names
 function getvarnames(matfile::Matlabv4File)
     if !isdefined(matfile, :varnames)
-        seek(matfile.ios, 128)
+        seek(matfile.ios, 0)
         matfile.varnames = varnames = Dict{String, Int64}()
         while !eof(matfile.ios)
             offset = position(matfile.ios)
-            (dtype, nbytes, hbytes) = read_header(matfile.ios, matfile.swap_bytes)
+            M, O, P, T, mrows, ncols, imagf, namlen = read_header(matfile.ios, matfile.swap_bytes)
             f = matfile.ios
-
-            read_element(f, matfile.swap_bytes, UInt32)
-            read_element(f, matfile.swap_bytes, Int32)
-            varnames[String(read_element(f, matfile.swap_bytes, UInt8))] = offset
-
-            seek(matfile.ios, offset+nbytes+hbytes)
+            
+            name = String(read_bswap(f, M==mBIG_ENDIAN, Vector{UInt8}(undef, namlen))[1:end-1])
+            varnames[name] = offset
+            imag_offset = 0
+            if imagf == imagfCOMPLEX
+                imag_offset = mrows*ncols
+            end
+            seek(matfile.ios, offset+20+namlen+mrows*mcols+imag_offset)
         end
     end
     matfile.varnames
@@ -382,11 +200,107 @@ function read(matfile::Matlabv4File, varname::String)
     data
 end
 
-# Complain about writing to a MAT file
+function colvals(A::AbstractSparseMatrix)
+    rows = rowvals(A)
+    cols = similar(rows)
+    m,n = size(A)
+    for i=1:n
+        for j in nzrange(A,i)
+            cols[j] = i
+        end
+    end
+    cols
+end
+
 function write(parent::Matlabv4File, name::String, s)
-    error("Writing to a MATLAB v4 file is not currently supported. Create a new file instead.")
+    M = Int(parent.swap_bytes)
+    O = 0
+    P = 0
+    for p=keys(pTYPE)
+        if eltype(s) == pTYPE[p] || eltype(s) == Complex{pTYPE[p]}
+            P = p
+        end
+    end
+    if pTYPE[P] != eltype(s) && Complex{pTYPE[P]} != eltype(s) && 
+        !(s isa AbstractString && pTYPE[P] == Float64) &&
+        !(s isa Vector{String} && pTYPE[P] == Float64)
+        error("invalid value type when writing v4 file")
+    end
+    if s isa AbstractSparseMatrix
+        T = tSPARSE
+    elseif s isa AbstractString || s isa Vector{String}
+        T = tTEXT
+    else
+        T = tNUMERIC
+    end
+    write(parent.ios, Int32(1000*M + 100*O + 10*P + T))
+
+    mrows = 1
+    ncols = 1
+    if s isa AbstractVector
+        ncols = length(s)
+    elseif s isa AbstractMatrix
+        if s isa AbstractSparseMatrix
+            mrows = nnz(s)
+            ncols = 3
+            if eltype(s) <: Complex
+                ncols = 4
+            end
+        else
+            mrows, ncols = size(s)
+        end
+    elseif s isa Vector{String}
+        ncols = length(s[1])
+        mrows = length(s)
+    end
+    write(parent.ios, Int32(mrows))
+    write(parent.ios, Int32(ncols))
+
+    imagf = 0
+    if eltype(s) <: Complex && T == tNUMERIC
+        imagf = 1
+    end
+    write(parent.ios, Int32(imagf))
+
+    namlen = length(name) + 1
+    write(parent.ios, Int32(namlen))
+
+    write(parent.ios, Vector{UInt8}(name))
+    write(parent.ios, UInt8(0))
+
+    if s isa AbstractArray && !(s isa Vector{String})
+        write(parent.ios, reshape(real(s), length(s)))
+        if imagf == 1
+            write(parent.ios, reshape(imag(s), length(s)))
+        end
+    elseif s isa Number
+        write(parent.ios, real(s))
+        if imagf == 1
+            write(parent.ios, imag(s))
+        end
+    elseif s isa AbstractString
+        floatarray = Float64.(Vector{UInt8}(name))
+        write(parent.ios, floatarray)
+    elseif s isa Vector{String}
+        floatarray = Matrix{Float64}(undef, mrows, ncols)
+        for (i,strel) = enumerate(s)
+            floatarray[i,:] = Float64.(Vector{UInt8}(strel))
+        end
+        write(parent.ios, floatarray)
+    elseif T == tSPARSE
+        rows = rowvals(s)
+        cols = colvals(s)
+        vals = nonzeros(s)
+        write(parent.ios, pTYPE[P].(rows))
+        write(parent.ios, pTYPE[P].(cols))
+        write(parent.ios, pTYPE[P].(real(vals)))
+        if eltype(s) <: Complex
+            write(parent.ios, pTYPE[P].(imag(vals)))
+        end
+    end
 end
 
 # Close MAT file
 close(matfile::Matlabv4File) = close(matfile.ios)
+
 end
