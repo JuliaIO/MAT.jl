@@ -86,6 +86,22 @@ function read_bswap(f::IO, swap_bytes::Bool, d::AbstractArray{T}) where T
     d
 end
 
+function checkv4(f::IO)
+    M, O, P, T, mrows, ncols, imagf, namlen = MAT_v4.read_header(f, false)
+    if 0<=M<=4 && O == 0 && 0<=P<=5 && 0<=T<=2 && mrows>=0 && ncols>=0 && 0<=imagf<=1 && namlen>0
+        swap_bytes = false
+        return (true, swap_bytes)
+    else
+        seek(f, 0)   
+        M, O, P, T, mrows, ncols, imagf, namlen = MAT_v4.read_header(f, true)
+        if 0<=M<=4 && O == 0 && 0<=P<=5 && 0<=T<=2 && mrows>=0 && ncols>=0 && 0<=imagf<=1 && namlen>0
+            swap_bytes = true
+            return (true, swap_bytes)
+        end
+    end
+    return (false, false)
+end
+
 # Read data type and number of bytes at the start of a data element
 function read_header(f::IO, swap_bytes::Bool)
     dtype = read_bswap(f, swap_bytes, Int32)

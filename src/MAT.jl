@@ -48,17 +48,9 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     rawfid = open(filename, "r")
 
     # Check for MAT v4 file
-    M, O, P, T, mrows, ncols, imagf, namlen = MAT_v4.read_header(rawfid, false)
-    if 0<=M<=4 && O == 0 && 0<=P<=5 && 0<=T<=2 && mrows>=0 && ncols>=0 && 0<=imagf<=1 && namlen>0
-        swap_bytes = false
+    (isv4, swap_bytes) = MAT_v4.checkv4(rawfid)
+    if isv4
         return MAT_v4.matopen(rawfid, swap_bytes)
-    else
-        seek(rawfid, 0)   
-        M, O, P, T, mrows, ncols, imagf, namlen = MAT_v4.read_header(rawfid, true)
-        if 0<=M<=4 && O == 0 && 0<=P<=5 && 0<=T<=2 && mrows>=0 && ncols>=0 && 0<=imagf<=1 && namlen>0
-            swap_bytes = true
-            return MAT_v4.matopen(rawfid, swap_bytes)
-        end
     end
 
     # Test whether this is a MAT file
