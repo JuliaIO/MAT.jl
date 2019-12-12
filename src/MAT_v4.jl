@@ -175,10 +175,10 @@ function getvarnames(matfile::Matlabv4File)
             name = String(read_bswap(f, M==mBIG_ENDIAN, Vector{UInt8}(undef, namlen))[1:end-1])
             varnames[name] = offset
             imag_offset = 0
+            skip(f, mrows*ncols*sizeof(pTYPE[P]))
             if imagf == imagfCOMPLEX
-                imag_offset = mrows*ncols
+                skip(f, mrows*ncols*sizeof(pTYPE[P]))
             end
-            seek(matfile.ios, offset+20+namlen+mrows*mcols+imag_offset)
         end
     end
     matfile.varnames
@@ -237,7 +237,7 @@ function write(parent::Matlabv4File, name::String, s)
 
     mrows = 1
     ncols = 1
-    if s isa AbstractVector
+    if s isa AbstractVector && !(s isa Vector{String})
         ncols = length(s)
     elseif s isa AbstractMatrix
         if s isa AbstractSparseMatrix
@@ -252,10 +252,12 @@ function write(parent::Matlabv4File, name::String, s)
     elseif s isa Vector{String}
         ncols = length(s[1])
         mrows = length(s)
+    elseif s isa AbstractString
+        ncols = length(s)
     end
     write(parent.ios, Int32(mrows))
     write(parent.ios, Int32(ncols))
-
+    
     imagf = 0
     if eltype(s) <: Complex && T == tNUMERIC
         imagf = 1
@@ -268,7 +270,7 @@ function write(parent::Matlabv4File, name::String, s)
     write(parent.ios, Vector{UInt8}(name))
     write(parent.ios, UInt8(0))
 
-    if s isa AbstractArray && !(s isa Vector{String})
+    if s isa AbstractArray && T == tNUMERIC
         write(parent.ios, reshape(real(s), length(s)))
         if imagf == 1
             write(parent.ios, reshape(imag(s), length(s)))
@@ -279,7 +281,7 @@ function write(parent::Matlabv4File, name::String, s)
             write(parent.ios, imag(s))
         end
     elseif s isa AbstractString
-        floatarray = Float64.(Vector{UInt8}(name))
+        floatarray = Float64.(Vector{UInt8}(s))
         write(parent.ios, floatarray)
     elseif s isa Vector{String}
         floatarray = Matrix{Float64}(undef, mrows, ncols)
