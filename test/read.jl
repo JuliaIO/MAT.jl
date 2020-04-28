@@ -217,7 +217,7 @@ end
 # since we don't support these objects, just make sure that there are no errors
 # reading the file and that the variables are there and replaced with `missing`
 let objtestfile = "struct_table_datetime.mat"
-    vars = matopen(m->read(m,"s"), joinpath(dirname(@__FILE__), "v7.3", objtestfile))
+    vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))["s"]
     @test "testTable" in keys(vars)
     @test ismissing(vars["testTable"])
     @test "testDatetime" in keys(vars)

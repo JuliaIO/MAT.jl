@@ -275,7 +275,7 @@ Return a list of variables in an opened Matlab file.
 
 See `matopen`.
 """
-names(f::MatlabHDF5File) = filter!(x->x != "#refs#", names(f.plain))
+names(f::MatlabHDF5File) = filter!(x -> x!="#refs#" && x!="#subsystem#", names(f.plain))
 
 """
     exists(matfile_handle, varname) -> Bool
