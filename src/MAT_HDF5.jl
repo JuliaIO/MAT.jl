@@ -622,7 +622,7 @@ function read(obj::HDF5Dataset, ::Type{Array{Bool}})
     end
     # Use the low-level HDF5 API to put the data directly into a Bool array
     tf = Array{Bool}(undef, size(obj))
-    HDF5.h5d_read(obj.id, HDF5.hdf5_type_id(UInt8), tf, obj.xfer)
+    HDF5.h5d_read(obj.id, HDF5.hdf5_type_id(UInt8), tf, obj.xfer.id)
     return tf
 end
 
