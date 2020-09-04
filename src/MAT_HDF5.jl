@@ -169,6 +169,9 @@ function m_read(dset::HDF5Dataset)
             end
         end
         return out
+    elseif !haskey(str2type_matlab,mattype)
+        @warn "MATLAB $mattype values are currently not supported"
+        return missing
     end
 
     # Regular arrays of values
@@ -272,7 +275,7 @@ Return a list of variables in an opened Matlab file.
 
 See `matopen`.
 """
-names(f::MatlabHDF5File) = filter!(x->x != "#refs#", names(f.plain))
+names(f::MatlabHDF5File) = filter!(x -> x!="#refs#" && x!="#subsystem#", names(f.plain))
 
 """
     exists(matfile_handle, varname) -> Bool
