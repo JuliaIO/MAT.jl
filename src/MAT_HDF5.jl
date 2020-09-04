@@ -328,7 +328,14 @@ end
 
 # Write an array to a dataset in a MATLAB file, returning the dataset
 function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{T}, compress::Bool) where {T<:HDF5BitsOrBool}
-    dset, dtype = compress ? d_create(parent, name, adata, "chunk",HDF5.heuristic_chunk(adata), "compress",3) : d_create(parent, name, adata)
+    if compress
+        p = p_create(HDF5.H5P_DATASET_CREATE)
+        p["compress"] = 3
+        p["chunk"] = HDF5.heuristic_chunk(adata)
+        dset, dtype = d_create(parent, name, adata, HDF5._link_properties(name), p)
+    else
+        dset, dtype = d_create(parent, name, adata)
+    end
     try
         HDF5.writearray(dset, dtype.id, adata)
         dset
