@@ -85,13 +85,13 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
 end
 
 function matopen(fname::AbstractString, mode::AbstractString; compress::Bool = false)
-    mode == "r"  ? matopen(fname, true , false, false, false, false, false) :
+    mode == "r"  ? matopen(fname, true , false, false, false, false, false)    :
     mode == "r+" ? matopen(fname, true , true , false, false, false, compress) :
     mode == "w"  ? matopen(fname, false, true , true , true , false, compress) :
-#     mode == "w+" ? matopen(fname, true , true , true , true , false, compress) :
-#     mode == "a"  ? matopen(fname, false, true , true , false, true, compress) :
-#     mode == "a+" ? matopen(fname, true , true , true , false, true, compress) :
-    error("invalid open mode: ", mode)
+    # mode == "w+" ? matopen(fname, true , true , true , true , false, compress) :
+    # mode == "a"  ? matopen(fname, false, true , true , false, true, compress)  :
+    # mode == "a+" ? matopen(fname, true , true , true , false, true, compress)  :
+    throw(ArgumentError("invalid open mode: $mode"))
 end
 
 matopen(fname::AbstractString; kwargs...) = matopen(fname, "r"; kwargs...)
