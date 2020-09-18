@@ -610,7 +610,7 @@ const type2str_matlab = Dict(
 )
 
 
-function read(obj::HDF5Object, ::Type{MatlabString})
+function read(obj::Union{HDF5Dataset,HDF5Attribute}, ::Type{MatlabString})
     T = HDF5.hdf5_to_julia(obj)
     data = read(obj, T)
     if size(data, 1) == 1
@@ -625,11 +625,11 @@ function read(obj::HDF5Object, ::Type{MatlabString})
         return data
     end
 end
-function read(obj::HDF5Object, ::Type{Bool})
+function read(obj::Union{HDF5Dataset,HDF5Attribute}, ::Type{Bool})
     tf = read(obj, UInt8)
     tf > 0
 end
-function read(obj::HDF5Dataset, ::Type{Array{Bool}})
+function read(obj::Union{HDF5Dataset,HDF5Attribute}, ::Type{Array{Bool}})
     if HDF5.isnull(obj)
         return Bool[]
     end
