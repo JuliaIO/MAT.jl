@@ -141,7 +141,7 @@ function m_read(dset::HDF5Dataset)
             # Not sure if this check is necessary but it is checked in
             # `m_read(g::HDF5Group)`
             if exists(dset, "MATLAB_fields")
-                return Dict{String,Any}(n=>[] for n in a_read(dset, "MATLAB_fields"))
+                return Dict{String,Any}(join(n)=>[] for n in a_read(dset, "MATLAB_fields"))
             else
                 return Dict{String,Any}()
             end
@@ -235,7 +235,7 @@ function m_read(g::HDF5Group)
         end
     end
     if exists(g, "MATLAB_fields")
-        fn = a_read(g, "MATLAB_fields")
+        fn = [join(f) for f in a_read(g, "MATLAB_fields")]
     else
         fn = names(g)
     end
