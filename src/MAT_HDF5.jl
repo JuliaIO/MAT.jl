@@ -88,13 +88,11 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     if !cr && !isfile(filename)
         error("File ", filename, " cannot be found")
     end
-    pa = p_create(HDF5.H5P_FILE_ACCESS)
-    pa["fclose_degree"] = HDF5.H5F_CLOSE_STRONG
+    pa = p_create(HDF5.H5P_FILE_ACCESS; fclose_degree = HDF5.H5F_CLOSE_STRONG)
     if cr && (tr || !isfile(filename))
         # We're truncating, so we don't have to check the format of an existing file
         # Set the user block to 512 bytes, to save room for the header
-        p = p_create(HDF5.H5P_FILE_CREATE)
-        p["userblock"] = 512
+        p = p_create(HDF5.H5P_FILE_CREATE; userblock = 512)
         f = HDF5.h5f_create(filename, HDF5.H5F_ACC_TRUNC, p.id, pa.id)
         writeheader = true
     else
@@ -335,10 +333,8 @@ end
 # Write an array to a dataset in a MATLAB file, returning the dataset
 function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{T}, compress::Bool) where {T<:HDF5BitsOrBool}
     if compress
-        p = p_create(HDF5.H5P_DATASET_CREATE)
-        p["compress"] = 3
-        p["chunk"] = HDF5.heuristic_chunk(adata)
-        dset, dtype = d_create(parent, name, adata, HDF5._link_properties(name), p)
+        dset, dtype = d_create(parent, name, adata;
+                               compress = 3, chunk = HDF5.heuristic_chunk(adata))
     else
         dset, dtype = d_create(parent, name, adata)
     end
@@ -357,13 +353,10 @@ function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{Com
     try
         stype = dataspace(adata)
         if compress
-            p = p_create(HDF5.H5P_DATASET_CREATE)
-            p["compress"] = 3
-            p["chunk"] = HDF5.heuristic_chunk(adata)
-            obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id,
-                                     HDF5._link_properties(name),p.id,HDF5.H5P_DEFAULT)
+            obj_id = d_create(parent, name, dtype, stype;
+                              compress = 3, chunk = HDF5.heuristic_chunk(adata))
         else
-            obj_id = HDF5.h5d_create(parent.id, name, dtype.id, stype.id)
+            obj_id = d_create(parent, name, dtype, stype)
         end
         dset = HDF5Dataset(obj_id, file(parent))
         try
