@@ -118,16 +118,12 @@ const sparse_attr_matlab = "MATLAB_sparse"
 const int_decode_attr_matlab = "MATLAB_int_decode"
 
 ### Reading
-function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{Array{T}}) where T
+function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{T}) where T
     if !check_datatype_complex(dtype)
         close(dtype)
         error("Unrecognized compound data type when reading ", name(dset))
     end
-    memtype = build_datatype_complex(T)
-    sz = size(dset)
-    dbuf = Array{Complex{T}}(undef, sz...)
-    HDF5.h5d_read(dset.id, memtype.id, HDF5.H5S_ALL, HDF5.H5S_ALL, HDF5.H5P_DEFAULT, vec(dbuf))
-    length(dbuf) == 1 ? dbuf[1] : dbuf
+    return read(dset, Complex{T})
 end
 
 function m_read(dset::HDF5Dataset)
@@ -146,7 +142,7 @@ function m_read(dset::HDF5Dataset)
                 return Dict{String,Any}()
             end
         else
-            T = mattype == "canonical empty" ? Union{} : str2eltype_matlab[mattype]
+            T = mattype == "canonical empty" ? Union{} : str2type_matlab[mattype]
             return Array{T}(undef, dims...)
         end
     end
@@ -155,7 +151,7 @@ function m_read(dset::HDF5Dataset)
 
     if mattype == "cell"
         # Cell arrays, represented as an array of refs
-        refs = read(dset, Array{HDF5ReferenceObj})
+        refs = read(dset, HDF5ReferenceObj)
         out = Array{Any}(undef, size(refs))
         f = file(dset)
         for i = 1:length(refs)
@@ -224,7 +220,7 @@ function m_read(g::HDF5Group)
             else
                 # This matrix is empty.
                 ir = Int[]
-                data = str2eltype_matlab[mattype][]
+                data = str2type_matlab[mattype][]
             end
             return SparseMatrixCSC(convert(Int, HDF5.a_read(g, sparse_attr_matlab)), length(jc)-1, jc, ir, data)
         elseif mattype == "function_handle"
@@ -557,23 +553,6 @@ struct MatlabString end
 
 const str2type_matlab = Dict(
     "canonical empty" => nothing,
-    "int8"    => Array{Int8},
-    "uint8"   => Array{UInt8},
-    "int16"   => Array{Int16},
-    "uint16"  => Array{UInt16},
-    "int32"   => Array{Int32},
-    "uint32"  => Array{UInt32},
-    "int64"   => Array{Int64},
-    "uint64"  => Array{UInt64},
-    "single"  => Array{Float32},
-    "double"  => Array{Float64},
-    "cell"    => Array{Any},
-    "char"    => MatlabString,
-    "logical" => Array{Bool}
-)
-# These operate on the element type rather than the whole type
-const str2eltype_matlab = Dict(
-    "canonical empty" => nothing,
     "int8"    => Int8,
     "uint8"   => UInt8,
     "int16"   => Int16,
@@ -604,7 +583,7 @@ const type2str_matlab = Dict(
 
 
 function read(obj::Union{HDF5Dataset,HDF5Attribute}, ::Type{MatlabString})
-    T = HDF5.hdf5_to_julia(obj)
+    T = HDF5.get_jl_type(obj)
     data = read(obj, T)
     if size(data, 1) == 1
         sz = size(data)
@@ -617,19 +596,6 @@ function read(obj::Union{HDF5Dataset,HDF5Attribute}, ::Type{MatlabString})
     else
         return data
     end
-end
-function read(obj::Union{HDF5Dataset,HDF5Attribute}, ::Type{Bool})
-    tf = read(obj, UInt8)
-    tf > 0
-end
-function read(obj::Union{HDF5Dataset,HDF5Attribute}, ::Type{Array{Bool}})
-    if HDF5.isnull(obj)
-        return Bool[]
-    end
-    # Use the low-level HDF5 API to put the data directly into a Bool array
-    tf = Array{Bool}(undef, size(obj))
-    HDF5.h5d_read(obj.id, HDF5.hdf5_type_id(UInt8), tf, convert(HDF5.Hid, obj.xfer))
-    return tf
 end
 
 ## Utilities for handling complex numbers
