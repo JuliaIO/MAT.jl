@@ -31,13 +31,13 @@ module MAT_HDF5
 using HDF5, SparseArrays
 
 import Base: read, write, close
-import HDF5: names, exists, HDF5ReferenceObj, HDF5BitsKind
+import HDF5: names, exists, Reference
 
-const HDF5Parent = Union{HDF5File, HDF5Group}
-const HDF5BitsOrBool = Union{HDF5BitsKind,Bool}
+const HDF5Parent = Union{HDF5.File, HDF5.Group}
+const HDF5BitsOrBool = Union{HDF5.BitsType,Bool}
 
 mutable struct MatlabHDF5File <: HDF5.DataFile
-    plain::HDF5File
+    plain::HDF5.File
     toclose::Bool
     writeheader::Bool
     refcounter::Int
@@ -100,7 +100,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         writeheader = false
     end
     close(pa)
-    fid = MatlabHDF5File(HDF5File(f, filename), true, writeheader, 0, compress)
+    fid = MatlabHDF5File(HDF5.File(f, filename), true, writeheader, 0, compress)
     pathrefs = "/#refs#"
     if exists(fid.plain, pathrefs)
         g = fid.plain[pathrefs]
@@ -118,7 +118,7 @@ const sparse_attr_matlab = "MATLAB_sparse"
 const int_decode_attr_matlab = "MATLAB_int_decode"
 
 ### Reading
-function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{T}) where T
+function read_complex(dtype::HDF5.Datatype, dset::HDF5.Dataset, ::Type{T}) where T
     if !check_datatype_complex(dtype)
         close(dtype)
         error("Unrecognized compound data type when reading ", name(dset))
@@ -126,7 +126,7 @@ function read_complex(dtype::HDF5Datatype, dset::HDF5Dataset, ::Type{T}) where T
     return read(dset, Complex{T})
 end
 
-function m_read(dset::HDF5Dataset)
+function m_read(dset::HDF5.Dataset)
     if exists(dset, empty_attr_matlab)
         # Empty arrays encode the dimensions as the dataset
         dims = convert(Vector{Int}, read(dset))
@@ -135,7 +135,7 @@ function m_read(dset::HDF5Dataset)
             return ""
         elseif mattype == "struct"
             # Not sure if this check is necessary but it is checked in
-            # `m_read(g::HDF5Group)`
+            # `m_read(g::HDF5.Group)`
             if exists(dset, "MATLAB_fields")
                 return Dict{String,Any}(join(n)=>[] for n in a_read(dset, "MATLAB_fields"))
             else
@@ -151,7 +151,7 @@ function m_read(dset::HDF5Dataset)
 
     if mattype == "cell"
         # Cell arrays, represented as an array of refs
-        refs = read(dset, HDF5ReferenceObj)
+        refs = read(dset, Reference)
         out = Array{Any}(undef, size(refs))
         f = file(dset)
         for i = 1:length(refs)
@@ -191,7 +191,7 @@ function add!(A, x)
 end
 
 # reading a struct, struct array, or sparse matrix
-function m_read(g::HDF5Group)
+function m_read(g::HDF5.Group)
     mattype = a_read(g, name_type_attr_matlab)
     if mattype != "struct"
         # Check if this is a sparse matrix.
@@ -354,7 +354,7 @@ function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{Com
         else
             obj_id = d_create(parent, name, dtype, stype)
         end
-        dset = HDF5Dataset(obj_id, file(parent))
+        dset = HDF5.Dataset(obj_id, file(parent))
         try
             arr = reshape(reinterpret(T, adata), tuple(2, size(adata)...))
             HDF5.writearray(dset, dtype.id, arr)
@@ -473,14 +473,14 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::
             close(a)
         end
         # Write the items to the reference group
-        refs = Array{HDF5ReferenceObj}(undef, size(data))
+        refs = Array{Reference}(undef, size(data))
         for i = 1:length(data)
             mfile.refcounter += 1
             itemname = string(mfile.refcounter)
             m_write(mfile, g, itemname, data[i])
             # Extract references
             tmp = g[itemname]
-            refs[i] = HDF5ReferenceObj(tmp, pathrefs*"/"*itemname)
+            refs[i] = Reference(tmp, pathrefs*"/"*itemname)
             close(tmp)
         end
     finally
@@ -518,7 +518,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, k::Vec
     for i = 1:length(k)
         m_write(mfile, g, k[i], v[i])
     end
-    a_write(g, "MATLAB_fields", HDF5Vlen(k))
+    a_write(g, "MATLAB_fields", HDF5.VLen(k))
 end
 
 # Write Associative as a struct
@@ -582,7 +582,7 @@ const type2str_matlab = Dict(
 )
 
 
-function read(obj::Union{HDF5Dataset,HDF5Attribute}, ::Type{MatlabString})
+function read(obj::Union{HDF5.Dataset,HDF5.Attribute}, ::Type{MatlabString})
     T = HDF5.get_jl_type(obj)
     data = read(obj, T)
     if size(data, 1) == 1
@@ -603,10 +603,10 @@ function build_datatype_complex(T::Type)
     memtype_id = HDF5.h5t_create(HDF5.H5T_COMPOUND, 2*sizeof(T))
     HDF5.h5t_insert(memtype_id, "real", 0, HDF5.hdf5_type_id(T))
     HDF5.h5t_insert(memtype_id, "imag", sizeof(T), HDF5.hdf5_type_id(T))
-    HDF5Datatype(memtype_id)
+    HDF5.Datatype(memtype_id)
 end
 
-function check_datatype_complex(dtype::HDF5Datatype)
+function check_datatype_complex(dtype::HDF5.Datatype)
     n = HDF5.h5t_get_nmembers(dtype.id)
     if n != 2
         return false
