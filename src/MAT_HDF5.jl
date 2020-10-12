@@ -29,9 +29,12 @@
 module MAT_HDF5
 
 using HDF5, SparseArrays
+# deprecated for HDF5 v0.14+, but use deprecated binding to have common function with
+# e.g. JLD.jl
+import HDF5: exists
 
-import Base: read, write, close
-import HDF5: names, exists, Reference
+import Base: names, read, write, close
+import HDF5: Reference
 
 const HDF5Parent = Union{HDF5.File, HDF5.Group}
 const HDF5BitsOrBool = Union{HDF5.BitsType,Bool}
@@ -102,7 +105,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     close(pa)
     fid = MatlabHDF5File(HDF5.File(f, filename), true, writeheader, 0, compress)
     pathrefs = "/#refs#"
-    if exists(fid.plain, pathrefs)
+    if haskey(fid.plain, pathrefs)
         g = fid.plain[pathrefs]
         fid.refcounter = length(g)-1
         close(g)
@@ -127,7 +130,7 @@ function read_complex(dtype::HDF5.Datatype, dset::HDF5.Dataset, ::Type{T}) where
 end
 
 function m_read(dset::HDF5.Dataset)
-    if exists(dset, empty_attr_matlab)
+    if haskey(dset, empty_attr_matlab)
         # Empty arrays encode the dimensions as the dataset
         dims = convert(Vector{Int}, read(dset))
         mattype = a_read(dset, name_type_attr_matlab)
@@ -136,7 +139,7 @@ function m_read(dset::HDF5.Dataset)
         elseif mattype == "struct"
             # Not sure if this check is necessary but it is checked in
             # `m_read(g::HDF5.Group)`
-            if exists(dset, "MATLAB_fields")
+            if haskey(dset, "MATLAB_fields")
                 return Dict{String,Any}(join(n)=>[] for n in a_read(dset, "MATLAB_fields"))
             else
                 return Dict{String,Any}()
@@ -147,7 +150,7 @@ function m_read(dset::HDF5.Dataset)
         end
     end
 
-    mattype = exists(dset, name_type_attr_matlab) ? a_read(dset, name_type_attr_matlab) : "cell"
+    mattype = haskey(dset, name_type_attr_matlab) ? a_read(dset, name_type_attr_matlab) : "cell"
 
     if mattype == "cell"
         # Cell arrays, represented as an array of refs
@@ -195,8 +198,8 @@ function m_read(g::HDF5.Group)
     mattype = a_read(g, name_type_attr_matlab)
     if mattype != "struct"
         # Check if this is a sparse matrix.
-        fn = names(g)
-        if exists(attrs(g), sparse_attr_matlab)
+        fn = keys(g)
+        if haskey(attrs(g), sparse_attr_matlab)
             # This is a sparse matrix.
             # ir is the row indices, jc is the column boundaries.
             # We add one to account for the zero-based (MATLAB) to one-based (Julia) transition
@@ -230,10 +233,10 @@ function m_read(g::HDF5.Group)
             error("Cannot read from a non-struct group, type was $mattype")
         end
     end
-    if exists(g, "MATLAB_fields")
+    if haskey(g, "MATLAB_fields")
         fn = [join(f) for f in a_read(g, "MATLAB_fields")]
     else
-        fn = names(g)
+        fn = keys(g)
     end
     s = Dict{String, Any}()
     for i = 1:length(fn)
@@ -272,7 +275,7 @@ Return a list of variables in an opened Matlab file.
 
 See `matopen`.
 """
-names(f::MatlabHDF5File) = filter!(x -> x!="#refs#" && x!="#subsystem#", names(f.plain))
+names(f::MatlabHDF5File) = keys(f)
 
 """
     exists(matfile_handle, varname) -> Bool
@@ -281,7 +284,11 @@ Return true if a variable is present in an opened Matlab file.
 
 See `matopen`.
 """
-exists(p::MatlabHDF5File, path::String) = exists(p.plain, path)
+exists(p::MatlabHDF5File, path::String) = haskey(p, path)
+
+# HDF5v0.14+ DataFile uses keys/haskey
+Base.keys(f::MatlabHDF5File) = filter!(x -> x!="#refs#" && x!="#subsystem#", keys(f.plain))
+Base.haskey(p::MatlabHDF5File, path::String) = haskey(p.plain, path)
 
 ### Writing
 
@@ -447,14 +454,14 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::
     fid = file(parent)
     local g
     local refs
-    if !exists(fid, pathrefs)
+    if !haskey(fid, pathrefs)
         g = g_create(fid, pathrefs)
     else
         g = fid[pathrefs]
     end
     try
         # If needed, create the "empty" item
-        if !exists(g, "a")
+        if !haskey(g, "a")
             edata = zeros(UInt64, 2)
             eset, etype = d_create(g, "a", edata)
             try
@@ -467,7 +474,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::
             end
         else
             a = g["a"]
-            if !exists(attrs(a), "MATLAB_empty")
+            if !haskey(attrs(a), "MATLAB_empty")
                 error("Must create the empty item, with name a, first")
             end
             close(a)
