@@ -213,9 +213,16 @@ let objtestfile = "figure.fig"
     @test vars["hgS_070000"]["type"] == "figure"
 end
 
-# test reading file containing Matlab table and datetime objects
+# test reading file containing Matlab function handle, table, and datetime objects
 # since we don't support these objects, just make sure that there are no errors
 # reading the file and that the variables are there and replaced with `missing`
+let objtestfile = "function_handles.mat"
+    vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))
+    @test "sin" in keys(vars)
+    @test ismissing(vars["sin"])
+    @test "anonymous" in keys(vars)
+    @test ismissing(vars["anonymous"])
+end
 let objtestfile = "struct_table_datetime.mat"
     vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))["s"]
     @test "testTable" in keys(vars)

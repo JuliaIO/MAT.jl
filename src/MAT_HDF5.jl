@@ -229,6 +229,9 @@ function m_read(g::HDF5Group)
                 data = str2eltype_matlab[mattype][]
             end
             return SparseMatrixCSC(convert(Int, HDF5.a_read(g, sparse_attr_matlab)), length(jc)-1, jc, ir, data)
+        elseif mattype == "function_handle"
+            @warn "MATLAB $mattype values are currently not supported"
+            return missing
         else
             error("Cannot read from a non-struct group, type was $mattype")
         end
