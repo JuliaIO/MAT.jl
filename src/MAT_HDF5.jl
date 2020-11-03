@@ -326,7 +326,7 @@ function m_writeempty(parent::HDF5Parent, name::String, data::AbstractArray)
     try
         a_write(dset, empty_attr_matlab, 0x01)
         m_writetypeattr(dset, eltype(data))
-        HDF5.writearray(dset, dtype.id, adata)
+        d_write(dset, dtype, adata)
     finally
         close(dset)
         close(dtype)
@@ -342,7 +342,7 @@ function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{T},
         dset, dtype = d_create(parent, name, adata)
     end
     try
-        HDF5.writearray(dset, dtype.id, adata)
+        d_write(dset, dtype, adata)
         dset
     catch e
         close(dset)
@@ -364,7 +364,7 @@ function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{Com
         dset = HDF5.Dataset(obj_id, file(parent))
         try
             arr = reshape(reinterpret(T, adata), tuple(2, size(adata)...))
-            HDF5.writearray(dset, dtype.id, arr)
+            d_write(dset, dtype, arr)
         catch e
             close(dset)
             rethrow(e)
@@ -421,7 +421,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, str::A
         try
             a_write(dset, name_type_attr_matlab, "char")
             a_write(dset, empty_attr_matlab, 0x01)
-            HDF5.writearray(dset, dtype.id, data)
+            d_write(dset, dtype, data)
         finally
             close(dset)
             close(dtype)
@@ -440,7 +440,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, str::A
         try
             a_write(dset, name_type_attr_matlab, "char")
             a_write(dset, int_decode_attr_matlab, Int32(2))
-            HDF5.writearray(dset, dtype.id, data)
+            d_write(dset, dtype, data)
         finally
             close(dset)
             close(dtype)
@@ -465,7 +465,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::
             edata = zeros(UInt64, 2)
             eset, etype = d_create(g, "a", edata)
             try
-                HDF5.writearray(eset, etype.id, edata)
+                d_write(eset, etype, edata)
                 a_write(eset, name_type_attr_matlab, "canonical empty")
                 a_write(eset, "MATLAB_empty", 0x00)
             finally
@@ -496,7 +496,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::
     # Write the references as the chosen variable
     cset, ctype = d_create(parent, name, refs)
     try
-        HDF5.writearray(cset, ctype.id, refs)
+        d_write(cset, ctype, refs)
         a_write(cset, name_type_attr_matlab, "cell")
     finally
         close(ctype)
