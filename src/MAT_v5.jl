@@ -35,7 +35,7 @@ import HDF5: exists
 round_uint8(data) = round.(UInt8, data)
 complex_array(a, b) = complex.(a, b)
 
-mutable struct Matlabv5File <: HDF5.DataFile
+mutable struct Matlabv5File <: HDF5.H5DataStore
     ios::IOStream
     swap_bytes::Bool
     varnames::Dict{String, Int64}

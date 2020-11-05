@@ -39,7 +39,7 @@ import HDF5: Reference
 const HDF5Parent = Union{HDF5.File, HDF5.Group}
 const HDF5BitsOrBool = Union{HDF5.BitsType,Bool}
 
-mutable struct MatlabHDF5File <: HDF5.DataFile
+mutable struct MatlabHDF5File <: HDF5.H5DataStore
     plain::HDF5.File
     toclose::Bool
     writeheader::Bool
@@ -286,7 +286,7 @@ See `matopen`.
 """
 exists(p::MatlabHDF5File, path::String) = haskey(p, path)
 
-# HDF5v0.14+ DataFile uses keys/haskey
+# HDF5v0.14+ H5DataStore uses keys/haskey
 Base.keys(f::MatlabHDF5File) = filter!(x -> x!="#refs#" && x!="#subsystem#", keys(f.plain))
 Base.haskey(p::MatlabHDF5File, path::String) = haskey(p.plain, path)
 
