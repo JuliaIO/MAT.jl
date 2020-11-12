@@ -129,7 +129,7 @@ for _format in ["v6", "v7", "v7.3"]
     result = Dict(
         "sparse_empty" => sparse(Matrix{Float64}(undef, 0, 0)),
         "sparse_eye" => sparse(1.0I, 20, 20),
-        "sparse_logical" => SparseMatrixCSC{Bool,Int64}(5, 5, [1:6;], [1:5;], fill(true, 5)),
+        "sparse_logical" => SparseMatrixCSC{Bool,Int}(5, 5, [1:6;], [1:5;], fill(true, 5)),
         "sparse_random" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]),
         "sparse_complex" => sparse([0 6. 0; 8. 0 1.; 0 0 9.]*(1. + 1.0im)),
         "sparse_zeros" => SparseMatrixCSC(20, 20, ones(Int, 21), Int[], Float64[])
