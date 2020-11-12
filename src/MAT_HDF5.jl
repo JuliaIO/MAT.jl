@@ -91,11 +91,11 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     if !cr && !isfile(filename)
         error("File ", filename, " cannot be found")
     end
-    pa = p_create(HDF5.H5P_FILE_ACCESS; fclose_degree = HDF5.H5F_CLOSE_STRONG)
+    pa = create_property(HDF5.H5P_FILE_ACCESS; fclose_degree = HDF5.H5F_CLOSE_STRONG)
     if cr && (tr || !isfile(filename))
         # We're truncating, so we don't have to check the format of an existing file
         # Set the user block to 512 bytes, to save room for the header
-        p = p_create(HDF5.H5P_FILE_CREATE; userblock = 512)
+        p = create_property(HDF5.H5P_FILE_CREATE; userblock = 512)
         f = HDF5.h5f_create(filename, HDF5.H5F_ACC_TRUNC, p.id, pa.id)
         writeheader = true
     else
@@ -133,14 +133,14 @@ function m_read(dset::HDF5.Dataset)
     if haskey(dset, empty_attr_matlab)
         # Empty arrays encode the dimensions as the dataset
         dims = convert(Vector{Int}, read(dset))
-        mattype = a_read(dset, name_type_attr_matlab)
+        mattype = read_attribute(dset, name_type_attr_matlab)
         if mattype == "char"
             return ""
         elseif mattype == "struct"
             # Not sure if this check is necessary but it is checked in
             # `m_read(g::HDF5.Group)`
             if haskey(dset, "MATLAB_fields")
-                return Dict{String,Any}(join(n)=>[] for n in a_read(dset, "MATLAB_fields"))
+                return Dict{String,Any}(join(n)=>[] for n in read_attribute(dset, "MATLAB_fields"))
             else
                 return Dict{String,Any}()
             end
@@ -150,7 +150,7 @@ function m_read(dset::HDF5.Dataset)
         end
     end
 
-    mattype = haskey(dset, name_type_attr_matlab) ? a_read(dset, name_type_attr_matlab) : "cell"
+    mattype = haskey(dset, name_type_attr_matlab) ? read_attribute(dset, name_type_attr_matlab) : "cell"
 
     if mattype == "cell"
         # Cell arrays, represented as an array of refs
@@ -195,11 +195,11 @@ end
 
 # reading a struct, struct array, or sparse matrix
 function m_read(g::HDF5.Group)
-    mattype = a_read(g, name_type_attr_matlab)
+    mattype = read_attribute(g, name_type_attr_matlab)
     if mattype != "struct"
         # Check if this is a sparse matrix.
         fn = keys(g)
-        if haskey(attrs(g), sparse_attr_matlab)
+        if haskey(attributes(g), sparse_attr_matlab)
             # This is a sparse matrix.
             # ir is the row indices, jc is the column boundaries.
             # We add one to account for the zero-based (MATLAB) to one-based (Julia) transition
@@ -225,7 +225,7 @@ function m_read(g::HDF5.Group)
                 ir = Int[]
                 data = str2type_matlab[mattype][]
             end
-            return SparseMatrixCSC(convert(Int, HDF5.a_read(g, sparse_attr_matlab)), length(jc)-1, jc, ir, data)
+            return SparseMatrixCSC(convert(Int, read_attribute(g, sparse_attr_matlab)), length(jc)-1, jc, ir, data)
         elseif mattype == "function_handle"
             @warn "MATLAB $mattype values are currently not supported"
             return missing
@@ -234,7 +234,7 @@ function m_read(g::HDF5.Group)
         end
     end
     if haskey(g, "MATLAB_fields")
-        fn = [join(f) for f in a_read(g, "MATLAB_fields")]
+        fn = [join(f) for f in read_attribute(g, "MATLAB_fields")]
     else
         fn = keys(g)
     end
@@ -313,20 +313,20 @@ function m_writetypeattr(dset, T)
     typename = type2str_matlab[T]
 
     # Write the attribute
-    a_write(dset, name_type_attr_matlab, typename)
+    write_attribute(dset, name_type_attr_matlab, typename)
     if T == Bool
-        a_write(dset, int_decode_attr_matlab, Int32(1))
+        write_attribute(dset, int_decode_attr_matlab, Int32(1))
     end
 end
 
 # Writes an empty scalar or array
 function m_writeempty(parent::HDF5Parent, name::String, data::AbstractArray)
     adata = [size(data)...]
-    dset, dtype = d_create(parent, name, adata)
+    dset, dtype = create_dataset(parent, name, adata)
     try
-        a_write(dset, empty_attr_matlab, 0x01)
+        write_attribute(dset, empty_attr_matlab, 0x01)
         m_writetypeattr(dset, eltype(data))
-        d_write(dset, dtype, adata)
+        write_dataset(dset, dtype, adata)
     finally
         close(dset)
         close(dtype)
@@ -336,13 +336,13 @@ end
 # Write an array to a dataset in a MATLAB file, returning the dataset
 function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{T}, compress::Bool) where {T<:HDF5BitsOrBool}
     if compress
-        dset, dtype = d_create(parent, name, adata;
+        dset, dtype = create_dataset(parent, name, adata;
                                compress = 3, chunk = HDF5.heuristic_chunk(adata))
     else
-        dset, dtype = d_create(parent, name, adata)
+        dset, dtype = create_dataset(parent, name, adata)
     end
     try
-        d_write(dset, dtype, adata)
+        write_dataset(dset, dtype, adata)
         dset
     catch e
         close(dset)
@@ -356,15 +356,15 @@ function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{Com
     try
         stype = dataspace(adata)
         if compress
-            obj_id = d_create(parent, name, dtype, stype;
+            obj_id = create_dataset(parent, name, dtype, stype;
                               compress = 3, chunk = HDF5.heuristic_chunk(adata))
         else
-            obj_id = d_create(parent, name, dtype, stype)
+            obj_id = create_dataset(parent, name, dtype, stype)
         end
         dset = HDF5.Dataset(obj_id, HDF5.file(parent))
         try
             arr = reshape(reinterpret(T, adata), tuple(2, size(adata)...))
-            d_write(dset, dtype, arr)
+            write_dataset(dset, dtype, arr)
         catch e
             close(dset)
             rethrow(e)
@@ -393,10 +393,10 @@ end
 
 # Write sparse arrays
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::SparseMatrixCSC{T}) where T
-    g = g_create(parent, name)
+    g = create_group(parent, name)
     try
         m_writetypeattr(g, T)
-        a_write(g, sparse_attr_matlab, UInt64(size(data, 1)))
+        write_attribute(g, sparse_attr_matlab, UInt64(size(data, 1)))
         if !isempty(data.nzval)
             close(m_writearray(g, "data", toarray(data.nzval), mfile.compress))
             close(m_writearray(g, "ir", add!(isa(data.rowval, Vector{UInt64}) ? copy(data.rowval) : convert(Vector{UInt64}, data.rowval), typemax(UInt64)), mfile.compress))
@@ -417,11 +417,11 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, str::A
         data = UInt64[0, 0]
 
         # Create the dataset
-        dset, dtype = d_create(parent, name, data)
+        dset, dtype = create_dataset(parent, name, data)
         try
-            a_write(dset, name_type_attr_matlab, "char")
-            a_write(dset, empty_attr_matlab, 0x01)
-            d_write(dset, dtype, data)
+            write_attribute(dset, name_type_attr_matlab, "char")
+            write_attribute(dset, empty_attr_matlab, 0x01)
+            write_dataset(dset, dtype, data)
         finally
             close(dset)
             close(dtype)
@@ -436,11 +436,11 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, str::A
         end
 
         # Create the dataset
-        dset, dtype = d_create(parent, name, data)
+        dset, dtype = create_dataset(parent, name, data)
         try
-            a_write(dset, name_type_attr_matlab, "char")
-            a_write(dset, int_decode_attr_matlab, Int32(2))
-            d_write(dset, dtype, data)
+            write_attribute(dset, name_type_attr_matlab, "char")
+            write_attribute(dset, int_decode_attr_matlab, Int32(2))
+            write_dataset(dset, dtype, data)
         finally
             close(dset)
             close(dtype)
@@ -455,7 +455,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::
     local g
     local refs
     if !haskey(fid, pathrefs)
-        g = g_create(fid, pathrefs)
+        g = create_group(fid, pathrefs)
     else
         g = fid[pathrefs]
     end
@@ -463,18 +463,18 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::
         # If needed, create the "empty" item
         if !haskey(g, "a")
             edata = zeros(UInt64, 2)
-            eset, etype = d_create(g, "a", edata)
+            eset, etype = create_dataset(g, "a", edata)
             try
-                d_write(eset, etype, edata)
-                a_write(eset, name_type_attr_matlab, "canonical empty")
-                a_write(eset, "MATLAB_empty", 0x00)
+                write_dataset(eset, etype, edata)
+                write_attribute(eset, name_type_attr_matlab, "canonical empty")
+                write_attribute(eset, "MATLAB_empty", 0x00)
             finally
                 close(etype)
                 close(eset)
             end
         else
             a = g["a"]
-            if !haskey(attrs(a), "MATLAB_empty")
+            if !haskey(attributes(a), "MATLAB_empty")
                 error("Must create the empty item, with name a, first")
             end
             close(a)
@@ -494,10 +494,10 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::
         close(g)
     end
     # Write the references as the chosen variable
-    cset, ctype = d_create(parent, name, refs)
+    cset, ctype = create_dataset(parent, name, refs)
     try
-        d_write(cset, ctype, refs)
-        a_write(cset, name_type_attr_matlab, "cell")
+        write_dataset(cset, ctype, refs)
+        write_attribute(cset, name_type_attr_matlab, "cell")
     finally
         close(ctype)
         close(cset)
@@ -520,12 +520,12 @@ end
 
 # Write a struct from arrays of keys and values
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, k::Vector{String}, v::Vector)
-    g = g_create(parent, name)
-    a_write(g, name_type_attr_matlab, "struct")
+    g = create_group(parent, name)
+    write_attribute(g, name_type_attr_matlab, "struct")
     for i = 1:length(k)
         m_write(mfile, g, k[i], v[i])
     end
-    a_write(g, "MATLAB_fields", HDF5.VLen(k))
+    write_attribute(g, "MATLAB_fields", HDF5.VLen(k))
 end
 
 # Write Associative as a struct
@@ -607,7 +607,7 @@ end
 
 ## Utilities for handling complex numbers
 function build_datatype_complex(T::Type)
-    memtype_id = HDF5.h5t_create(HDF5.H5T_COMPOUND, 2*sizeof(T))
+    memtype_id = create_datatype(HDF5.H5T_COMPOUND, 2*sizeof(T))
     HDF5.h5t_insert(memtype_id, "real", 0, HDF5.hdf5_type_id(T))
     HDF5.h5t_insert(memtype_id, "imag", sizeof(T), HDF5.hdf5_type_id(T))
     HDF5.Datatype(memtype_id)
