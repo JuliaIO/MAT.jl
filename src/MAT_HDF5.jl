@@ -124,7 +124,7 @@ const int_decode_attr_matlab = "MATLAB_int_decode"
 function read_complex(dtype::HDF5.Datatype, dset::HDF5.Dataset, ::Type{T}) where T
     if !check_datatype_complex(dtype)
         close(dtype)
-        error("Unrecognized compound data type when reading ", name(dset))
+        error("Unrecognized compound data type when reading ", HDF5.name(dset))
     end
     return read(dset, Complex{T})
 end
@@ -156,7 +156,7 @@ function m_read(dset::HDF5.Dataset)
         # Cell arrays, represented as an array of refs
         refs = read(dset, Reference)
         out = Array{Any}(undef, size(refs))
-        f = file(dset)
+        f = HDF5.file(dset)
         for i = 1:length(refs)
             dset = f[refs[i]]
             try
@@ -361,7 +361,7 @@ function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{Com
         else
             obj_id = d_create(parent, name, dtype, stype)
         end
-        dset = HDF5.Dataset(obj_id, file(parent))
+        dset = HDF5.Dataset(obj_id, HDF5.file(parent))
         try
             arr = reshape(reinterpret(T, adata), tuple(2, size(adata)...))
             d_write(dset, dtype, arr)
@@ -451,7 +451,7 @@ end
 # Write cell arrays
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Array{T}) where T
     pathrefs = "/#refs#"
-    fid = file(parent)
+    fid = HDF5.file(parent)
     local g
     local refs
     if !haskey(fid, pathrefs)
