@@ -356,12 +356,11 @@ function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{Com
     try
         stype = dataspace(adata)
         if compress
-            obj_id = create_dataset(parent, name, dtype, stype;
+            dset = create_dataset(parent, name, dtype, stype;
                               compress = 3, chunk = HDF5.heuristic_chunk(adata))
         else
-            obj_id = create_dataset(parent, name, dtype, stype)
+            dset = create_dataset(parent, name, dtype, stype)
         end
-        dset = HDF5.Dataset(obj_id, HDF5.file(parent))
         try
             arr = reshape(reinterpret(T, adata), tuple(2, size(adata)...))
             write_dataset(dset, dtype, arr)
@@ -371,7 +370,7 @@ function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{Com
         finally
             close(stype)
         end
-        dset
+        return dset
     finally
         close(dtype)
     end
