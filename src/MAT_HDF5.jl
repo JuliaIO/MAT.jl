@@ -607,10 +607,10 @@ end
 
 ## Utilities for handling complex numbers
 function build_datatype_complex(T::Type)
-    memtype_id = create_datatype(HDF5.H5T_COMPOUND, 2*sizeof(T))
-    HDF5.h5t_insert(memtype_id, "real", 0, HDF5.hdf5_type_id(T))
-    HDF5.h5t_insert(memtype_id, "imag", sizeof(T), HDF5.hdf5_type_id(T))
-    HDF5.Datatype(memtype_id)
+    memtype = create_datatype(HDF5.H5T_COMPOUND, 2*sizeof(T))
+    HDF5.h5t_insert(memtype, "real", 0, HDF5.hdf5_type_id(T))
+    HDF5.h5t_insert(memtype, "imag", sizeof(T), HDF5.hdf5_type_id(T))
+    return memtype
 end
 
 function check_datatype_complex(dtype::HDF5.Datatype)
