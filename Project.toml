@@ -1,17 +1,17 @@
 name = "MAT"
 uuid = "23992714-dd62-5051-b70f-ba57cb901cac"
-version = "0.8.1"
+version = "0.9.0"
 
 [deps]
 BufferedStreams = "e1450e63-4bb3-523b-b2a4-4ffa8c0fd77d"
+CodecZlib = "944b1d66-785c-5afd-91f1-9de20f533193"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
-CodecZlib = "944b1d66-785c-5afd-91f1-9de20f533193"
 
 [compat]
 BufferedStreams = "0.4.1, 1"
-HDF5 = "0.11, 0.12, 0.13"
 CodecZlib = "0.5, 0.6, 0.7"
+HDF5 = "0.14"
 julia = "1.3"
 
 [extras]
