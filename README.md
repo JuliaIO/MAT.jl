@@ -1,6 +1,7 @@
-# Support for reading and writing MATLAB files in Julia.
+# MAT.jl
+[![Build Status](https://github.com/JuliaIO/MAT.jl/workflows/CI/badge.svg?branch=master)](https://github.com/JuliaIO/MAT.jl/actions)
 
-[![Build Status](https://travis-ci.org/JuliaIO/MAT.jl.svg?branch=master)](https://travis-ci.org/JuliaIO/MAT.jl)
+### Read and write MATLAB files in Julia
 
 This library can read MATLAB `.mat` files, both in the older v5/v6/v7 format, as well as the newer v7.3 format.
 
