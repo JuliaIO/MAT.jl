@@ -68,7 +68,7 @@ To check for the presence of a variable name in a MAT file:
 
 ```julia
 file = matopen("matfile.mat")
-if exists(file, "variable")
+if haskey(file, "variable")
     # something
 end
 close(file)

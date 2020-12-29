@@ -25,14 +25,13 @@
 module MAT
 
 using HDF5, SparseArrays
-import HDF5: exists
 
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")
 
 using .MAT_HDF5, .MAT_v5
 
-export matopen, matread, matwrite, exists, @read, @write
+export matopen, matread, matwrite, @read, @write
 
 # Open a MATLAB file
 const HDF5_HEADER = UInt8[0x89, 0x48, 0x44, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]
@@ -116,7 +115,7 @@ read or write without creation or truncation.
 Compression on reading is detected/handled automatically; the compress
 keyword argument only affects write operations.
 
-Use with `read`, `write`, `close`, `names`, and `exists`.
+Use with `read`, `write`, `close`, `names`, and `haskey`.
 """
 matopen
 
@@ -161,5 +160,11 @@ function matwrite(filename::AbstractString, dict::AbstractDict{S, T}; compress::
         close(file)
     end
 end
-end
 
+###
+### v0.10.0 deprecations
+###
+
+Base.@deprecate_binding exists haskey
+
+end

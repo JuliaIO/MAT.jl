@@ -3,7 +3,7 @@ using MAT, Test
 function check(filename, result)
     matfile = matopen(filename)
     for (k, v) in result
-        @test exists(matfile, k)
+        @test haskey(matfile, k)
         got = read(matfile, k)
         if !isequal(got, v) || (typeof(got) != typeof(v) && (!isa(got, String) || !(isa(v, String))))
             close(matfile)
