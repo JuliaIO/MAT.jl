@@ -266,13 +266,13 @@ function read(f::MatlabHDF5File, name::String)
 end
 
 """
-    names(matfile_handle) -> Vector{String}
+    keys(matfile_handle) -> Vector{String}
 
 Return a list of variables in an opened Matlab file.
 
 See `matopen`.
 """
-names(f::MatlabHDF5File) = keys(f)
+Base.keys(f::MatlabHDF5File) = filter!(x -> x!="#refs#" && x!="#subsystem#", keys(f.plain))
 
 """
     haskey(matfile_handle, varname) -> Bool
@@ -281,9 +281,6 @@ Return true if a variable is present in an opened Matlab file.
 
 See `matopen`.
 """
-
-# HDF5v0.14+ H5DataStore uses keys/haskey
-Base.keys(f::MatlabHDF5File) = filter!(x -> x!="#refs#" && x!="#subsystem#", keys(f.plain))
 Base.haskey(p::MatlabHDF5File, path::String) = haskey(p.plain, path)
 
 ### Writing

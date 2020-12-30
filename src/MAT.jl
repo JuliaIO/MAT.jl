@@ -115,7 +115,7 @@ read or write without creation or truncation.
 Compression on reading is detected/handled automatically; the compress
 keyword argument only affects write operations.
 
-Use with `read`, `write`, `close`, `names`, and `haskey`.
+Use with `read`, `write`, `close`, `keys`, and `haskey`.
 """
 matopen
 
@@ -166,5 +166,9 @@ end
 ###
 
 Base.@deprecate_binding exists haskey
+@noinline function Base.names(matfile::Union{MAT_v5.Matlabv5File,MAT_HDF5.MatlabHDF5File})
+    Base.depwarn("`names(matfile)` is deprecated, use `keys(matfile)` instead.", :names)
+    return keys(matfile)
+end
 
 end

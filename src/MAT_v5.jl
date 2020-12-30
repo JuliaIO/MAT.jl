@@ -27,7 +27,7 @@
 
 module MAT_v5
 using CodecZlib, BufferedStreams, HDF5, SparseArrays
-import Base: names, read, write, close
+import Base: read, write, close
 
 round_uint8(data) = round.(UInt8, data)
 complex_array(a, b) = complex.(a, b)
@@ -398,7 +398,6 @@ function getvarnames(matfile::Matlabv5File)
     matfile.varnames
 end
 
-names(matfile::Matlabv5File) = keys(matfile)
 Base.haskey(matfile::Matlabv5File, varname::String) =
     haskey(getvarnames(matfile), varname)
 Base.keys(matfile::Matlabv5File) =

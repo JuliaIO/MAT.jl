@@ -20,7 +20,7 @@ function check(filename, result)
                 """)
         end
     end
-    @test union!(Set(), names(matfile)) == union!(Set(), keys(result))
+    @test union!(Set(), keys(matfile)) == union!(Set(), keys(result))
     close(matfile)
 
     mat = matread(filename)
