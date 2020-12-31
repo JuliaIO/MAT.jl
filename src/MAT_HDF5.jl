@@ -29,9 +29,6 @@
 module MAT_HDF5
 
 using HDF5, SparseArrays
-# deprecated for HDF5 v0.14+, but use deprecated binding to have common function with
-# e.g. JLD.jl
-import HDF5: exists
 
 import Base: names, read, write, close
 import HDF5: Reference
@@ -269,25 +266,21 @@ function read(f::MatlabHDF5File, name::String)
 end
 
 """
-    names(matfile_handle) -> Vector{String}
+    keys(matfile_handle) -> Vector{String}
 
 Return a list of variables in an opened Matlab file.
 
 See `matopen`.
 """
-names(f::MatlabHDF5File) = keys(f)
+Base.keys(f::MatlabHDF5File) = filter!(x -> x!="#refs#" && x!="#subsystem#", keys(f.plain))
 
 """
-    exists(matfile_handle, varname) -> Bool
+    haskey(matfile_handle, varname) -> Bool
 
 Return true if a variable is present in an opened Matlab file.
 
 See `matopen`.
 """
-exists(p::MatlabHDF5File, path::String) = haskey(p, path)
-
-# HDF5v0.14+ H5DataStore uses keys/haskey
-Base.keys(f::MatlabHDF5File) = filter!(x -> x!="#refs#" && x!="#subsystem#", keys(f.plain))
 Base.haskey(p::MatlabHDF5File, path::String) = haskey(p.plain, path)
 
 ### Writing

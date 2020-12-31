@@ -27,10 +27,7 @@
 
 module MAT_v5
 using CodecZlib, BufferedStreams, HDF5, SparseArrays
-import Base: names, read, write, close
-# deprecated for HDF5 v0.14+, but use deprecated binding to have common function with
-# e.g. JLD.jl
-import HDF5: exists
+import Base: read, write, close
 
 round_uint8(data) = round.(UInt8, data)
 complex_array(a, b) = complex.(a, b)
@@ -401,9 +398,6 @@ function getvarnames(matfile::Matlabv5File)
     matfile.varnames
 end
 
-exists(matfile::Matlabv5File, varname::String) = haskey(matfile, varname)
-names(matfile::Matlabv5File) = keys(matfile)
-# HDF5v0.14+ DataFile uses keys/haskey
 Base.haskey(matfile::Matlabv5File, varname::String) =
     haskey(getvarnames(matfile), varname)
 Base.keys(matfile::Matlabv5File) =
