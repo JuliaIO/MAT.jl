@@ -54,4 +54,6 @@ function read(mat::Matlabv4File)
     return results
 end
 
+close(mat::Matlabv4File) = close(mat.ios)
+
 end # module
