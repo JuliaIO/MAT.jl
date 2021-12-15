@@ -244,7 +244,19 @@ function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::
             pr = complex_array(pr, read_data(f, swap_bytes))
         end
     end
-
+    if length(ir) > length(pr)
+        # Fix for Issue #169, xref https://github.com/JuliaLang/julia/pull/40523
+        #= 
+        # The following expression must be obeyed according to
+        # https://github.com/JuliaLang/julia/blob/b3e4341d43da32f4ab6087230d98d00b89c8c004/stdlib/SparseArrays/src/sparsematrix.jl#L86-L90
+        @debug "SparseMatrixCSC" m n jc ir pr
+        @debug "SparseMatrixCSC check " length(jc) n+1 jc[end]-1 length(ir) length(pr) begin
+            length(jc) == n + 1 && jc[end] - 1 == length(ir) == length(pr)
+        end
+        =#
+        # Truncate rowvals (ir) to the be the same length as the non-zero elements (pr)
+        resize!(ir, length(pr))
+    end
     SparseMatrixCSC(m, n, jc, ir, pr)
 end
 
