@@ -88,7 +88,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     if !cr && !isfile(filename)
         error("File ", filename, " cannot be found")
     end
-    fapl = HDF5.FileAccessProperties() # fapl
+    fapl = HDF5.FileAccessProperties()
     fapl.fclose_degree = :strong
     if cr && (tr || !isfile(filename))
         # We're truncating, so we don't have to check the format of an existing file
