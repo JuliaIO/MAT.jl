@@ -88,18 +88,20 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     if !cr && !isfile(filename)
         error("File ", filename, " cannot be found")
     end
-    pa = create_property(HDF5.H5P_FILE_ACCESS; fclose_degree = HDF5.H5F_CLOSE_STRONG)
+    fapl = HDF5.FileAccessProperties() # fapl
+    fapl.fclose_degree = :strong
     if cr && (tr || !isfile(filename))
         # We're truncating, so we don't have to check the format of an existing file
         # Set the user block to 512 bytes, to save room for the header
-        p = create_property(HDF5.H5P_FILE_CREATE; userblock = 512)
-        f = HDF5.h5f_create(filename, HDF5.H5F_ACC_TRUNC, p.id, pa.id)
+        fcpl = HDF5.FileCreateProperties()
+        fcpl.userblock = 512
+        f = HDF5.API.h5f_create(filename, HDF5.API.H5F_ACC_TRUNC, fcpl, fapl)
         writeheader = true
     else
-        f = HDF5.h5f_open(filename, wr ? HDF5.H5F_ACC_RDWR : HDF5.H5F_ACC_RDONLY, pa.id)
+        f = HDF5.API.h5f_open(filename, wr ? HDF5.API.H5F_ACC_RDWR : HDF5.API.H5F_ACC_RDONLY, fapl)
         writeheader = false
     end
-    close(pa)
+    close(fapl)
     fid = MatlabHDF5File(HDF5.File(f, filename), true, writeheader, 0, compress)
     pathrefs = "/#refs#"
     if haskey(fid.plain, pathrefs)
@@ -175,8 +177,8 @@ function m_read(dset::HDF5.Dataset)
     # Check for a COMPOUND data set, and if so handle complex numbers specially
     dtype = datatype(dset)
     try
-        class_id = HDF5.h5t_get_class(dtype.id)
-        d = class_id == HDF5.H5T_COMPOUND ? read_complex(dtype, dset, T) : read(dset, T)
+        class_id = HDF5.API.h5t_get_class(dtype.id)
+        d = class_id == HDF5.API.H5T_COMPOUND ? read_complex(dtype, dset, T) : read(dset, T)
         length(d) == 1 ? d[1] : d
     finally
         close(dtype)
@@ -208,9 +210,9 @@ function m_read(g::HDF5.Group)
                 T = str2type_matlab[mattype]
                 try
                     dtype = datatype(dset)
-                    class_id = HDF5.h5t_get_class(dtype.id)
+                    class_id = HDF5.API.h5t_get_class(dtype.id)
                     try
-                        data = class_id == HDF5.H5T_COMPOUND ? read_complex(dtype, dset, T) : read(dset, T)
+                        data = class_id == HDF5.API.H5T_COMPOUND ? read_complex(dtype, dset, T) : read(dset, T)
                     finally
                         close(dtype)
                     end
@@ -330,7 +332,7 @@ end
 function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{T}, compress::Bool) where {T<:HDF5BitsOrBool}
     if compress
         dset, dtype = create_dataset(parent, name, adata;
-                               compress = 3, chunk = HDF5.heuristic_chunk(adata))
+                               deflate = 3, chunk = HDF5.heuristic_chunk(adata))
     else
         dset, dtype = create_dataset(parent, name, adata)
     end
@@ -350,7 +352,7 @@ function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{Com
         stype = dataspace(adata)
         if compress
             dset = create_dataset(parent, name, dtype, stype;
-                              compress = 3, chunk = HDF5.heuristic_chunk(adata))
+                              deflate = 3, chunk = HDF5.heuristic_chunk(adata))
         else
             dset = create_dataset(parent, name, dtype, stype)
         end
@@ -599,19 +601,19 @@ end
 
 ## Utilities for handling complex numbers
 function build_datatype_complex(T::Type)
-    memtype = create_datatype(HDF5.H5T_COMPOUND, 2*sizeof(T))
-    HDF5.h5t_insert(memtype, "real", 0, HDF5.hdf5_type_id(T))
-    HDF5.h5t_insert(memtype, "imag", sizeof(T), HDF5.hdf5_type_id(T))
+    memtype = create_datatype(HDF5.API.H5T_COMPOUND, 2*sizeof(T))
+    HDF5.API.h5t_insert(memtype, "real", 0, HDF5.hdf5_type_id(T))
+    HDF5.API.h5t_insert(memtype, "imag", sizeof(T), HDF5.hdf5_type_id(T))
     return memtype
 end
 
 function check_datatype_complex(dtype::HDF5.Datatype)
-    n = HDF5.h5t_get_nmembers(dtype.id)
+    n = HDF5.API.h5t_get_nmembers(dtype.id)
     if n != 2
         return false
     end
-    if HDF5.h5t_get_member_name(dtype.id, 0) != "real" ||
-       HDF5.h5t_get_member_name(dtype.id, 1) != "imag"
+    if HDF5.API.h5t_get_member_name(dtype.id, 0) != "real" ||
+       HDF5.API.h5t_get_member_name(dtype.id, 1) != "imag"
         return false
     end
     true
