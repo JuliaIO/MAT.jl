@@ -60,7 +60,7 @@ To get a list of variable names in a MAT file:
 
 ```julia
 file = matopen("matfile.mat")
-varnames = names(file)
+varnames = keys(file)
 close(file)
 ```
 
