@@ -59,6 +59,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         end
     end
 
+
     # Check for MAT v5 file
     seek(rawfid, 124)
     version = read(rawfid, UInt16)
@@ -165,12 +166,12 @@ end
 ### v0.10.0 deprecations
 ###
 
-import HDF5: exists
-export exists
-@noinline function exists(matfile::Union{MAT_v5.Matlabv5File,MAT_HDF5.MatlabHDF5File}, varname::String)
-    Base.depwarn("`exists(matfile, varname)` is deprecated, use `haskey(matfile, varname)` instead.", :exists)
-    return haskey(matfile, varname)
-end
+# import HDF5: exists
+# export exists
+# @noinline function exists(matfile::Union{MAT_v5.Matlabv5File,MAT_HDF5.MatlabHDF5File}, varname::String)
+#     Base.depwarn("`exists(matfile, varname)` is deprecated, use `haskey(matfile, varname)` instead.", :exists)
+#     return haskey(matfile, varname)
+# end
 @noinline function Base.names(matfile::Union{MAT_v5.Matlabv5File,MAT_HDF5.MatlabHDF5File})
     Base.depwarn("`names(matfile)` is deprecated, use `keys(matfile)` instead.", :names)
     return keys(matfile)
