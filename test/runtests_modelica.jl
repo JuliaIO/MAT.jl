@@ -6,7 +6,8 @@
 #  test/v4_Modelica/FallingbodyBox/FallingBodyBox_dymola2021.mat - simulated with Dymola v2021 (Number of intervals = 100, Stop Time = 0.2)
 # These exercise every function in MAT_v4_Modelica.jl...but often use hand-observed values or otherwise require knowledge of the mat's contents
 
-using Test, MAT
+using Test
+using MAT
 
 #OpenModelica v1.19.0
 bbOM = joinpath(@__DIR__, "v4_Modelica","BouncingBall","BouncingBall_om1.19.0.mat")
@@ -121,6 +122,20 @@ end
   @test isapprox(vel[2], -0.981, rtol=1e-3)
 end
 
+@testset "all-in-one readVariable" begin
+  data = MAT.MAT_v4_Modelica.readVariable(fbbOM, "bodyBox.frame_a.r_0[1]")
+  @test isapprox(data["bodyBox.frame_a.r_0[1]"][16], 0.002923239, rtol=1e-3)
+  @test_throws ArgumentError MAT.MAT_v4_Modelica.readVariable(fbbOM, "nullVariable")
+end
+
+@testset "all-in-one readVariables" begin
+  data = MAT.MAT_v4_Modelica.readVariables(fbbOM, ["bodyBox.frame_a.r_0[1]","bodyBox.frame_a.R.T[1,1]", "world.animateGravity"] )
+  @test isapprox(data["bodyBox.frame_a.r_0[1]"][16], 0.002923239, rtol=1e-3)
+  @test isapprox(data["bodyBox.frame_a.R.T[1,1]"][26], 0.983794001, rtol=1e-3)
+  @test isapprox(data["world.animateGravity"][1], 1.0, rtol=1e-3) #this constant of length 2 is filled across dataframe's time
+end
+
+
 @testset "readVariable: BouncingBall Dymola" begin
   ac = MAT.MAT_v4_Modelica.readAclass(bbDy)
   vn = MAT.MAT_v4_Modelica.readVariableNames(ac)
@@ -186,7 +201,7 @@ end
   vn = MAT.MAT_v4_Modelica.readVariableNames(ac)
   vd = MAT.MAT_v4_Modelica.readVariableDescriptions(ac,vn)
   di = MAT.MAT_v4_Modelica.readDataInfo(ac,vd)
- 
+
   var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "Time") 
 
   # display(var)
@@ -214,7 +229,3 @@ end
   var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "world.animateGravity") 
   @test isapprox(var[1], 1.0, rtol=1e-3)
 end
-
-
-;
-
