@@ -3,7 +3,7 @@ using MAT, Test
 function check(filename, result)
     matfile = matopen(filename)
     for (k, v) in result
-        @test haskey(matfile, k)
+        @test exists(matfile, k)
         got = read(matfile, k)
         if !isequal(got, v) || (typeof(got) != typeof(v) && (!isa(got, String) || !(isa(v, String))))
             close(matfile)
@@ -20,7 +20,7 @@ function check(filename, result)
                 """)
         end
     end
-    @test union!(Set(), keys(matfile)) == union!(Set(), keys(result))
+    @test union!(Set(), names(matfile)) == union!(Set(), keys(result))
     close(matfile)
 
     mat = matread(filename)
@@ -46,7 +46,7 @@ cd(dirname(@__FILE__))
 for filename in readdir("v4")
     #println("testing $filename")
     d = matread("v4/$filename")
-    matwrite("v4/tmp.mat", d; version="v4")
+    matwrite4("v4/tmp.mat", d)
     check("v4/tmp.mat", d)
     rm("v4/tmp.mat")
 end
