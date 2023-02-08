@@ -24,8 +24,9 @@ end
 Read a single data matrix from the opened MAT file
 """
 function readMATMatrix(ios::IOStream)
+  @show startP = position(ios)
   # The 20-byte header consists of five long (4-byte) integers:
-  type, nrows, ncols, imagf, namelen = read!(ios, Vector{Int32}(undef, 5)) # int32=4byte * 5 = 20byte
+  type, nrows, ncols, imagf, namelen = read!(ios, Vector{Int32}(undef, 5)) # 32bits=4byte, * 5 qty
 
   #The type flag contains an integer whose decimal digits encode storage information. If the integer is represented as MOPT where M is the thousands digit...
   T, P, O, M = digits(type; pad=4)
@@ -35,6 +36,7 @@ function readMATMatrix(ios::IOStream)
 
   #  real Real part of the matrix consists of nrows ∗ ncols numbers in the format specified by the P element of the type flag. The data is stored column-wise such that the second column follows the first column, etc.
   realint = []
+  @show dataFormat(P)
   if dataFormat(P) == uint8 
     realint = read!(ios, Matrix{UInt8}(undef, nrows,ncols))  
   elseif dataFormat(P) == uint16 
@@ -57,6 +59,7 @@ function readMATMatrix(ios::IOStream)
   end
 
   @show matrixName
+  @show endP = position(ios)
 
   return MATrix(matrixName, realint)
 end
@@ -157,8 +160,6 @@ function parseData1(mat::MATrix, varIndex::Int)
 end
 
 
-# using Profile
-
 @testset "matrix reader" begin
   matio = open(mat1s, "r")
   seekstart(matio)
@@ -176,6 +177,7 @@ end
   @test getVariableIndex(variableNames, "time") == 1
 
 
+  @show position(matio)
   ret = readMATMatrix(matio) # description
   variableDescriptions = parseVariableDescriptions(ret)
   @test variableDescriptions[2490] == "Color of cylinders"
