@@ -323,8 +323,6 @@ read one variable from the thing
 to read a variable, we need its index, then to look up whether it is in data_1 or data_2
 """
 function readVariable(ac::Aclass, vn::VariableNames, vd::VariableDescriptions, di::DataInfo, name::String)
-  display(ac)
-  
   open(ac.filepath, "r", lock=false) do matio
     seek(matio, di.positionEnd) #this follows the VariableNames matrix
 
@@ -354,6 +352,9 @@ function readVariable(ac::Aclass, vn::VariableNames, vd::VariableDescriptions, d
     #with the positions marked, read the desired variable
     # println("\nlocate variable [$name]:")
     varInd = getVariableIndex(vn, name)
+    if varInd < 1
+      throw( ErrorException("Variable [$name] not found in file [$(ac.filepath)]") )
+    end
 
     if di.info[varInd]["locatedInData"] == 1 #data_1
       #read the matrix data_1
