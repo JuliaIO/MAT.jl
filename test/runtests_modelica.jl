@@ -4,10 +4,10 @@ Pkg.activate(joinpath(@__DIR__, ".."))
 
 # test only MAT_v4
 using Test
+using JSON
 # include("../src/MAT.jl")
 include("../src/MAT_v4_Modelica.jl")
 
-const mat1s = "W:/sync/mechgits/library/julia/ConvenientModelica/test/ViseHammer_result_1s/ViseHammer_res.mat"
 
 
 
@@ -36,69 +36,63 @@ end
 
 
 @testset "Aclass" begin
-  mat1s = "W:/sync/mechgits/library/julia/ConvenientModelica/test/ViseHammer_result_1s/ViseHammer_res.mat"
-  ac = MAT_v4_Modelica.readAclass(mat1s)
+  mat = "W:/sync/mechgits/library/julia/MAT.jl/test/Modelica/BouncingBall/BouncingBall_res.mat"
+  ac = MAT_v4_Modelica.readAclass(mat)
   @test ac.positionStart == 0
   @test ac.positionEnd == 71
 end
 
 
 @testset "readVariableNames" begin
-  mat1s = "W:/sync/mechgits/library/julia/ConvenientModelica/test/ViseHammer_result_1s/ViseHammer_res.mat"
-  ac = MAT_v4_Modelica.readAclass(mat1s)
+  mat = "W:/sync/mechgits/library/julia/MAT.jl/test/Modelica/BouncingBall/BouncingBall_res.mat"
+  ac = MAT_v4_Modelica.readAclass(mat)
   vn = MAT_v4_Modelica.readVariableNames(ac)
   # @show vn
-  @test length(vn.names) == 2490
+  @test length(vn.names) == 11
   @test vn.names[1] == "time"
-  @test vn.names[3] == "revolute.w"
-  @test vn.names[30] == "der(alignElastoBacklash.frame_a.r_0[1])"
-  @test vn.names[2490] == "world.z_label.color[3]"
+  @test vn.names[3] == "vel"
+  @test vn.names[11] == "grav"
   @test vn.positionStart == 71
-  @test vn.positionEnd == 117126
+  @test vn.positionEnd == 228
 end
 
 
 @testset "getVariableIndex" begin
-  mat1s = "W:/sync/mechgits/library/julia/ConvenientModelica/test/ViseHammer_result_1s/ViseHammer_res.mat"
-  ac = MAT_v4_Modelica.readAclass(mat1s)
+  mat = "W:/sync/mechgits/library/julia/MAT.jl/test/Modelica/BouncingBall/BouncingBall_res.mat"
+  ac = MAT_v4_Modelica.readAclass(mat)
   vn = MAT_v4_Modelica.readVariableNames(ac)
   @test MAT_v4_Modelica.getVariableIndex(vn, vn.names[3]) == 3
-  @test MAT_v4_Modelica.getVariableIndex(vn, vn.names[30]) == 30
+  @test MAT_v4_Modelica.getVariableIndex(vn, vn.names[10]) == 10
 end
 
 
 @testset "readVariableDescriptions" begin
-  mat1s = "W:/sync/mechgits/library/julia/ConvenientModelica/test/ViseHammer_result_1s/ViseHammer_res.mat"
-  ac = MAT_v4_Modelica.readAclass(mat1s)
+  mat = "W:/sync/mechgits/library/julia/MAT.jl/test/Modelica/BouncingBall/BouncingBall_res.mat"
+  ac = MAT_v4_Modelica.readAclass(mat)
   vn = MAT_v4_Modelica.readVariableNames(ac)
   vd = MAT_v4_Modelica.readVariableDescriptions(ac,vn)
-  @test length(vd.descriptions) == 2490  
+  @test length(vd.descriptions) == 11  
   @test vd.descriptions[1] == "Simulation time [s]"
-  @test vd.descriptions[3] == "First derivative of angle phi (relative angular velocity) [rad/s]"
-  @test vd.descriptions[30] == "Position vector from world frame to the connector frame origin, resolved in world frame"
-  @test vd.descriptions[2490] == "Color of cylinders"
+  @test vd.descriptions[3] == "velocity of ball"
+  @test vd.descriptions[11] == "gravity acceleration"
 end
 
-
-
 @testset "readDataInfo" begin
-  mat1s = "W:/sync/mechgits/library/julia/ConvenientModelica/test/ViseHammer_result_1s/ViseHammer_res.mat"
-  ac = MAT_v4_Modelica.readAclass(mat1s)
+  mat = "W:/sync/mechgits/library/julia/MAT.jl/test/Modelica/BouncingBall/BouncingBall_res.mat"
+  ac = MAT_v4_Modelica.readAclass(mat)
   vn = MAT_v4_Modelica.readVariableNames(ac)
   vd = MAT_v4_Modelica.readVariableDescriptions(ac,vn)
   di = MAT_v4_Modelica.readDataInfo(ac,vd)
   # @show di.info[3]
   @test di.info[1]["isWithinTimeRange"] == -1
   @test di.info[3]["locatedInData"] == 2 
-  @test di.info[30]["isInterpolated"] == 0
-  @test di.info[2490]["isWithinTimeRange"] == 0
+  @test di.info[4]["isInterpolated"] == 0
+  @test di.info[11]["isWithinTimeRange"] == 0
 end
 
-using JSON
-@testset "readVariable" begin
-  # mat1s = "W:/sync/mechgits/library/julia/ConvenientModelica/test/ViseHammer_result_1s/ViseHammer_res.mat"
-  matbb = "W:/sync/mechgits/library/julia/MAT.jl/test/Modelica/BouncingBall/BouncingBall_res.mat"
-  ac = MAT_v4_Modelica.readAclass(matbb)
+@testset "readVariable: BouncingBall" begin
+  mat = "W:/sync/mechgits/library/julia/MAT.jl/test/Modelica/BouncingBall/BouncingBall_res.mat"
+  ac = MAT_v4_Modelica.readAclass(mat)
   vn = MAT_v4_Modelica.readVariableNames(ac)
   vd = MAT_v4_Modelica.readVariableDescriptions(ac,vn)
   di = MAT_v4_Modelica.readDataInfo(ac,vd)
@@ -126,6 +120,38 @@ using JSON
   @test isapprox(vel[2], -0.981, rtol=1e-3)
 end
 
+@testset "readVariable: FallingBodyBox" begin
+  mat = "W:/sync/mechgits/library/julia/MAT.jl/test/Modelica/FallingBodyBox/FallingBodyBox_res.mat"
+  ac = MAT_v4_Modelica.readAclass(mat)
+  vn = MAT_v4_Modelica.readVariableNames(ac)
+  vd = MAT_v4_Modelica.readVariableDescriptions(ac,vn)
+  di = MAT_v4_Modelica.readDataInfo(ac,vd)
+
+  # println(JSON.json(di.info, 2)) 
+
+  var = MAT_v4_Modelica.readVariable(ac, vn, vd, di, "time") 
+  # display(var)
+  ret = true
+  for i = 2:length(var)-1 #last time is duplicated
+    ret &= isapprox(var[i]-var[i-1], 0.002, rtol=1e-4)
+  end
+  @test ret == true
+
+  #point-check values read from FallingBodyBox_res.csv
+  var = MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.frame_a.r_0[1]") 
+  @test isapprox(var[16], 0.002923239, rtol=1e-3)
+
+  var = MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.frame_a.R.T[1,1]") 
+  @test isapprox(var[26], 0.983794001, rtol=1e-3)
+
+  @test_throws ErrorException MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.frame_a.v_0[1]")  # there is no frame_A.v_0
+
+  var = MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.v_0[2]") 
+  @test isapprox(var[33], -0.58818129, rtol=1e-3)
+
+  var = MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.frame_b.r_0[1]") 
+  @test isapprox(var[72], 0.935886479, rtol=1e-3)
+end
 
 ;
 
