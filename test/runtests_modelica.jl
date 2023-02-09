@@ -443,35 +443,46 @@ function readVariable(ac::Aclass, vn::VariableNames, vd::VariableDescriptions, d
     if di.info[varInd]["locatedInData"] == 1 #data_1
       @show pstart = data1MatrixStart + di.info[varInd]["indexInData"] * typeBytes(fmt1)
     else #data_2
-      @show pstart = data2MatrixStart + di.info[varInd]["indexInData"] * ncols * typeBytes(fmt2)
-      @show pstop  = data2MatrixStart + di.info[varInd]["indexInData"] * ncols * typeBytes(fmt2) *2
-      @show pstop-pstart
+      @show pstart = data2MatrixStart + (di.info[varInd]["indexInData"]-1) * ncols * typeBytes(fmt2)
+      pstop = pstart + ncols*typeBytes(fmt2)
+      # @show pstop-pstart
       seek(matio, pstart)
-      # readreal = read!(matio, Vector{fmt2}(undef, pstop-pstart) ) 
-      # @show readreal[1:100]
+      # readreal = read!(matio, Vector{fmt2}(undef, 30) ) 
+      for i = 1:30
+        ps = position(matio)
+        readreal = read!(matio, Vector{fmt2}(undef,1))
+        println("$i [$ps] = $(readreal[1])")
+      end
 
-      read100 = read!(matio, Vector{fmt2}(undef, 100) ) 
-
-      seek(matio, pstart)
+      # 'transpose' reading, that is the data is saved time, var1(time), var2(time),... time2, var1(time2),...
       readns = []
-      for i = 1:100
-        append!(readns, read!(matio, Vector{fmt2}(undef,1)))
-        skip(matio, typeBytes(fmt2)*ncols )
-        println( "$i] " , vn.names[i] , ": " , read100[i], " : ", readns[i])
+      nvar = 9 # == nrows == number of variables listing data2 as their location
+      bytesPerBar = 8 # typeBytes(fmt2) == Float64
+      for ivar = 1:nrows
+        for ind = 1:ncols
+          seek(matio, pstart + (ivar-1)*bytesPerBar + ((ind-1)*nvar*bytesPerBar) )
+          readns = read!(matio, Vector{fmt2}(undef, 1) ) 
+          println( "$ind] : " , readns[1])
+        end
       end
     end
 
   end #open
 end
 
+using JSON
 @testset "readVariable" begin
-  mat1s = "W:/sync/mechgits/library/julia/ConvenientModelica/test/ViseHammer_result_1s/ViseHammer_res.mat"
-  ac = readAclass(mat1s)
+  # mat1s = "W:/sync/mechgits/library/julia/ConvenientModelica/test/ViseHammer_result_1s/ViseHammer_res.mat"
+  matbb = "W:/sync/mechgits/library/julia/MAT.jl/test/Modelica/BouncingBall/BouncingBall_res.mat"
+  ac = readAclass(matbb)
   vn = readVariableNames(ac)
   vd = readVariableDescriptions(ac,vn)
   di = readDataInfo(ac,vd)
-  readVariable(ac, vn, vd, di, "time")
-  # readVariable(ac, vn, vd, di, "revolute.w")
+  # println(JSON.json(di.info, 2)) #get the data 1/2 info
+  # readVariable(ac, vn, vd, di, "eff") #data1
+  # readVariable(ac, vn, vd, di, "grav") #data1
+  readVariable(ac, vn, vd, di, "time") # data0
+  # readVariable(ac, vn, vd, di, "height") #data2
 end
 
 
