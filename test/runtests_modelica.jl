@@ -80,8 +80,8 @@ function typeBytes(type::T)::Int where T<:DataType
     return 1
   end
 end
-@testset "typeBits" begin
-  @test typeBits(Int32) == 4
+@testset "typeBytes" begin
+  @test typeBytes(Int32) == 4
 end
 
 struct Aclass
@@ -364,109 +364,126 @@ end
   @test di.info[2490]["isWithinTimeRange"] == 0
 end
 
+struct MatrixHeader
+  type::Int
+  nRows::Int
+  nCols::Int
+  hasImaginary::Bool
+  lName::Int
+end
 
 """
 read one variable from the thing
 to read a variable, we need its index, then to look up whether it is in data_1 or data_2
 """
 function readVariable(ac::Aclass, vn::VariableNames, vd::VariableDescriptions, di::DataInfo, name::String)
-   open(ac.filepath, "r", lock=false) do matio
+  display(ac)
+  
+
+
+  open(ac.filepath, "r", lock=false) do matio
     seek(matio, di.positionEnd) #this follows the VariableNames matrix
-    # @show startP = position(matio)
 
     println("\ndata_1:")
-    @show data1HeaderStart = mark(matio)
     # read data1 header:
-    # The 20-byte header consists of five long (4-byte) integers:
+    data1HeaderStart = mark(matio)
     dtype = 0
     nrows = 0
     ncols = 0
     namelen = 0
     includesImaginary = 0
     try
-      @show dtype, nrows, ncols, includesImaginary, namelen = read!(matio, Vector{Int32}(undef, 5)) # int32=4byte * 5 = 20byte
+      dtype, nrows, ncols, includesImaginary, namelen = read!(matio, Vector{Int32}(undef, 5)) # int32=4byte * 5 = 20byte
     catch e
       error("caught error $e while reading $ac.filepath")
     end
+    mh1 = MatrixHeader(dtype,nrows,ncols,includesImaginary,namelen)
 
-    @show data1MatrixName = mark(matio)
+    data1MatrixName = mark(matio)
     nameuint = read!(matio, Vector{UInt8}(undef, namelen)) # read the full namelen to make the pointer ready to read the data
-    @show matrixName = replace(String(nameuint), '\0'=>"")
+    matrixName = replace(String(nameuint), '\0'=>"")
     if matrixName != "data_1"
       error("trying to read matrix [data_1] but read $matrixName")
     end
 
-    @show data1MatrixStart = mark(matio)
-    #read the matrix data_1
-    @show fmt1 = dataFormat(dtype) # read the format type before reading
-    # realread = []
+    #skip dataMatrix1
+    data1MatrixStart = mark(matio)
+    fmt1 = dataFormat(dtype) # read the format type before reading
     try
-      # realread = read!(matio, Matrix{fmt}(undef, nrows,ncols))  # UInt8 from P is 8 bytes long
-      @show position(matio)
-      @show toskip = nrows*ncols*typeBytes(fmt1) #817*2*8 = 13072, 488197+20+7+13072 = 501296
+      toskip = nrows*ncols*typeBytes(fmt1) #817*2*8 = 13072, 488197+20+7+13072 = 501296
       skip(matio, toskip )
-      @show position(matio)
     catch e
       error("caught error $e while reading $ac.filepath")
     end
 
     # read data2 header:
     println("\ndata_2:")
-    # The 20-byte header consists of five long (4-byte) integers:
     dtype = 0
     nrows = 0
     ncols = 0
     namelen = 0
     includesImaginary = 0
     try
-      @show dtype, nrows, ncols, includesImaginary, namelen = read!(matio, Vector{Int32}(undef, 5)) # int32=4byte * 5 = 20byte
+      dtype, nrows, ncols, includesImaginary, namelen = read!(matio, Vector{Int32}(undef, 5)) # int32=4byte * 5 = 20byte
     catch e
       error("caught error $e while reading $ac.filepath")
     end
+    mh2 = MatrixHeader(dtype,nrows,ncols,includesImaginary,namelen)
 
     #read the matrix name
-    @show data2MatrixName = mark(matio)
+    data2MatrixName = mark(matio)
     nameuint = read!(matio, Vector{UInt8}(undef, namelen)) # read the full namelen to make the pointer ready to read the data
-    @show matrixName = replace(String(nameuint), '\0'=>"")
+    matrixName = replace(String(nameuint), '\0'=>"")
+
     if matrixName != "data_2"
       error("trying to read matrix [data_2] but read $matrixName")
     end
+    data2MatrixStart = mark(matio)
 
-    #read the matrix data_2
-    @show data2MatrixStart = mark(matio)
-    @show fmt2 = dataFormat(dtype) # read the format type before reading
+    #with the positions marked, read the desired variable
+    # println("\nlocate variable [$name]:")
+    varInd = getVariableIndex(vn, name)
 
-    # so, having found both headers and matrix starts, need to calculate the variable's position and length
-    println("\nlocate variable [$name]:")
-    @show varInd = getVariableIndex(vn, name)
-    @show di.info[varInd]
     if di.info[varInd]["locatedInData"] == 1 #data_1
-      @show pstart = data1MatrixStart + di.info[varInd]["indexInData"] * typeBytes(fmt1)
-    else #data_2
-      @show pstart = data2MatrixStart + (di.info[varInd]["indexInData"]-1) * ncols * typeBytes(fmt2)
-      pstop = pstart + ncols*typeBytes(fmt2)
-      # @show pstop-pstart
-      seek(matio, pstart)
-      # readreal = read!(matio, Vector{fmt2}(undef, 30) ) 
-      for i = 1:30
-        ps = position(matio)
-        readreal = read!(matio, Vector{fmt2}(undef,1))
-        println("$i [$ps] = $(readreal[1])")
-      end
+      #read the matrix data_1
+      fmt1 = dataFormat(dtype) # read the format type before reading
+      # @show di.info[varInd]
 
-      # 'transpose' reading, that is the data is saved time, var1(time), var2(time),... time2, var1(time2),...
-      readns = []
-      nvar = 9 # == nrows == number of variables listing data2 as their location
-      bytesPerBar = 8 # typeBytes(fmt2) == Float64
-      for ivar = 1:nrows
-        for ind = 1:ncols
-          seek(matio, pstart + (ivar-1)*bytesPerBar + ((ind-1)*nvar*bytesPerBar) )
-          readns = read!(matio, Vector{fmt2}(undef, 1) ) 
-          println( "$ind] : " , readns[1])
+      # dataInfo(i,4) is -1 in OpenModelica to signify that the value is not defined outside the time range. 0 keeps the first/last value when going outside the time range and 1 performs linear interpolation on the first/last two points.
+      if di.info[varInd]["isWithinTimeRange"]== 0 #linear interpolation
+        seek(matio, data1MatrixStart)
+        realread = read!(matio, Vector{fmt1}(undef,10))
+        display(realread)
+        #data format is: time(tInitial), var1(tI), ... varN(tI), time(tFinal), var1(tF), ... varN(tF)
+        # seek(matio, data1MatrixStart + (di.info[varInd]["indexInData"]-1)*typeBytes(fmt1) + ((ind-1)*nrows*typeBytes(fmt1)) )
+        # readns[ind] = read(matio, fmt1)
+
+        readns = Vector{fmt1}(undef, mh1.nCols)
+        for ind = 1:mh1.nCols
+          seek(matio, data1MatrixStart + (di.info[varInd]["indexInData"]-1)*typeBytes(fmt1) + ((ind-1)*mh1.nRows*typeBytes(fmt1)) )
+          readns[ind] = read(matio, fmt1)
         end
+        return readns
       end
-    end
 
+    elseif name == "time" || di.info[varInd]["locatedInData"] == 2 #data_2
+      #read the matrix data_2
+      fmt2 = dataFormat(dtype) # read the format type before reading
+
+      if ac.isTranspose == false
+        # data is sequential: time(t0), var1(t0), var2(t0),... varN(t0), time(t1), var1(t1),...
+        readns = Vector{fmt2}(undef, ncols)
+        for ind = 1:ncols
+          seek(matio, data2MatrixStart + (di.info[varInd]["indexInData"]-1)*typeBytes(fmt2) + ((ind-1)*nrows*typeBytes(fmt2)) )
+          readns[ind] = read(matio, fmt2)
+        end
+        return readns
+      else
+        error("reading binTranspose not implemented, lack test data")
+      end
+    else
+      error("variable [$name] is located in an unknown location")
+    end
   end #open
 end
 
@@ -478,11 +495,28 @@ using JSON
   vn = readVariableNames(ac)
   vd = readVariableDescriptions(ac,vn)
   di = readDataInfo(ac,vd)
+
   # println(JSON.json(di.info, 2)) #get the data 1/2 info
-  # readVariable(ac, vn, vd, di, "eff") #data1
-  # readVariable(ac, vn, vd, di, "grav") #data1
-  readVariable(ac, vn, vd, di, "time") # data0
-  # readVariable(ac, vn, vd, di, "height") #data2
+
+  eff = readVariable(ac, vn, vd, di, "eff") #data1
+  @test length(eff) == 2
+  @test eff[1] ≈ 0.77
+  @test eff[2] ≈ 0.77
+
+  grav = readVariable(ac, vn, vd, di, "grav") #data1
+  @test length(grav) == 2
+  @test grav[1] ≈ 9.81
+  @test grav[2] ≈ 9.81
+
+  time = readVariable(ac, vn, vd, di, "time") # data0
+  @test all(isapprox.(time, [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,1], rtol=1e-3))
+
+  height = readVariable(ac, vn, vd, di, "height") #data2
+  @test isapprox(height[1], 111, rtol=1e-3)
+  @test isapprox(height[2], 110.9509, rtol=1e-3)
+
+  vel = readVariable(ac, vn, vd, di, "vel") #data2
+  @test isapprox(vel[2], -0.981, rtol=1e-3)
 end
 
 
