@@ -370,6 +370,31 @@ struct MatrixHeader
   nCols::Int
   hasImaginary::Bool
   lName::Int
+  name::String
+  format::DataType
+end
+"""
+Reads the matix header, assuming matio's position is correct to read the header
+"""
+function readMatrixHeader!(matio::IOStream) :: MatrixHeader
+  dtype = 0
+  nrows = 0
+  ncols = 0
+  namelen = 0
+  includesImaginary = 0
+  try
+    dtype, nrows, ncols, includesImaginary, namelen = read!(matio, Vector{Int32}(undef, 5)) # int32=4byte * 5 = 20byte
+  catch e
+    error("caught error $e while reading matrix header")
+  end
+
+  # data1MatrixName = mark(matio)
+  nameuint = read!(matio, Vector{UInt8}(undef, namelen)) # read the full namelen to make the pointer ready to read the data
+  matrixName = replace(String(nameuint), '\0'=>"")
+
+  fmt = dataFormat(dtype) # read the format type before reading
+
+  return MatrixHeader(dtype,nrows,ncols,includesImaginary,namelen,matrixName, fmt)
 end
 
 """
@@ -379,38 +404,40 @@ to read a variable, we need its index, then to look up whether it is in data_1 o
 function readVariable(ac::Aclass, vn::VariableNames, vd::VariableDescriptions, di::DataInfo, name::String)
   display(ac)
   
-
-
   open(ac.filepath, "r", lock=false) do matio
     seek(matio, di.positionEnd) #this follows the VariableNames matrix
 
     println("\ndata_1:")
     # read data1 header:
     data1HeaderStart = mark(matio)
-    dtype = 0
-    nrows = 0
-    ncols = 0
-    namelen = 0
-    includesImaginary = 0
-    try
-      dtype, nrows, ncols, includesImaginary, namelen = read!(matio, Vector{Int32}(undef, 5)) # int32=4byte * 5 = 20byte
-    catch e
-      error("caught error $e while reading $ac.filepath")
-    end
-    mh1 = MatrixHeader(dtype,nrows,ncols,includesImaginary,namelen)
-
-    data1MatrixName = mark(matio)
-    nameuint = read!(matio, Vector{UInt8}(undef, namelen)) # read the full namelen to make the pointer ready to read the data
-    matrixName = replace(String(nameuint), '\0'=>"")
-    if matrixName != "data_1"
+    # dtype = 0
+    # nrows = 0
+    # ncols = 0
+    # namelen = 0
+    # includesImaginary = 0
+    # try
+    #   dtype, nrows, ncols, includesImaginary, namelen = read!(matio, Vector{Int32}(undef, 5)) # int32=4byte * 5 = 20byte
+    # catch e
+    #   error("caught error $e while reading $ac.filepath")
+    # end
+    # mh1 = MatrixHeader(dtype,nrows,ncols,includesImaginary,namelen)
+    mh1 = readMatrixHeader!(matio)
+    if mh1.name != "data_1"
       error("trying to read matrix [data_1] but read $matrixName")
     end
 
+    # data1MatrixName = mark(matio)
+    # nameuint = read!(matio, Vector{UInt8}(undef, mh1.lName)) # read the full namelen to make the pointer ready to read the data
+    # matrixName = replace(String(nameuint), '\0'=>"")
+    # if matrixName != "data_1"
+    #   error("trying to read matrix [data_1] but read $matrixName")
+    # end
+
     #skip dataMatrix1
     data1MatrixStart = mark(matio)
-    fmt1 = dataFormat(dtype) # read the format type before reading
+    # fmt1 = dataFormat(mh1.type) # read the format type before reading
     try
-      toskip = nrows*ncols*typeBytes(fmt1) #817*2*8 = 13072, 488197+20+7+13072 = 501296
+      toskip = mh1.nRows*mh1.nCols*typeBytes(mh1.format) #817*2*8 = 13072, 488197+20+7+13072 = 501296
       skip(matio, toskip )
     catch e
       error("caught error $e while reading $ac.filepath")
@@ -418,25 +445,26 @@ function readVariable(ac::Aclass, vn::VariableNames, vd::VariableDescriptions, d
 
     # read data2 header:
     println("\ndata_2:")
-    dtype = 0
-    nrows = 0
-    ncols = 0
-    namelen = 0
-    includesImaginary = 0
-    try
-      dtype, nrows, ncols, includesImaginary, namelen = read!(matio, Vector{Int32}(undef, 5)) # int32=4byte * 5 = 20byte
-    catch e
-      error("caught error $e while reading $ac.filepath")
-    end
-    mh2 = MatrixHeader(dtype,nrows,ncols,includesImaginary,namelen)
+    # dtype = 0
+    # nrows = 0
+    # ncols = 0
+    # namelen = 0
+    # includesImaginary = 0
+    # try
+    #   dtype, nrows, ncols, includesImaginary, namelen = read!(matio, Vector{Int32}(undef, 5)) # int32=4byte * 5 = 20byte
+    # catch e
+    #   error("caught error $e while reading $ac.filepath")
+    # end
+    # # mh2 = MatrixHeader(dtype,nrows,ncols,includesImaginary,namelen)
 
-    #read the matrix name
-    data2MatrixName = mark(matio)
-    nameuint = read!(matio, Vector{UInt8}(undef, namelen)) # read the full namelen to make the pointer ready to read the data
-    matrixName = replace(String(nameuint), '\0'=>"")
+    # #read the matrix name
+    # data2MatrixName = mark(matio)
+    # nameuint = read!(matio, Vector{UInt8}(undef, namelen)) # read the full namelen to make the pointer ready to read the data
+    # matrixName = replace(String(nameuint), '\0'=>"")
+    mh2 = readMatrixHeader!(matio)
 
-    if matrixName != "data_2"
-      error("trying to read matrix [data_2] but read $matrixName")
+    if mh2.name != "data_2"
+      error("trying to read matrix [data_2] but read $(mh2.name)")
     end
     data2MatrixStart = mark(matio)
 
@@ -446,36 +474,36 @@ function readVariable(ac::Aclass, vn::VariableNames, vd::VariableDescriptions, d
 
     if di.info[varInd]["locatedInData"] == 1 #data_1
       #read the matrix data_1
-      fmt1 = dataFormat(dtype) # read the format type before reading
+      # fmt1 = dataFormat(dtype) # read the format type before reading
       # @show di.info[varInd]
 
       # dataInfo(i,4) is -1 in OpenModelica to signify that the value is not defined outside the time range. 0 keeps the first/last value when going outside the time range and 1 performs linear interpolation on the first/last two points.
       if di.info[varInd]["isWithinTimeRange"]== 0 #linear interpolation
-        seek(matio, data1MatrixStart)
-        realread = read!(matio, Vector{fmt1}(undef,10))
-        display(realread)
+        # seek(matio, data1MatrixStart)
+        # realread = read!(matio, Vector{mh1.format}(undef,10))
+        # display(realread)
         #data format is: time(tInitial), var1(tI), ... varN(tI), time(tFinal), var1(tF), ... varN(tF)
-        # seek(matio, data1MatrixStart + (di.info[varInd]["indexInData"]-1)*typeBytes(fmt1) + ((ind-1)*nrows*typeBytes(fmt1)) )
-        # readns[ind] = read(matio, fmt1)
+        # seek(matio, data1MatrixStart + (di.info[varInd]["indexInData"]-1)*typeBytes(mh1.format) + ((ind-1)*nrows*typeBytes(mh1.format)) )
+        # readns[ind] = read(matio, mh1.format)
 
-        readns = Vector{fmt1}(undef, mh1.nCols)
+        readns = Vector{mh1.format}(undef, mh1.nCols)
         for ind = 1:mh1.nCols
-          seek(matio, data1MatrixStart + (di.info[varInd]["indexInData"]-1)*typeBytes(fmt1) + ((ind-1)*mh1.nRows*typeBytes(fmt1)) )
-          readns[ind] = read(matio, fmt1)
+          seek(matio, data1MatrixStart + (di.info[varInd]["indexInData"]-1)*typeBytes(mh1.format) + ((ind-1)*mh1.nRows*typeBytes(mh1.format)) )
+          readns[ind] = read(matio, mh1.format)
         end
         return readns
       end
 
     elseif name == "time" || di.info[varInd]["locatedInData"] == 2 #data_2
       #read the matrix data_2
-      fmt2 = dataFormat(dtype) # read the format type before reading
+      # fmt2 = dataFormat(dtype) # read the format type before reading
 
       if ac.isTranspose == false
         # data is sequential: time(t0), var1(t0), var2(t0),... varN(t0), time(t1), var1(t1),...
-        readns = Vector{fmt2}(undef, ncols)
-        for ind = 1:ncols
-          seek(matio, data2MatrixStart + (di.info[varInd]["indexInData"]-1)*typeBytes(fmt2) + ((ind-1)*nrows*typeBytes(fmt2)) )
-          readns[ind] = read(matio, fmt2)
+        readns = Vector{mh2.format}(undef, mh2.nCols)
+        for ind = 1:mh2.nCols
+          seek(matio, data2MatrixStart + (di.info[varInd]["indexInData"]-1)*typeBytes(mh2.format) + ((ind-1)*mh2.nRows*typeBytes(mh2.format)) )
+          readns[ind] = read(matio, mh2.format)
         end
         return readns
       else
