@@ -60,7 +60,6 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         end
     end
 
-
     # Check for MAT v5 file
     seek(rawfid, 124)
     version = read(rawfid, UInt16)
