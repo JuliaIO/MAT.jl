@@ -28,9 +28,9 @@ using HDF5, SparseArrays
 
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")
-include("MAT_v4.jl")
+include("MAT_v4_Modelica.jl")
 
-using .MAT_HDF5, .MAT_v5, .MAT_v4
+using .MAT_HDF5, .MAT_v5, .MAT_v4_Modelica
 
 export matopen, matread, matwrite, @read, @write
 
