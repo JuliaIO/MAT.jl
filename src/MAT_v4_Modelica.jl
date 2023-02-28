@@ -1,6 +1,52 @@
+# A module to read MAT files written by OpenModelica tools
+ 
+# Copyright (C) 2023   Ben Conrad
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+# LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+# WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+# Given the often large size of mat files, each read option is atomic, opening and closing the file for every operation with state managed by the user.
+
+# The OpenModelica MATv4 file takes the basic v4 matrix format and adds some requirments on the contents and ordering of the matrices
+# The format is described at https://openmodelica.org/doc/OpenModelicaUsersGuide/latest/technical_details.html#the-matv4-result-file-format, consisting of a series of matrices that first describe the data then store it.
+#-  Aclass:
+#    Aclass(1,:) is always Atrajectory
+#    Aclass(2,:) is 1.1 in OpenModelica
+#    Aclass(3,:) is empty
+#    Aclass(4,:) is either binTrans or binNormal, which determines if the data is stored striped (rows of values at a time instance) or tansposed (rows being a single variable across time)
+#- name:
+#    a NxM matrix giving the names of the N variables as int8 characters
+#- description:
+#    a NxM matrix giving the descriptions of the N variables as int8 characters
+#- dataInfo:
+#    a Nx4 matrix describing the data of each variable, with
+#    dataInfo(i,1) locating the data in data_1 or data_2
+#    dataInfo(i,2) providing the start index within the data_ matrix
+#    dataInfo(i,3) = 0 to indicate that the variable is interpolated
+#    dataInfo(i,4) = -1 to indicate that the variable is undefined outside the time range
+#- data_1:
+#    is either an Nx1 matrix giving the variable's constant value, or Nx2 giving the start and end values
+#- data_2:
+#    holds the values of the continuously-varying variables in rows of [time1, var1(@time1), var2(@time1), ...varN(@time1), time2, var1(@time2)...]
+
+
 module MAT_v4_Modelica
-# The Modelica MATv4 file takes the basic v4 Matrix format and adds some requirments to the contents and ordering of the matrices
-# The first matrix, Aclass is narrowly defined 
 
 function isLittleEndian(dtype) :: Bool 
   #The type flag contains an integer whose decimal digits encode storage information. If the integer is represented as MOPT where M is the thousands digit...
@@ -8,7 +54,6 @@ function isLittleEndian(dtype) :: Bool
   # @enum numberFormat little=0 big=1 vaxD=2 vaxG=3 cray=4
   return M == 0
 end
-
 
 function dataFormat(type) :: DataType 
   #The type flag contains an integer whose decimal digits encode storage information. If the integer is represented as MOPT where M is the thousands digit...
@@ -54,6 +99,7 @@ function typeBytes(type::T)::Int where T<:DataType
     return 1
   end
 end
+
 
 struct Aclass
   filepath::String
@@ -106,8 +152,6 @@ function readAclass( filepath::String )
   end #open
 end
 
-
-##### the NAME matrix########################################################################################################################
 struct VariableNames
   # names::Vector{T}(undef,undef) where T<:AbstractString
   names::Vector{String}
@@ -283,8 +327,6 @@ function readDataInfo(ac::Aclass, vd::VariableDescriptions)
   end #open
 end
 
-
-
 struct MatrixHeader
   type::Int
   nRows::Int
@@ -294,6 +336,7 @@ struct MatrixHeader
   name::String
   format::DataType
 end
+
 """
 Reads the matix header, assuming matio's position is correct to read the header
 """
@@ -319,15 +362,13 @@ function readMatrixHeader!(matio::IOStream) :: MatrixHeader
 end
 
 """
-read one variable from the thing
-to read a variable, we need its index, then to look up whether it is in data_1 or data_2
+read one variable from the file
 """
 function readVariable(ac::Aclass, vn::VariableNames, vd::VariableDescriptions, di::DataInfo, name::String)
   open(ac.filepath, "r", lock=false) do matio
     seek(matio, di.positionEnd) #this follows the VariableNames matrix
 
     # read data1 header:
-    # data1HeaderStart = mark(matio)
     mh1 = readMatrixHeader!(matio)
     if mh1.name != "data_1"
       error("trying to read matrix [data_1] but read $matrixName")
@@ -388,6 +429,12 @@ function readVariable(ac::Aclass, vn::VariableNames, vd::VariableDescriptions, d
   end #open
 end
 
+"""
+all-in-one
+"""
+function readVariable(filepath::String, name::String) :: DataFrame
+
+end
 
 
-end #module
+end #MAT_v4_Modelica
