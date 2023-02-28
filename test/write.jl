@@ -96,9 +96,11 @@ test_write(Dict(
     "sparse_zeros" => SparseMatrixCSC(20, 20, ones(Int, 21), Int[], Float64[])
 ))
 
-@test_throws ErrorException test_write(Dict("1invalidkey" => "starts with a number"))
-@test_throws ErrorException test_write(Dict("another invalid key" => "invalid characters"))
-@test_throws ErrorException test_write(Dict("yetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkey" => "too long"))
+@testset "write exceptions" begin
+    @test_throws ErrorException test_write(Dict("1invalidkey" => "starts with a number"))
+    @test_throws ErrorException test_write(Dict("another invalid key" => "invalid characters"))
+    @test_throws ErrorException test_write(Dict("yetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkeyyetanotherinvalidkey" => "too long"))
+end
 
 struct TestCompositeKind
     field1::AbstractString
