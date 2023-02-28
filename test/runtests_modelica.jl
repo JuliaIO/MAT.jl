@@ -9,7 +9,6 @@ import Pkg
 Pkg.activate(joinpath(@__DIR__, ".."))
 
 using Test
-using JSON
 cd(joinpath(@__DIR__,".."))
 include("../src/MAT.jl")
 # include("../src/MAT_v4_Modelica.jl")
@@ -93,8 +92,6 @@ end
   vd = MAT.MAT_v4_Modelica.readVariableDescriptions(ac,vn)
   di = MAT.MAT_v4_Modelica.readDataInfo(ac,vd)
 
-  # println(JSON.json(di.info, 2)) #get the data 1/2 info
-
   eff = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "eff") #data1
   @test length(eff) == 2
   @test eff[1] ≈ 0.77
@@ -121,8 +118,6 @@ end
   vn = MAT.MAT_v4_Modelica.readVariableNames(ac)
   vd = MAT.MAT_v4_Modelica.readVariableDescriptions(ac,vn)
   di = MAT.MAT_v4_Modelica.readDataInfo(ac,vd)
-
-  # println(JSON.json(di.info, 2)) 
 
   var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "time") 
   # display(var)
