@@ -47,6 +47,7 @@
 
 
 module MAT_v4_Modelica
+using DataFrames
 
 function isLittleEndian(dtype) :: Bool 
   #The type flag contains an integer whose decimal digits encode storage information. If the integer is represented as MOPT where M is the thousands digit...
@@ -370,31 +371,26 @@ function readVariable(ac::Aclass, vn::VariableNames, vd::VariableDescriptions, d
 
     # read data1 header:
     mh1 = readMatrixHeader!(matio)
-    if mh1.name != "data_1"
-      error("trying to read matrix [data_1] but read $matrixName")
-    end
+    @assert mh1.name == "data_1" "trying to read matrix [data_1] but read $matrixName"
 
     data1MatrixStart = mark(matio)
     try
       toskip = mh1.nRows*mh1.nCols*typeBytes(mh1.format) #817*2*8 = 13072, 488197+20+7+13072 = 501296
       skip(matio, toskip )
     catch e
-      error("caught error $e while reading $ac.filepath")
+      throw( ErrorException("Caught error $e while reading $ac.filepath") )
     end
 
     # read data2 header:
     mh2 = readMatrixHeader!(matio)
 
-    if mh2.name != "data_2"
-      error("trying to read matrix [data_2] but read $(mh2.name)")
-    end
+    @assert mh2.name == "data_2" "trying to read matrix [data_2] but read $(mh2.name)"
     data2MatrixStart = mark(matio)
 
     #with the positions marked, read the desired variable
-    # println("\nlocate variable [$name]:")
     varInd = getVariableIndex(vn, name)
     if varInd < 1
-      throw( ErrorException("Variable [$name] not found in file [$(ac.filepath)]") )
+      throw( ArgumentError("Variable [$name] not found in file [$(ac.filepath)]") )
     end
 
     if di.info[varInd]["locatedInData"] == 1 #data_1
@@ -421,20 +417,54 @@ function readVariable(ac::Aclass, vn::VariableNames, vd::VariableDescriptions, d
         end
         return readns
       else
-        error("reading binTranspose not implemented, lack test data")
+        throw(ErrorException("reading binTranspose not implemented, lack test data") )
       end
     else
-      error("variable [$name] is located in an unknown location")
+      throw(ErrorException("variable [$name] is located in an unknown location") )
     end
   end #open
 end
 
+
 """
-all-in-one
+All-in-one reading of variable `name` from `filepath`, returning a DataFrame with columns "time" and `name`
 """
 function readVariable(filepath::String, name::String) :: DataFrame
+  ac = readAclass(filepath)
+  vn = readVariableNames(ac)
+  vd = readVariableDescriptions(ac,vn)
+  di = readDataInfo(ac,vd)
 
+  time = readVariable(ac, vn, vd, di, "time") 
+  varn = readVariable(ac, vn, vd, di, name) 
+
+  df = DataFrame("time"=>time, name=>varn)
+  return df
 end
 
+"""
+Reads the vector of variable `names` from mat file `filepath`, returning a DataFrame with columns "time" and `names`
+"""
+function readVariables(filepath::String, names::AbstractVector{T}) :: DataFrame where T<:AbstractString 
+  ac = readAclass(filepath)
+  vn = readVariableNames(ac)
+  vd = readVariableDescriptions(ac,vn)
+  di = readDataInfo(ac,vd)
+
+  df = DataFrame("time"=> readVariable(ac, vn, vd, di, "time") )
+  for name in names
+    var = readVariable(ac,vn,vd,di, name)
+    if length(var) == 1 # a constant value
+      df[!, name] .= var[1]
+    elseif length(var) == 2 && var[1] == var[2]
+      df[!, name] .= var[1]
+    elseif length(var) == length(df.time)
+      df[!, name] = var
+    else
+      throw(DimensionMismatch("Length of $name [$(length(var))] differs from the dataframe [$(length(df.time))], cannot add it"))
+    end
+  end
+  return df
+end
 
 end #MAT_v4_Modelica

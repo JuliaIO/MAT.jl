@@ -11,7 +11,6 @@ Pkg.activate(joinpath(@__DIR__, ".."))
 using Test
 cd(joinpath(@__DIR__,".."))
 include("../src/MAT.jl")
-# include("../src/MAT_v4_Modelica.jl")
 
 #OpenModelica v1.19.0
 matBBO = joinpath(@__DIR__, "v4_Modelica","BouncingBall","BouncingBall_res.mat")
@@ -134,14 +133,31 @@ end
   var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.frame_a.R.T[1,1]") 
   @test isapprox(var[26], 0.983794001, rtol=1e-3)
 
-  @test_throws ErrorException MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.frame_a.v_0[1]")  # there is no frame_A.v_0
+  @test_throws ArgumentError MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.frame_a.v_0[1]")  # there is no frame_A.v_0
 
   var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.v_0[2]") 
   @test isapprox(var[33], -0.58818129, rtol=1e-3)
 
   var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.frame_b.r_0[1]") 
   @test isapprox(var[72], 0.935886479, rtol=1e-3)
+
+  var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "world.animateGravity") 
+  @test isapprox(var[1], 1.0, rtol=1e-3)
 end
+
+@testset "all-in-one readVariable" begin
+  data = MAT.MAT_v4_Modelica.readVariable(matFBB, "bodyBox.frame_a.r_0[1]")
+  @test isapprox(data[!,"bodyBox.frame_a.r_0[1]"][16], 0.002923239, rtol=1e-3)
+  @test_throws ArgumentError MAT.MAT_v4_Modelica.readVariable(matFBB, "nullVariable")
+end
+
+@testset "all-in-one readVariables" begin
+  data = MAT.MAT_v4_Modelica.readVariables(matFBB, ["bodyBox.frame_a.r_0[1]","bodyBox.frame_a.R.T[1,1]", "world.animateGravity"] )
+  @test isapprox(data[!,"bodyBox.frame_a.r_0[1]"][16], 0.002923239, rtol=1e-3)
+  @test isapprox(data[!,"bodyBox.frame_a.R.T[1,1]"][26], 0.983794001, rtol=1e-3)
+  @test isapprox(data[!,"world.animateGravity"][26], 1.0, rtol=1e-3) #this constant of length 2 is filled across dataframe's time
+end
+
 
 ;
 
