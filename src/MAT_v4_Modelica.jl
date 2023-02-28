@@ -112,7 +112,7 @@ end
 Reads the Aclass matrix, returing if the data is stored binNormal or binTranspose
 """
 function readAclass( filepath::String )
-  open(filepath, "r", lock=false) do matio
+  open(filepath, "r") do matio
     seekstart(matio) # always start from the start, don't assume the position
     startP = position(matio)
 
@@ -160,7 +160,7 @@ struct VariableNames
 end
 
 function readVariableNames(ac::Aclass)
-  open(ac.filepath, "r", lock=false) do matio
+  open(ac.filepath, "r") do matio
     seek(matio, ac.positionEnd) #skip over Aclass
     startP = position(matio)
 
@@ -228,7 +228,7 @@ struct VariableDescriptions
 end
 
 function readVariableDescriptions(ac::Aclass, vn::VariableNames)
-   open(ac.filepath, "r", lock=false) do matio
+   open(ac.filepath, "r") do matio
     seek(matio, vn.positionEnd) #this follows the VariableNames matrix
     startP = position(matio)
 
@@ -287,7 +287,7 @@ Is an n x 4 integer matrix containing information for each variable (in the same
   dataInfo(i,4) is -1 in OpenModelica to signify that the value is not defined outside the time range. 0 keeps the first/last value when going outside the time range and 1 performs linear interpolation on the first/last two points.
 """
 function readDataInfo(ac::Aclass, vd::VariableDescriptions)
-   open(ac.filepath, "r", lock=false) do matio
+   open(ac.filepath, "r") do matio
     seek(matio, vd.positionEnd) #this follows the VariableNames matrix
     startP = position(matio)
 
@@ -365,7 +365,7 @@ end
 read one variable from the file
 """
 function readVariable(ac::Aclass, vn::VariableNames, vd::VariableDescriptions, di::DataInfo, name::String)
-  open(ac.filepath, "r", lock=false) do matio
+  open(ac.filepath, "r") do matio
     seek(matio, di.positionEnd) #this follows the VariableNames matrix
 
     # read data1 header:
