@@ -28,6 +28,7 @@ using HDF5, SparseArrays
 
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")
+include("MAT_v4.jl")
 
 using .MAT_HDF5, .MAT_v5
 
@@ -54,8 +55,10 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     magic = read!(rawfid, Vector{UInt8}(undef, 4))
     for i = 1:length(magic)
         if magic[i] == 0
-            close(rawfid)
-            error("\"$filename\" is not a MAT file, or is an unsupported (v4) MAT file")
+            if wr || cr || tr || ff
+                error("creating or appending to MATLAB v4 files is not supported")
+            end
+            return MAT_v4.matopen(rawfid)
         end
     end
 
