@@ -32,7 +32,7 @@ include("MAT_v4.jl")
 
 using .MAT_HDF5, .MAT_v5, .MAT_v4
 
-export matopen, matread, matwrite, matwrite4, names, exists, @read, @write
+export matopen, matread, matwrite, @read, @write
 
 # Open a MATLAB file
 const HDF5_HEADER = UInt8[0x89, 0x48, 0x44, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]
@@ -139,25 +139,47 @@ end
 
 # Write a dict to a MATLAB file
 """
-    matwrite(filename, d::Dict; compress::Bool = false)
+    matwrite(filename, d::Dict; compress::Bool = false, version::String)
 
 Write a dictionary containing variable names as keys and values as values
 to a Matlab file, opening and closing it automatically.
 """
-function matwrite(filename::AbstractString, dict::AbstractDict{S, T}; compress::Bool = false) where {S, T}
-    file = matopen(filename, "w"; compress = compress)
-    try
-        for (k, v) in dict
-            local kstring
-            try
-                kstring = ascii(convert(String, k))
-            catch x
-                error("matwrite requires a Dict with ASCII keys")
+function matwrite(filename::AbstractString, dict::AbstractDict{S, T}; compress::Bool = false, version::String ="") where {S, T}
+
+    if version == "v4"
+        file = open(filename, "w")
+        m = MAT_v4.Matlabv4File(file, false)
+        try
+            for (k, v) in dict
+                local kstring
+                try
+                    kstring = ascii(convert(String, k))
+                catch x
+                    error("matwrite requires a Dict with ASCII keys")
+                end
+                write(m, kstring, v)
             end
-            write(file, kstring, v)
+        finally
+            close(file)
         end
-    finally
-        close(file)
+
+    else
+        
+        file = matopen(filename, "w"; compress = compress)
+        try
+            for (k, v) in dict
+                local kstring
+                try
+                    kstring = ascii(convert(String, k))
+                catch x
+                    error("matwrite requires a Dict with ASCII keys")
+                end
+                write(file, kstring, v)
+            end
+        finally
+            close(file)
+        end
+
     end
 end
 
@@ -173,25 +195,6 @@ end
 @noinline function Base.names(matfile::Union{MAT_v4.Matlabv4File,MAT_v5.Matlabv5File,MAT_HDF5.MatlabHDF5File})
     Base.depwarn("`names(matfile)` is deprecated, use `keys(matfile)` instead.", :names)
     return keys(matfile)
-end
-
-
-function matwrite4(filename::AbstractString, dict::AbstractDict{S, T}) where {S, T}
-    file = open(filename, "w")
-    m = MAT_v4.Matlabv4File(file, false)
-    try
-        for (k, v) in dict
-            local kstring
-            try
-                kstring = ascii(convert(String, k))
-            catch x
-                error("matwrite requires a Dict with ASCII keys")
-            end
-            write(m, kstring, v)
-        end
-    finally
-        close(file)
-    end
 end
 
 end

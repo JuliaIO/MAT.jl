@@ -62,7 +62,7 @@ To write in MATLAB v4 format:
 matwrite4("matfile.mat", Dict(
 	"myvar1" => 0,
 	"myvar2" => 1
-))
+);version="v4")
 ```
 
 To get a list of variable names in a MAT file:
@@ -86,7 +86,7 @@ close(file)
 ## Caveats
 
 * All files are written in MATLAB v7.3 format by default.
-* Writing in MATLAB v4 format is provided by the matwrite4 function.
+* Writing in MATLAB v4 format is provided by the matwrite function with keyword argument.
 
 ## Credits
 
