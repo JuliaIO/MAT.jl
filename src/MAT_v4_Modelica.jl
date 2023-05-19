@@ -134,7 +134,7 @@ function readAclass( filepath::String )
     end
 
     nameuint = read!(matio, Vector{UInt8}(undef, namelen)) # read the full namelen to make the pointer ready to read the data
-    name = replace(String(nameuint), '\0'=>"")
+    name = strip(replace(String(nameuint), '\0'=>""))
     if name != "Aclass"
       error("First matrix must be named Aclass, is instead [$name]. This likely means that [$filepath] is not a Modelica MAT v4 file.")
     end
@@ -143,10 +143,10 @@ function readAclass( filepath::String )
     fmt = dataFormat(dtype) # read the format type before reading
     realint = read!(matio, Matrix{UInt8}(undef, nrows,ncols))  
 
-    Aclass1 = replace(String(realint[1,:]), '\0'=>"")
-    Aclass2 = replace(String(realint[2,:]), '\0'=>"")
-    Aclass3 = replace(String(realint[3,:]), '\0'=>"")
-    Aclass4 = replace(String(realint[4,:]), '\0'=>"")
+    Aclass1 = strip(replace(String(realint[1,:]), '\0'=>""))
+    Aclass2 = strip(replace(String(realint[2,:]), '\0'=>""))
+    Aclass3 = strip(replace(String(realint[3,:]), '\0'=>""))
+    Aclass4 = strip(replace(String(realint[4,:]), '\0'=>""))
     if Aclass1 == "Atrajectory" && Aclass2 == "1.1" && isempty(Aclass3) && Aclass4 == "binNormal" || Aclass4 == "binTrans"
       return Aclass( filepath, Aclass4 == "binTranspose", startP, position(matio) )
     end
@@ -180,7 +180,7 @@ function readVariableNames(ac::Aclass)
 
     #read the matrix name
     nameuint = read!(matio, Vector{UInt8}(undef, namelen)) # read the full namelen to make the pointer ready to read the data
-    matrixName = replace(String(nameuint), '\0'=>"")
+    matrixName = strip(replace(String(nameuint), '\0'=>""))
     if matrixName != "name"
       error("trying to read matrix [name] but read [$matrixName]")
     end
@@ -197,7 +197,7 @@ function readVariableNames(ac::Aclass)
     #pull the names out of the matrix
     vnames = []
     for i in 1:ncols
-      push!(vnames, replace(String(realint[:,i]), '\0'=>"")) # note :,1 = implicit transpose
+      push!(vnames, strip(replace(String(realint[:,i]), '\0'=>""))) # note :,1 = implicit transpose
     end
 
     return VariableNames(vnames, startP, position(matio))
@@ -247,7 +247,7 @@ function readVariableDescriptions(ac::Aclass, vn::VariableNames)
 
     #read the matrix name
     nameuint = read!(matio, Vector{UInt8}(undef, namelen)) # read the full namelen to make the pointer ready to read the data
-    matrixName = replace(String(nameuint), '\0'=>"")
+    matrixName = strip(replace(String(nameuint), '\0'=>""))
     if matrixName != "description"
       error("trying to read matrix [description] but read [$matrixName]")
     end
@@ -263,7 +263,7 @@ function readVariableDescriptions(ac::Aclass, vn::VariableNames)
 
     vdesc = []
     for i in 1:ncols
-      push!(vdesc, replace(String(realread[:,i]), '\0'=>"")) # note :,1 = implicit transpose
+      push!(vdesc, strip(replace(String(realread[:,i]), '\0'=>""))) # note :,1 = implicit transpose
     end
 
     return VariableDescriptions(vn.names, vdesc, startP, position(matio))
@@ -306,7 +306,7 @@ function readDataInfo(ac::Aclass, vd::VariableDescriptions)
 
     #read the matrix name
     nameuint = read!(matio, Vector{UInt8}(undef, namelen)) # read the full namelen to make the pointer ready to read the data
-    matrixName = replace(String(nameuint), '\0'=>"")
+    matrixName = strip(replace(String(nameuint), '\0'=>""))
     if matrixName != "dataInfo"
       error("trying to read variable [dataInfo] but read [$matrixName]")
     end
@@ -355,7 +355,7 @@ function readMatrixHeader!(matio::IOStream) :: MatrixHeader
 
   # data1MatrixName = mark(matio)
   nameuint = read!(matio, Vector{UInt8}(undef, namelen)) # read the full namelen to make the pointer ready to read the data
-  matrixName = replace(String(nameuint), '\0'=>"")
+  matrixName = strip(replace(String(nameuint), '\0'=>""))
 
   fmt = dataFormat(dtype) # read the format type before reading
 
@@ -406,7 +406,7 @@ function readVariable(ac::Aclass, vn::VariableNames, vd::VariableDescriptions, d
         return readns
       end
 
-    elseif name == "time" || di.info[varInd]["locatedInData"] == 2 #data_2
+    elseif name == "Time" || name == "time" || di.info[varInd]["locatedInData"] == 2 #data_2
       #read the matrix data_2
       if ac.isTranspose == false
         # data is sequential: time(t0), var1(t0), var2(t0),... varN(t0), time(t1), var1(t1),...

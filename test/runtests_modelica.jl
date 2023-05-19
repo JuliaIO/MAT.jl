@@ -15,8 +15,8 @@ include("../src/MAT.jl")
 #OpenModelica v1.19.0
 matBBO = joinpath(@__DIR__, "v4_Modelica","BouncingBall","BouncingBall_res.mat")
 matFBB = joinpath(@__DIR__, "v4_Modelica","FallingBodyBox","FallingBodyBox_res.mat")
-#Dymola v2021 -- not implemented
-# matBBD = joinpath(@__DIR__, "v4_Modelica","BouncingBall","BouncingBall_dymola2021.mat")
+#Dymola v2021
+matBBD = joinpath(@__DIR__, "v4_Modelica","BouncingBall","BouncingBall_dymola2021.mat")
 
 
 @testset "isLittleEndian" begin
@@ -85,7 +85,7 @@ end
   @test di.info[11]["isWithinTimeRange"] == 0
 end
 
-@testset "readVariable: BouncingBall" begin
+@testset "readVariable: BouncingBall OpenModelica" begin
   ac = MAT.MAT_v4_Modelica.readAclass(matBBO)
   vn = MAT.MAT_v4_Modelica.readVariableNames(ac)
   vd = MAT.MAT_v4_Modelica.readVariableDescriptions(ac,vn)
@@ -103,6 +103,33 @@ end
 
   time = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "time") # data0
   @test all(isapprox.(time, [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,1], rtol=1e-3))
+
+  height = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "height") #data2
+  @test isapprox(height[1], 111, rtol=1e-3)
+  @test isapprox(height[2], 110.9509, rtol=1e-3)
+
+  vel = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "vel") #data2
+  @test isapprox(vel[2], -0.981, rtol=1e-3)
+end
+
+@testset "readVariable: BouncingBall Dymola" begin
+  ac = MAT.MAT_v4_Modelica.readAclass(matBBD)
+  vn = MAT.MAT_v4_Modelica.readVariableNames(ac)
+  vd = MAT.MAT_v4_Modelica.readVariableDescriptions(ac,vn)
+  di = MAT.MAT_v4_Modelica.readDataInfo(ac,vd)
+
+  eff = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "eff") #data1
+  @test length(eff) == 2
+  @test eff[1] ≈ 0.77
+  @test eff[2] ≈ 0.77
+
+  grav = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "grav") #data1
+  @test length(grav) == 2
+  @test grav[1] ≈ 9.81
+  @test grav[2] ≈ 9.81
+
+  Time = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "Time") # data0
+  @test all(isapprox.(Time, [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,1], rtol=1e-3))
 
   height = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "height") #data2
   @test isapprox(height[1], 111, rtol=1e-3)
