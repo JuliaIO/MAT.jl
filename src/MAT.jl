@@ -28,10 +28,11 @@ using HDF5, SparseArrays
 
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")
+include("MAT_v4.jl")
 
-using .MAT_HDF5, .MAT_v5
+using .MAT_HDF5, .MAT_v5, .MAT_v4
 
-export matopen, matread, matwrite, @read, @write
+export matopen, matread, matwrite, matwrite4, names, exists, @read, @write
 
 # Open a MATLAB file
 const HDF5_HEADER = UInt8[0x89, 0x48, 0x44, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]
@@ -44,19 +45,18 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         error("File \"$filename\" does not exist and create was not specified")
     end
 
-    # Test whether this is a MAT file
-    if fs < 128
-        error("File \"$filename\" is too small to be a supported MAT file")
-    end
     rawfid = open(filename, "r")
 
     # Check for MAT v4 file
-    magic = read!(rawfid, Vector{UInt8}(undef, 4))
-    for i = 1:length(magic)
-        if magic[i] == 0
-            close(rawfid)
-            error("\"$filename\" is not a MAT file, or is an unsupported (v4) MAT file")
-        end
+    (isv4, swap_bytes) = MAT_v4.checkv4(rawfid)
+    if isv4
+        return MAT_v4.matopen(rawfid, swap_bytes)
+    end
+
+    # Test whether this is a MAT file
+    if fs < 128
+        close(rawfid)
+        error("File \"$filename\" is too small to be a supported MAT file")
     end
 
     # Check for MAT v5 file
@@ -166,13 +166,32 @@ end
 ###
 
 export exists
-@noinline function exists(matfile::Union{MAT_v5.Matlabv5File,MAT_HDF5.MatlabHDF5File}, varname::String)
+@noinline function exists(matfile::Union{MAT_v4.Matlabv4File,MAT_v5.Matlabv5File,MAT_HDF5.MatlabHDF5File}, varname::String)
     Base.depwarn("`exists(matfile, varname)` is deprecated, use `haskey(matfile, varname)` instead.", :exists)
     return haskey(matfile, varname)
 end
-@noinline function Base.names(matfile::Union{MAT_v5.Matlabv5File,MAT_HDF5.MatlabHDF5File})
+@noinline function Base.names(matfile::Union{MAT_v4.Matlabv4File,MAT_v5.Matlabv5File,MAT_HDF5.MatlabHDF5File})
     Base.depwarn("`names(matfile)` is deprecated, use `keys(matfile)` instead.", :names)
     return keys(matfile)
+end
+
+
+function matwrite4(filename::AbstractString, dict::AbstractDict{S, T}) where {S, T}
+    file = open(filename, "w")
+    m = MAT_v4.Matlabv4File(file, false)
+    try
+        for (k, v) in dict
+            local kstring
+            try
+                kstring = ascii(convert(String, k))
+            catch x
+                error("matwrite requires a Dict with ASCII keys")
+            end
+            write(m, kstring, v)
+        end
+    finally
+        close(file)
+    end
 end
 
 end
