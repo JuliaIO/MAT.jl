@@ -59,7 +59,7 @@ matwrite("matfile.mat", Dict(
 To write in MATLAB v4 format:
 
 ```julia
-matwrite4("matfile.mat", Dict(
+matwrite("matfile.mat", Dict(
 	"myvar1" => 0,
 	"myvar2" => 1
 );version="v4")
