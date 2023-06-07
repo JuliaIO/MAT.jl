@@ -1,6 +1,9 @@
 # MAT.jl
 [![Build Status](https://github.com/JuliaIO/MAT.jl/workflows/CI/badge.svg?branch=master)](https://github.com/JuliaIO/MAT.jl/actions)
 
+[![docs-stable][docs-stable-img]][docs-stable-url]
+[![docs-dev][docs-dev-img]][docs-dev-url]
+
 ### Read and write MATLAB files in Julia
 
 This library can read MATLAB `.mat` files, both in the older v4/v5/v6/v7 format, as well as the newer v7.3 format.
@@ -91,3 +94,10 @@ close(file)
 ## Credits
 
 The MAT_HDF5 module, which provides read/write support for MATLAB v7.3 files, was written primarily by [Tim Holy](https://github.com/timholy/). The MAT_v5 module, which provides read support for MATLAB v5/v6/v7 files, was written primarily by [Simon Kornblith](https://github.com/simonster/). The MAT_v4 module, which provides read and write support for MATLAB v4 files, was written primarily by [Victor Saase](https://github.com/vsaase/).
+
+
+<!-- URLs -->
+[docs-stable-img]: https://img.shields.io/badge/docs-stable-blue.svg
+[docs-stable-url]: https://JuliaIO.github.io/MAT.jl/stable
+[docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
+[docs-dev-url]: https://JuliaIO.github.io/MAT.jl/dev
