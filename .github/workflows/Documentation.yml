@@ -40,8 +40,7 @@ jobs:
             Pkg.instantiate()'
       - name: BuildAndDeploy
         env:
-# https://juliadocs.github.io/Documenter.jl/stable/man/hosting/#Authentication:-GITHUB_TOKEN
-#         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ssh: ${{ secrets.DOCUMENTER_KEY }}
+          JULIA_PKG_SERVER: ""
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
         run: julia --project=docs/ docs/make.jl
