@@ -1,6 +1,6 @@
 execute = isempty(ARGS) || ARGS[1] == "run"
 
-org, reps = :JuilaIO, :MAT
+org, reps = :JuliaIO, :MAT
 eval(:(using $reps))
 using Documenter
 using Literate
@@ -66,7 +66,7 @@ makedocs(;
 if isci
     deploydocs(;
         repo = "github.com/$base",
-        devbranch = "main",
+        devbranch = "master",
         devurl = "dev",
         versions = ["stable" => "v^", "dev" => "dev"],
         forcepush = true,
