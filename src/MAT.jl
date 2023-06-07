@@ -29,9 +29,8 @@ using HDF5, SparseArrays
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")
 include("MAT_v4.jl")
-include("MAT_v4_Modelica.jl")
 
-using .MAT_HDF5, .MAT_v5, .MAT_v4, .MAT_v4_Modelica
+using .MAT_HDF5, .MAT_v5, .MAT_v4
 
 export matopen, matread, matwrite, @read, @write
 
@@ -190,11 +189,11 @@ end
 ###
 
 export exists
-@noinline function exists(matfile::Union{MAT_v5.Matlabv5File,MAT_HDF5.MatlabHDF5File}, varname::String)
+@noinline function exists(matfile::Union{MAT_v4.Matlabv4File,MAT_v5.Matlabv5File,MAT_HDF5.MatlabHDF5File}, varname::String)
     Base.depwarn("`exists(matfile, varname)` is deprecated, use `haskey(matfile, varname)` instead.", :exists)
     return haskey(matfile, varname)
 end
-@noinline function Base.names(matfile::Union{MAT_v5.Matlabv5File,MAT_HDF5.MatlabHDF5File})
+@noinline function Base.names(matfile::Union{MAT_v4.Matlabv4File,MAT_v5.Matlabv5File,MAT_HDF5.MatlabHDF5File})
     Base.depwarn("`names(matfile)` is deprecated, use `keys(matfile)` instead.", :names)
     return keys(matfile)
 end
