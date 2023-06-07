@@ -65,7 +65,7 @@ makedocs(;
 
 if isci
     deploydocs(;
-        repo = "github.com/$base",
+        repo = "github.com/JuliaIO/MAT.jl",
         devbranch = "master",
         devurl = "dev",
         versions = ["stable" => "v^", "dev" => "dev"],
