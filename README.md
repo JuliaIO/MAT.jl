@@ -6,7 +6,7 @@
 
 ### Read and write MATLAB files in Julia
 
-This library can read MATLAB `.mat` files, both in the older v5/v6/v7 format, as well as the newer v7.3 format.
+This library can read MATLAB `.mat` files, both in the older v4/v5/v6/v7 format, as well as the newer v7.3 format.
 
 ## Installation
 
@@ -59,6 +59,15 @@ matwrite("matfile.mat", Dict(
 ); compress = true)
 ```
 
+To write in MATLAB v4 format:
+
+```julia
+matwrite("matfile.mat", Dict(
+	"myvar1" => 0,
+	"myvar2" => 1
+);version="v4")
+```
+
 To get a list of variable names in a MAT file:
 
 ```julia
@@ -79,12 +88,12 @@ close(file)
 
 ## Caveats
 
-* All files are written in MATLAB v7.3 format.
-* MATLAB v4 files are not currently supported.
+* All files are written in MATLAB v7.3 format by default.
+* Writing in MATLAB v4 format is provided by the matwrite function with keyword argument.
 
 ## Credits
 
-The MAT_HDF5 module, which provides read/write support for MATLAB v7.3 files, was written primarily by [Tim Holy](https://github.com/timholy/). The MAT_v5 module, which provides read support for MATLAB v5/v6/v7 files, was written primarily by [Simon Kornblith](https://github.com/simonster/).
+The MAT_HDF5 module, which provides read/write support for MATLAB v7.3 files, was written primarily by [Tim Holy](https://github.com/timholy/). The MAT_v5 module, which provides read support for MATLAB v5/v6/v7 files, was written primarily by [Simon Kornblith](https://github.com/simonster/). The MAT_v4 module, which provides read and write support for MATLAB v4 files, was written primarily by [Victor Saase](https://github.com/vsaase/).
 
 
 <!-- URLs -->
