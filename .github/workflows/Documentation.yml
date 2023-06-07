@@ -8,7 +8,7 @@ on:
     paths-ignore:
       - 'README.md'
     branches:
-      - 'main'
+      - 'master'
       - 'release-'
     tags: '*'
 
