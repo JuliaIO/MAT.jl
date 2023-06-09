@@ -1,5 +1,5 @@
 # A module to read MAT files written by OpenModelica tools
- 
+
 # Copyright (C) 2023   Ben Conrad
 #
 # Permission is hereby granted, free of charge, to any person obtaining
@@ -47,7 +47,6 @@
 
 
 module MAT_v4_Modelica
-using DataFrames
 
 function isLittleEndian(dtype) :: Bool 
   #The type flag contains an integer whose decimal digits encode storage information. If the integer is represented as MOPT where M is the thousands digit...
@@ -423,48 +422,6 @@ function readVariable(ac::Aclass, vn::VariableNames, vd::VariableDescriptions, d
       throw(ErrorException("variable [$name] is located in an unknown location") )
     end
   end #open
-end
-
-
-"""
-All-in-one reading of variable `name` from `filepath`, returning a DataFrame with columns "time" and `name`
-"""
-function readVariable(filepath::String, name::String) :: DataFrame
-  ac = readAclass(filepath)
-  vn = readVariableNames(ac)
-  vd = readVariableDescriptions(ac,vn)
-  di = readDataInfo(ac,vd)
-
-  time = readVariable(ac, vn, vd, di, "time") 
-  varn = readVariable(ac, vn, vd, di, name) 
-
-  df = DataFrame("time"=>time, name=>varn)
-  return df
-end
-
-"""
-Reads the vector of variable `names` from mat file `filepath`, returning a DataFrame with columns "time" and `names`
-"""
-function readVariables(filepath::String, names::AbstractVector{T}) :: DataFrame where T<:AbstractString 
-  ac = readAclass(filepath)
-  vn = readVariableNames(ac)
-  vd = readVariableDescriptions(ac,vn)
-  di = readDataInfo(ac,vd)
-
-  df = DataFrame("time"=> readVariable(ac, vn, vd, di, "time") )
-  for name in names
-    var = readVariable(ac,vn,vd,di, name)
-    if length(var) == 1 # a constant value
-      df[!, name] .= var[1]
-    elseif length(var) == 2 && var[1] == var[2]
-      df[!, name] .= var[1]
-    elseif length(var) == length(df.time)
-      df[!, name] = var
-    else
-      throw(DimensionMismatch("Length of $name [$(length(var))] differs from the dataframe [$(length(df.time))], cannot add it"))
-    end
-  end
-  return df
 end
 
 end #MAT_v4_Modelica
