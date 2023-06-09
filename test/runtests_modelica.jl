@@ -13,10 +13,11 @@ cd(joinpath(@__DIR__,".."))
 include("../src/MAT.jl")
 
 #OpenModelica v1.19.0
-matBBO = joinpath(@__DIR__, "v4_Modelica","BouncingBall","BouncingBall_res.mat")
-matFBB = joinpath(@__DIR__, "v4_Modelica","FallingBodyBox","FallingBodyBox_res.mat")
+bbOM = joinpath(@__DIR__, "v4_Modelica","BouncingBall","BouncingBall_om1.19.0.mat")
+fbbOM = joinpath(@__DIR__, "v4_Modelica","FallingBodyBox","FallingBodyBox_om1.19.0.mat")
+
 #Dymola v2021
-matBBD = joinpath(@__DIR__, "v4_Modelica","BouncingBall","BouncingBall_dymola2021.mat")
+bbDy = joinpath(@__DIR__, "v4_Modelica","BouncingBall","BouncingBall_dymola2021.mat")
 
 
 @testset "isLittleEndian" begin
@@ -38,14 +39,25 @@ end
   @test MAT.MAT_v4_Modelica.typeBytes(Int32) == 4
 end
 
+@testset "isModelicaFormat" begin
+  @test MAT.MAT_v4_Modelica.isMatV4Modelica( bbOM );
+  @test MAT.MAT_v4_Modelica.isMatV4Modelica( fbbOM );
+  @test MAT.MAT_v4_Modelica.isMatV4Modelica( bbDy );
+
+  #cursorily check negative coverage
+  @test_throws EOFError MAT.MAT_v4_Modelica.isMatV4Modelica( joinpath( @__DIR__, "v6", "array.mat") )
+  @test_throws EOFError MAT.MAT_v4_Modelica.isMatV4Modelica( joinpath( @__DIR__, "v7", "array.mat") )
+  @test_throws EOFError MAT.MAT_v4_Modelica.isMatV4Modelica( joinpath( @__DIR__, "v7.3", "array.mat") )
+end
+
 @testset "Aclass" begin
-  ac = MAT.MAT_v4_Modelica.readAclass(matBBO)
+  ac = MAT.MAT_v4_Modelica.readAclass(bbOM)
   @test ac.positionStart == 0
   @test ac.positionEnd == 71
 end
 
 @testset "readVariableNames" begin
-  ac = MAT.MAT_v4_Modelica.readAclass(matBBO)
+  ac = MAT.MAT_v4_Modelica.readAclass(bbOM)
   vn = MAT.MAT_v4_Modelica.readVariableNames(ac)
   # @show vn
   @test length(vn.names) == 11
@@ -57,14 +69,14 @@ end
 end
 
 @testset "getVariableIndex" begin
-  ac = MAT.MAT_v4_Modelica.readAclass(matBBO)
+  ac = MAT.MAT_v4_Modelica.readAclass(bbOM)
   vn = MAT.MAT_v4_Modelica.readVariableNames(ac)
   @test MAT.MAT_v4_Modelica.getVariableIndex(vn, vn.names[3]) == 3
   @test MAT.MAT_v4_Modelica.getVariableIndex(vn, vn.names[10]) == 10
 end
 
 @testset "readVariableDescriptions" begin
-  ac = MAT.MAT_v4_Modelica.readAclass(matBBO)
+  ac = MAT.MAT_v4_Modelica.readAclass(bbOM)
   vn = MAT.MAT_v4_Modelica.readVariableNames(ac)
   vd = MAT.MAT_v4_Modelica.readVariableDescriptions(ac,vn)
   @test length(vd.descriptions) == 11  
@@ -74,7 +86,7 @@ end
 end
 
 @testset "readDataInfo" begin
-  ac = MAT.MAT_v4_Modelica.readAclass(matBBO)
+  ac = MAT.MAT_v4_Modelica.readAclass(bbOM)
   vn = MAT.MAT_v4_Modelica.readVariableNames(ac)
   vd = MAT.MAT_v4_Modelica.readVariableDescriptions(ac,vn)
   di = MAT.MAT_v4_Modelica.readDataInfo(ac,vd)
@@ -86,7 +98,7 @@ end
 end
 
 @testset "readVariable: BouncingBall OpenModelica" begin
-  ac = MAT.MAT_v4_Modelica.readAclass(matBBO)
+  ac = MAT.MAT_v4_Modelica.readAclass(bbOM)
   vn = MAT.MAT_v4_Modelica.readVariableNames(ac)
   vd = MAT.MAT_v4_Modelica.readVariableDescriptions(ac,vn)
   di = MAT.MAT_v4_Modelica.readDataInfo(ac,vd)
@@ -113,7 +125,7 @@ end
 end
 
 @testset "readVariable: BouncingBall Dymola" begin
-  ac = MAT.MAT_v4_Modelica.readAclass(matBBD)
+  ac = MAT.MAT_v4_Modelica.readAclass(bbDy)
   vn = MAT.MAT_v4_Modelica.readVariableNames(ac)
   vd = MAT.MAT_v4_Modelica.readVariableDescriptions(ac,vn)
   di = MAT.MAT_v4_Modelica.readDataInfo(ac,vd)
@@ -139,8 +151,8 @@ end
   @test isapprox(vel[2], -0.981, rtol=1e-3)
 end
 
-@testset "readVariable: FallingBodyBox" begin
-  ac = MAT.MAT_v4_Modelica.readAclass(matFBB)
+@testset "readVariable: FallingBodyBox OpenModelica" begin
+  ac = MAT.MAT_v4_Modelica.readAclass(fbbOM)
   vn = MAT.MAT_v4_Modelica.readVariableNames(ac)
   vd = MAT.MAT_v4_Modelica.readVariableDescriptions(ac,vn)
   di = MAT.MAT_v4_Modelica.readDataInfo(ac,vd)
@@ -171,19 +183,6 @@ end
   var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "world.animateGravity") 
   @test isapprox(var[1], 1.0, rtol=1e-3)
 end
-
-# @testset "all-in-one readVariable" begin
-#   data = MAT.MAT_v4_Modelica.readVariable(matFBB, "bodyBox.frame_a.r_0[1]")
-#   @test isapprox(data[!,"bodyBox.frame_a.r_0[1]"][16], 0.002923239, rtol=1e-3)
-#   @test_throws ArgumentError MAT.MAT_v4_Modelica.readVariable(matFBB, "nullVariable")
-# end
-
-# @testset "all-in-one readVariables" begin
-#   data = MAT.MAT_v4_Modelica.readVariables(matFBB, ["bodyBox.frame_a.r_0[1]","bodyBox.frame_a.R.T[1,1]", "world.animateGravity"] )
-#   @test isapprox(data[!,"bodyBox.frame_a.r_0[1]"][16], 0.002923239, rtol=1e-3)
-#   @test isapprox(data[!,"bodyBox.frame_a.R.T[1,1]"][26], 0.983794001, rtol=1e-3)
-#   @test isapprox(data[!,"world.animateGravity"][26], 1.0, rtol=1e-3) #this constant of length 2 is filled across dataframe's time
-# end
 
 
 ;

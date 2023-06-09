@@ -424,4 +424,24 @@ function readVariable(ac::Aclass, vn::VariableNames, vd::VariableDescriptions, d
   end #open
 end
 
+"""
+Determine whether the `filepath` is a mat file in the Modelica format.
+"""
+function isMatV4Modelica(filepath::String)
+  #first check the extension
+  ret = splitext(filepath)[2] == ".mat" || splitext(filepath)[2] == ".MAT"
+
+  #now we need to interrogate the contents, by ensuring that all of the internal functions return correctly
+  ac = readAclass(filepath)
+  vn = readVariableNames(ac)
+  vd = readVariableDescriptions(ac,vn)
+  di = readDataInfo(ac,vd)
+
+  ret &= typeof(ac) == Aclass
+  ret &= typeof(vn) == VariableNames
+  ret &= typeof(vd) == VariableDescriptions
+  ret &= typeof(di) == DataInfo
+  return ret;
+end
+
 end #MAT_v4_Modelica
