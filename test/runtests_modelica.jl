@@ -6,12 +6,7 @@
 #  test/v4_Modelica/FallingbodyBox/FallingBodyBox_res.mat - simulated with Dymola v2021 (Number of intervals = 100, Stop Time = 0.2)
 # These exercise every function in MAT_v4_Modelica.jl...but often use hand-observed values or otherwise require knowledge of the mat's contents
 
-import Pkg
-Pkg.activate(joinpath(@__DIR__, ".."))
-
-using Test
-cd(joinpath(@__DIR__,".."))
-include("../src/MAT.jl")
+using Test, MAT
 
 #OpenModelica v1.19.0
 bbOM = joinpath(@__DIR__, "v4_Modelica","BouncingBall","BouncingBall_om1.19.0.mat")
