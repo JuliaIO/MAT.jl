@@ -3,7 +3,7 @@
 #  test/v4_Modelica/BouncingBall/BouncingBall_res.mat - simulated with OpenModelica v1.19.0
 #  test/v4_Modelica/BouncingBall/BouncingBall_dymola2021.mat - simulated with Dymola v2021
 #  test/v4_Modelica/FallingbodyBox/FallingBodyBox_res.mat - simulated with OpenModelica v1.19.0
-#  test/v4_Modelica/FallingbodyBox/FallingBodyBox_res.mat - simulated with Dymola v2021 (Number of intervals = 100, Stop Time = 0.2)
+#  test/v4_Modelica/FallingbodyBox/FallingBodyBox_dymola2021.mat - simulated with Dymola v2021 (Number of intervals = 100, Stop Time = 0.2)
 # These exercise every function in MAT_v4_Modelica.jl...but often use hand-observed values or otherwise require knowledge of the mat's contents
 
 using Test, MAT
