@@ -3,14 +3,10 @@
 #  test/v4_Modelica/BouncingBall/BouncingBall_res.mat - simulated with OpenModelica v1.19.0
 #  test/v4_Modelica/BouncingBall/BouncingBall_dymola2021.mat - simulated with Dymola v2021
 #  test/v4_Modelica/FallingbodyBox/FallingBodyBox_res.mat - simulated with OpenModelica v1.19.0
+#  test/v4_Modelica/FallingbodyBox/FallingBodyBox_dymola2021.mat - simulated with Dymola v2021 (Number of intervals = 100, Stop Time = 0.2)
 # These exercise every function in MAT_v4_Modelica.jl...but often use hand-observed values or otherwise require knowledge of the mat's contents
 
-import Pkg
-Pkg.activate(joinpath(@__DIR__, ".."))
-
-using Test
-cd(joinpath(@__DIR__,".."))
-include("../src/MAT.jl")
+using Test, MAT
 
 #OpenModelica v1.19.0
 bbOM = joinpath(@__DIR__, "v4_Modelica","BouncingBall","BouncingBall_om1.19.0.mat")
@@ -18,6 +14,7 @@ fbbOM = joinpath(@__DIR__, "v4_Modelica","FallingBodyBox","FallingBodyBox_om1.19
 
 #Dymola v2021
 bbDy = joinpath(@__DIR__, "v4_Modelica","BouncingBall","BouncingBall_dymola2021.mat")
+fbbDy = joinpath(@__DIR__, "v4_Modelica","FallingBodyBox","FallingBodyBox_dymola2021.mat")
 
 
 @testset "isLittleEndian" begin
@@ -171,6 +168,40 @@ end
 
   var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.frame_a.R.T[1,1]") 
   @test isapprox(var[26], 0.983794001, rtol=1e-3)
+
+  @test_throws ArgumentError MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.frame_a.v_0[1]")  # there is no frame_A.v_0
+
+  var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.v_0[2]") 
+  @test isapprox(var[33], -0.58818129, rtol=1e-3)
+
+  var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.frame_b.r_0[1]") 
+  @test isapprox(var[72], 0.935886479, rtol=1e-3)
+
+  var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "world.animateGravity") 
+  @test isapprox(var[1], 1.0, rtol=1e-3)
+end
+
+@testset "readVariable: FallingBodyBox Dymola" begin
+  ac = MAT.MAT_v4_Modelica.readAclass(fbbDy)
+  vn = MAT.MAT_v4_Modelica.readVariableNames(ac)
+  vd = MAT.MAT_v4_Modelica.readVariableDescriptions(ac,vn)
+  di = MAT.MAT_v4_Modelica.readDataInfo(ac,vd)
+ 
+  var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "Time") 
+
+  # display(var)
+  ret = true
+  for i = 2:length(var)-1 #last time is duplicated
+    ret &= isapprox(var[i]-var[i-1], 0.002, rtol=1e-4)
+  end
+  @test ret == true
+
+  #point-check values read from FallingBodyBox_res.csv
+  var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.frame_a.r_0[1]") 
+  @test isapprox(var[16], 0.002923239, rtol=1e-2)
+
+  var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.frame_a.R.T[1, 1]") 
+  @test isapprox(var[26], 0.983794001, rtol=1e-2)
 
   @test_throws ArgumentError MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "bodyBox.frame_a.v_0[1]")  # there is no frame_A.v_0
 
