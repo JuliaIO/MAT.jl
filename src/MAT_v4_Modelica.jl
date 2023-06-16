@@ -444,4 +444,49 @@ function isMatV4Modelica(filepath::String)
   return ret;
 end
 
+
+"""
+All-in-one reading of variable `name` from `filepath`, returning a DataFrame with columns "time" and `name`
+"""
+function readVariable(filepath::String, name::String) 
+  ac = readAclass(filepath)
+  vn = readVariableNames(ac)
+  vd = readVariableDescriptions(ac,vn)
+  di = readDataInfo(ac,vd)
+
+  time = readVariable(ac, vn, vd, di, "time") 
+  varn = readVariable(ac, vn, vd, di, name) 
+  return Dict(["time"=>time, name=>varn]);
+
+  # df = DataFrame("time"=>time, name=>varn)
+  # return df
+end
+
+"""
+Reads the vector of variable `names` from mat file `filepath`, returning a DataFrame with columns "time" and `names`
+"""
+function readVariables(filepath::String, names::AbstractVector{T}) :: DataFrame where T<:AbstractString 
+  ac = readAclass(filepath)
+  vn = readVariableNames(ac)
+  vd = readVariableDescriptions(ac,vn)
+  di = readDataInfo(ac,vd)
+
+  data = Dict(["time"=> readVariable(ac, vn, vd, di, "time")])
+  for name in names
+    var = readVariable(ac,vn,vd,di, name)
+    if length(var) == 1 # a constant value
+      data[name] = var[1]
+    elseif length(var) == 2 && var[1] == var[2]
+      data[name] = var[1]
+    elseif length(var) == length(df.time)
+      data[name] = var
+    else
+      throw(DimensionMismatch("Length of $name [$(length(var))] differs from the dataframe [$(length(df.time))], cannot add it"))
+    end
+  end
+  return data
+end
+
+
+
 end #MAT_v4_Modelica
