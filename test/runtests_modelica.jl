@@ -7,7 +7,6 @@
 # These exercise every function in MAT_v4_Modelica.jl...but often use hand-observed values or otherwise require knowledge of the mat's contents
 
 using Test
-using Pkg
 using MAT
 
 #OpenModelica v1.19.0
