@@ -443,4 +443,50 @@ function isMatV4Modelica(filepath::String)
   return ret;
 end
 
+
+"""
+All-in-one reading of variable `name` from `filepath`, returning a Dict with keys "time" and `name`
+"""
+function readVariable(filepath::String, name::String) :: Dict
+  ac = readAclass(filepath)
+  vn = readVariableNames(ac)
+  vd = readVariableDescriptions(ac,vn)
+  di = readDataInfo(ac,vd)
+
+  time = readVariable(ac, vn, vd, di, "time") 
+  varn = readVariable(ac, vn, vd, di, name) 
+  return Dict(["time"=>time, name=>varn]);
+
+end
+
+"""
+Reads the vector of variable `names` from mat file `filepath`, returning a Dict with columns "time" and `names`
+"""
+# function readVariables(filepath::String, names::AbstractVector{T}) :: Dict where T<:AbstractString 
+function readVariables(filepath::String, names::AbstractVector{T}) where T<:AbstractString 
+  ac = readAclass(filepath)
+  vn = readVariableNames(ac)
+  vd = readVariableDescriptions(ac,vn)
+  di = readDataInfo(ac,vd)
+
+  data = Dict(["time"=> readVariable(ac, vn, vd, di, "time")])
+  for name in names
+    var = readVariable(ac,vn,vd,di, name)
+    if length(var) == 1 # a constant value
+      # data[name] = var[1]
+      data[name] = [var[1]]
+    elseif length(var) == 2 && var[1] == var[2] # this is a 2-element constant array: [123, 123]
+      # data[name] = var[1]
+      data[name] = [var[1]] # Dict infers Vector64
+    elseif length(var) == length(data["time"]) # a regular vector
+      data[name] = var
+    else
+      throw(DimensionMismatch("Length of $name [$(length(var))] differs from the dataframe [$(length(data["time"]))], cannot add it"))
+    end
+  end
+  return data
+end
+
+
+
 end #MAT_v4_Modelica
