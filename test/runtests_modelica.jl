@@ -6,7 +6,9 @@
 #  test/v4_Modelica/FallingbodyBox/FallingBodyBox_dymola2021.mat - simulated with Dymola v2021 (Number of intervals = 100, Stop Time = 0.2)
 # These exercise every function in MAT_v4_Modelica.jl...but often use hand-observed values or otherwise require knowledge of the mat's contents
 
-using Test, MAT
+using Test
+using Pkg
+using MAT
 
 #OpenModelica v1.19.0
 bbOM = joinpath(@__DIR__, "v4_Modelica","BouncingBall","BouncingBall_om1.19.0.mat")
@@ -200,7 +202,7 @@ end
   vn = MAT.MAT_v4_Modelica.readVariableNames(ac)
   vd = MAT.MAT_v4_Modelica.readVariableDescriptions(ac,vn)
   di = MAT.MAT_v4_Modelica.readDataInfo(ac,vd)
- 
+
   var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "Time") 
 
   # display(var)
@@ -228,7 +230,3 @@ end
   var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "world.animateGravity") 
   @test isapprox(var[1], 1.0, rtol=1e-3)
 end
-
-
-;
-
