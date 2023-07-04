@@ -201,7 +201,6 @@ end
   vn = MAT.MAT_v4_Modelica.readVariableNames(ac)
   vd = MAT.MAT_v4_Modelica.readVariableDescriptions(ac,vn)
   di = MAT.MAT_v4_Modelica.readDataInfo(ac,vd)
-
   var = MAT.MAT_v4_Modelica.readVariable(ac, vn, vd, di, "Time") 
 
   # display(var)
