@@ -83,7 +83,7 @@ end
 function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool)
     local f
     if ff && !wr
-        error("Cannot append to a write-only file")
+        error("Cannot append to a read-only file")
     end
     if !cr && !isfile(filename)
         error("File ", filename, " cannot be found")
