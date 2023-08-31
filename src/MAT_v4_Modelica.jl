@@ -152,6 +152,9 @@ function readAclass( filepath::String )
   end #open
 end
 
+"""
+  Struct to record variable names and their start/stop file positions.
+"""
 struct VariableNames
   # names::Vector{T}(undef,undef) where T<:AbstractString
   names::Vector{String}
@@ -457,7 +460,6 @@ function readVariable(filepath::String, name::String) :: Dict
   time = readVariable(ac, vn, vd, di, "time") 
   varn = readVariable(ac, vn, vd, di, name) 
   return Dict(["time"=>time, name=>varn]);
-
 end
 
 """
