@@ -54,6 +54,11 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         return MAT_v4.matopen(rawfid, swap_bytes)
     end
 
+    if fs < 128
+        close(rawfid)
+        error("file < 128")
+    end
+
     # Check for MAT v5 file
     seek(rawfid, 124)
     version = read(rawfid, UInt16)
