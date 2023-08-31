@@ -6,3 +6,6 @@ desktop.ini
 docs/build/
 docs/site/
 docs/src/generated/
+
+#vscode workspace
+*.code-workspace
