@@ -61,6 +61,7 @@ makedocs(;
         "Methods" => "methods.md",
 #       "Examples" => pages("examples")
     ],
+    warnonly = [:missing_docs,],
 )
 
 if isci
