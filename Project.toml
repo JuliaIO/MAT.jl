@@ -11,7 +11,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 [compat]
 BufferedStreams = "0.4.1, 1"
 CodecZlib = "0.5, 0.6, 0.7"
-HDF5 = "0.16"
+HDF5 = "0.16, 0.17"
 julia = "1.6"
 
 [extras]
