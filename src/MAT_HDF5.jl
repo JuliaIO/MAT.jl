@@ -229,7 +229,7 @@ function m_read(g::HDF5.Group)
             @warn "MATLAB $mattype values are currently not supported"
             return missing
         else
-            error("Cannot read from a non-struct group, type was $mattype")
+            @warn "Unknown non-struct group of type $mattype detected; attempting to read as struct"
         end
     end
     if haskey(g, "MATLAB_fields")

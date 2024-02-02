@@ -230,3 +230,10 @@ let objtestfile = "struct_table_datetime.mat"
     @test "testDatetime" in keys(vars)
     @test ismissing(vars["testDatetime"])
 end
+
+# test reading of old-style Matlab object in v7.3 format
+let objtestfile = "old_class.mat"
+    vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))
+    @test "tc_old" in keys(vars)
+    @test "foo" in keys(vars["tc_old"])
+end
