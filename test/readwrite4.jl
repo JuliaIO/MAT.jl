@@ -45,8 +45,10 @@ end
 cd(dirname(@__FILE__))
 for filename in readdir("v4")
     #println("testing $filename")
-    d = matread("v4/$filename")
-    matwrite("v4/tmp.mat", d; version="v4")
-    check("v4/tmp.mat", d)
-    rm("v4/tmp.mat")
+    @testset "readwrite4.jl testing $filename" begin
+        d = matread("v4/$filename")
+        matwrite("v4/tmp.mat", d; version="v4")
+        check("v4/tmp.mat", d)
+        rm("v4/tmp.mat")
+    end
 end

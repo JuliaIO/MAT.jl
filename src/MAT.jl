@@ -29,8 +29,9 @@ using HDF5, SparseArrays
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")
 include("MAT_v4.jl")
+include("MAT_v4_Modelica.jl")
 
-using .MAT_HDF5, .MAT_v5, .MAT_v4
+using .MAT_HDF5, .MAT_v5, .MAT_v4, .MAT_v4_Modelica
 
 export matopen, matread, matwrite, @read, @write
 
@@ -53,10 +54,9 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         return MAT_v4.matopen(rawfid, swap_bytes)
     end
 
-    # Test whether this is a MAT file
     if fs < 128
         close(rawfid)
-        error("File \"$filename\" is too small to be a supported MAT file")
+        error("file < 128")
     end
 
     # Check for MAT v5 file
