@@ -12,13 +12,16 @@ jobs:
         version:
           - '1.6'
           - '1'
-          - 'nightly'
+          - 'pre'
         os:
           - ubuntu-latest
-          - macOS-latest
           - windows-latest
         arch:
           - x64
+        include:
+          - os: macOS-14
+            arch: aarch64
+            version: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@latest
