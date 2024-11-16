@@ -117,6 +117,44 @@ Compression on reading is detected/handled automatically; the `compress`
 keyword argument only affects write operations.
 
 Use with `read`, `write`, `close`, `keys`, and `haskey`.
+
+## Examples
+
+### Usage with `read`
+
+```julia-repl
+julia> matwrite("test.mat", Dict("foo" => 1, "bar" => 2)) # create file
+julia> file = matopen("test.mat")
+julia> read(file) # get a dictionary of `key => value` pairs
+julia> read(file, "foo") # read a specific variable
+julia> close(file)
+```
+
+### Usage with `write`
+
+```julia-repl
+julia> matwrite("test.mat", Dict("foo" => 1, "bar" => 2)) # create file
+julia> file = matopen("test.mat", "w+")
+julia> write(file, "baz", 3) # test.mat now contains the variable "baz"
+julia> close(file)
+```
+
+```julia-repl
+julia> matwrite("test.mat", Dict("foo" => 1, "bar" => 2)) # create file
+julia> file = matopen("test.mat", "w")
+julia> write(file, "bop", 3) # test.mat now ONLY contains the variable "bop"
+julia> close(file)
+```
+
+### Usage with `keys` and `haskey`
+
+```julia-repl
+julia> matwrite("test.mat", Dict("foo" => 1, "bar" => 2)) # create file
+julia> file = matopen("test.mat")
+julia> keys(file) # ["bar", "foo"]
+julia> haskey(file, "bar") # true
+julia> close(file)
+```
 """
 matopen
 
@@ -126,6 +164,15 @@ matopen
 
 Return a dictionary of all the variables and values in a Matlab file,
 opening and closing it automatically.
+
+### Example
+
+```julia-repl
+julia> matwrite("test.mat", Dict("foo" => 1, "bar" => 2)) # create file
+julia> data = matread("test.mat")
+julia> keys(data) # KeySet containing "foo" and "bar"
+julia> data["foo"] # 1
+```
 """
 function matread(filename::AbstractString)
     file = matopen(filename)
@@ -140,10 +187,55 @@ end
 
 # Write a dict to a MATLAB file
 """
-    matwrite(filename, d::Dict; compress::Bool = false, version::String)
+    matwrite(filename, d::Dict; compress::Bool = false, version::String = "")
 
 Write a dictionary containing variable names as keys and values as values
 to a Matlab file, opening and closing it automatically.
+
+### Arguments
+
+- `filename`: The name of the output file. If `filename` already exists, \
+its contents will be completely replaced.
+- `d`: A dictionary of `key => value` pairs to write. 
+  - `key` should be a `String` that starts with a letter and contain only alphanumeric characters and underscores.
+  - `value` should be `<:Number`, `Array{<:Number}`, `String`, or `Bool`. `Tuple`, \
+  `Nothing` and custom `struct`s will not work.
+
+### Optional Arguments
+
+- `compress`: If `true`, the output data are compressed. Default `false`.
+- `version`: A `String` giving the target version. If equal to `"v4"`, \
+write to Matlab v4, otherwise write to Matlab v7.3. Default `""`.
+
+### Examples
+
+Write a dictionary of various types:
+
+```julia-repl
+julia> d = Dict(
+    "var1" => 1,
+    "var2" => 4.0 + 5.0*im,
+    "var3" => [1.0, 2.0, 3.0],
+    "var4" => rand(UInt8, 4, 4),
+    "var5" => true,
+    "var6" => "foo")
+julia> matwrite("test.mat", d)
+```
+
+Add a variable to an existing file:
+
+```julia-repl
+julia> d = Dict{String, Any}("var7" => "bar") # note use of `Any`
+julia> merge!(d, matread("test.mat"))
+julia> matwrite("test.mat", d) # "var7" is added to test.mat
+```
+
+Completely replace an existing file:
+
+```julia-repl
+julia> d = Dict{String, Any}("foo" => "bar")
+julia> matwrite("test.mat", d) # "foo" is now the only variable in test.mat
+```
 """
 function matwrite(filename::AbstractString, dict::AbstractDict{S, T}; compress::Bool = false, version::String ="") where {S, T}
 
