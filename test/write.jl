@@ -129,3 +129,7 @@ test_write(sd)
 # note: compression is NOT effective when the dict contains many duplicate entries
 # which are not compressible by themselves!
 test_compression_effective(Dict("data" => fill(1.0, 1000)))
+
+# test adjoint/reshape array 
+test_write(Dict("aa"=>[1 2 3;4 5 6;7 8 9]'))
+test_write(Dict("aa"=>reshape([1 2 3;4 5 6;7 8 9]',1,9)))
