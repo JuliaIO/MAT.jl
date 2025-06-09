@@ -371,8 +371,19 @@ function m_writearray(parent::HDF5Parent, name::String, adata::AbstractArray{Com
     end
 end
 
+function _normalize_arr(x)
+    if x isa Array
+        x
+    elseif x isa AbstractArray
+        collect(x)
+    else
+        x
+    end
+end
+
 # Write a scalar or array
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Union{T, Complex{T}, Array{T}, Array{Complex{T}}}) where {T<:HDF5BitsOrBool}
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Union{T, Complex{T}, AbstractArray{T}, AbstractArray{Complex{T}}}) where {T<:HDF5BitsOrBool}
+    data = _normalize_arr(data)
     if isempty(data)
         m_writeempty(parent, name, data)
         return
@@ -443,7 +454,8 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, str::A
 end
 
 # Write cell arrays
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Array{T}) where T
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::AbstractArray{T}) where T
+    data = _normalize_arr(data)
     pathrefs = "/#refs#"
     fid = HDF5.file(parent)
     local g
