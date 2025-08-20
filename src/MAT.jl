@@ -26,11 +26,12 @@ module MAT
 
 using HDF5, SparseArrays
 
+include("MAT_subsys.jl")
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")
 include("MAT_v4.jl")
 
-using .MAT_HDF5, .MAT_v5, .MAT_v4
+using .MAT_HDF5, .MAT_v5, .MAT_v4, .MAT_subsys
 
 export matopen, matread, matwrite, @read, @write
 
@@ -40,7 +41,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     # When creating new files, create as HDF5 by default
     fs = filesize(filename)
     if cr && (tr || fs == 0)
-        return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff, compress)
+        return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff, compress, Base.ENDIAN_BOM == 0x04030201)
     elseif fs == 0
         error("File \"$filename\" does not exist and create was not specified")
     end
@@ -76,7 +77,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         seek(rawfid, offset)
         if read!(rawfid, Vector{UInt8}(undef, 8)) == HDF5_HEADER
             close(rawfid)
-            return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff, compress)
+            return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff, compress, endian_indicator == 0x494D)
         end
     end
 
@@ -133,6 +134,7 @@ function matread(filename::AbstractString)
     try
         vars = read(file)
     finally
+        MAT_subsys.clear_subsys!()
         close(file)
     end
     vars
@@ -165,7 +167,7 @@ function matwrite(filename::AbstractString, dict::AbstractDict{S, T}; compress::
         end
 
     else
-        
+
         file = matopen(filename, "w"; compress = compress)
         try
             for (k, v) in dict

@@ -29,6 +29,7 @@
 module MAT_HDF5
 
 using HDF5, SparseArrays
+using ..MAT_subsys
 
 import Base: names, read, write, close
 import HDF5: Reference
@@ -69,8 +70,13 @@ function close(f::MatlabHDF5File)
                 unsafe_copyto!(magicptr, idptr, length(identifier))
             end
             magic[126] = 0x02
-            magic[127] = 0x49
-            magic[128] = 0x4d
+            if Base.ENDIAN_BOM == 0x04030201
+                magic[127] = 0x49
+                magic[128] = 0x4d
+            else
+                magic[127] = 0x4d
+                magic[128] = 0x49
+            end
             rawfid = open(f.plain.filename, "r+")
             write(rawfid, magic)
             close(rawfid)
@@ -80,7 +86,7 @@ function close(f::MatlabHDF5File)
     nothing
 end
 
-function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool)
+function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool, endian_indicator::Bool)
     local f
     if ff && !wr
         error("Cannot append to a read-only file")
@@ -109,6 +115,11 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         fid.refcounter = length(g)-1
         close(g)
     end
+    subsys_refs = "#subsystem#"
+    if haskey(fid.plain, subsys_refs)
+        subsys_data = m_read(fid.plain[subsys_refs])
+        MAT_subsys.load_subsys!(subsys_data, endian_indicator)
+    end
     fid
 end
 
@@ -118,6 +129,7 @@ const name_type_attr_matlab = "MATLAB_class"
 const empty_attr_matlab = "MATLAB_empty"
 const sparse_attr_matlab = "MATLAB_sparse"
 const int_decode_attr_matlab = "MATLAB_int_decode"
+const object_type_attr_matlab = "MATLAB_object_decode"
 
 ### Reading
 function read_complex(dtype::HDF5.Datatype, dset::HDF5.Dataset, ::Type{T}) where T
@@ -126,6 +138,21 @@ function read_complex(dtype::HDF5.Datatype, dset::HDF5.Dataset, ::Type{T}) where
         error("Unrecognized compound data type when reading ", HDF5.name(dset))
     end
     return read(dset, Complex{T})
+end
+
+function read_cell(dset::HDF5.Dataset)
+    refs = read(dset, Reference)
+    out = Array{Any}(undef, size(refs))
+    f = HDF5.file(dset)
+    for i = 1:length(refs)
+        dset = f[refs[i]]
+        try
+            out[i] = m_read(dset)
+        finally
+            close(dset)
+        end
+    end
+    return out
 end
 
 function m_read(dset::HDF5.Dataset)
@@ -150,36 +177,46 @@ function m_read(dset::HDF5.Dataset)
     end
 
     mattype = haskey(dset, name_type_attr_matlab) ? read_attribute(dset, name_type_attr_matlab) : "cell"
+    objecttype = haskey(dset, object_type_attr_matlab) ? read_attribute(dset, object_type_attr_matlab) : nothing
 
-    if mattype == "cell"
+    if mattype == "cell" && objecttype === nothing
         # Cell arrays, represented as an array of refs
-        refs = read(dset, Reference)
-        out = Array{Any}(undef, size(refs))
-        f = HDF5.file(dset)
-        for i = 1:length(refs)
-            dset = f[refs[i]]
-            try
-                out[i] = m_read(dset)
-            finally
-                close(dset)
-            end
+        return read_cell(dset)
+    elseif objecttype !== nothing
+        if objecttype != 3
+            @warn "MATLAB Object Type $mattype is currently not supported."
+            return missing
         end
-        return out
+        if mattype == "FileWrapper__"
+            return read_cell(dset)
+        end
+        if haskey(dset, "MATLAB_fields")
+            @warn "Enumeration Instances are not supported currently."
+            return missing
+        end
     elseif !haskey(str2type_matlab,mattype)
-        @warn "MATLAB $mattype values are currently not supported"
+        @warn "MATLAB $mattype values are currently not supported."
         return missing
     end
 
     # Regular arrays of values
     # Convert to Julia type
-    T = str2type_matlab[mattype]
+    if objecttype === nothing
+        T = str2type_matlab[mattype]
+    else
+        T = UInt32 # FIXME: Default for MATLAB objects?
+    end
 
     # Check for a COMPOUND data set, and if so handle complex numbers specially
     dtype = datatype(dset)
     try
         class_id = HDF5.API.h5t_get_class(dtype.id)
         d = class_id == HDF5.API.H5T_COMPOUND ? read_complex(dtype, dset, T) : read(dset, T)
-        length(d) == 1 ? d[1] : d
+        if objecttype !== nothing
+            return MAT_subsys.load_mcos_object(d, "MCOS")
+        else
+            return length(d) == 1 ? d[1] : d
+        end
     finally
         close(dtype)
     end
@@ -194,7 +231,11 @@ end
 
 # reading a struct, struct array, or sparse matrix
 function m_read(g::HDF5.Group)
-    mattype = read_attribute(g, name_type_attr_matlab)
+    if HDF5.name(g) == "/#subsystem#"
+        mattype = "#subsystem#"
+    else
+        mattype = read_attribute(g, name_type_attr_matlab)
+    end
     if mattype != "struct"
         # Check if this is a sparse matrix.
         fn = keys(g)
@@ -226,10 +267,11 @@ function m_read(g::HDF5.Group)
             end
             return SparseMatrixCSC(convert(Int, read_attribute(g, sparse_attr_matlab)), length(jc)-1, jc, ir, data)
         elseif mattype == "function_handle"
-            @warn "MATLAB $mattype values are currently not supported"
-            return missing
+            # Fall through
         else
-            @warn "Unknown non-struct group of type $mattype detected; attempting to read as struct"
+            if mattype != "#subsystem#"
+                @warn "Unknown non-struct group of type $mattype detected; attempting to read as struct"
+            end
         end
     end
     if haskey(g, "MATLAB_fields")
