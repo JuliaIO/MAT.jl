@@ -131,7 +131,7 @@ function read_matrix(f::IO, swap_bytes::Bool)
         # surprises, we produce an empty array in both cases.
         return ("", Matrix{Union{}}(undef, 0, 0))
     end
-    name = String(read_bswap(f, M==mBIG_ENDIAN, Vector{UInt8}(undef, namlen))[1:end-1])
+    name = strip(String(read_bswap(f, M==mBIG_ENDIAN, Vector{UInt8}(undef, namlen))), '\0')
     if T == tNUMERIC || T == tSPARSE
         real_data = read_bswap(f, M==mBIG_ENDIAN, Vector{pTYPE[P]}(undef, ncols*mrows))
         if T == tNUMERIC && imagf == imagfCOMPLEX
