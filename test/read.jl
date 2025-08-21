@@ -214,21 +214,46 @@ let objtestfile = "figure.fig"
 end
 
 # test reading file containing Matlab function handle, table, and datetime objects
-# since we don't support these objects, just make sure that there are no errors
-# reading the file and that the variables are there and replaced with `missing`
 let objtestfile = "function_handles.mat"
     vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))
     @test "sin" in keys(vars)
-    @test ismissing(vars["sin"])
+    @test typeof(vars["sin"]) == Dict{String, Any}
+    @test Set(keys(vars["sin"])) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
     @test "anonymous" in keys(vars)
-    @test ismissing(vars["anonymous"])
+    @test typeof(vars["anonymous"]) == Dict{String, Any}
+    @test Set(keys(vars["anonymous"])) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
 end
-let objtestfile = "struct_table_datetime.mat"
-    vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))["s"]
-    @test "testTable" in keys(vars)
-    @test ismissing(vars["testTable"])
-    @test "testDatetime" in keys(vars)
-    @test ismissing(vars["testDatetime"])
+
+for format in ["v7", "v7.3"]
+    let objtestfile = "struct_table_datetime.mat"
+        vars = matread(joinpath(dirname(@__FILE__), format, objtestfile))["s"]
+        @test "testTable" in keys(vars)
+        @test size(vars["testTable"]) == (1, 1)
+        @test Set(keys(vars["testTable"][1, 1])) == Set(["__class__", "props", "varnames", "nrows", "data", "rownames", "ndims", "nvars"])
+        @test vars["testTable"][1, 1]["__class__"] == "table"
+        @test vars["testTable"][1, 1]["ndims"] === 2.0
+        @test vars["testTable"][1, 1]["nvars"] === 5.0
+        @test vars["testTable"][1, 1]["nrows"] === 3.0
+        @test vars["testTable"][1, 1]["data"][1, 1] == reshape([1261.0, 547.0, 3489.0], 3, 1)
+        @test vars["testTable"][1, 1]["data"][1, 2][1, 1]["__class__"] == "string"
+        @test vars["testTable"][1, 1]["data"][1, 3][1, 1]["__class__"] == "datetime"
+        @test vars["testTable"][1, 1]["data"][1, 4][1, 1]["__class__"] == "categorical"
+        @test vars["testTable"][1, 1]["data"][1, 5][1, 1]["__class__"] == "string"
+
+        @test "testDatetime" in keys(vars)
+        @test size(vars["testDatetime"]) == (1, 1)
+        if format == "v7.3"
+            @test Set(keys(vars["testDatetime"][1, 1])) == Set(["__class__", "tz", "data", "fmt", "isDateOnly"])
+            @test vars["testDatetime"][1, 1]["isDateOnly"] === false
+        else
+            # MATLAB removed property "isDateOnly" in later versions
+            @test Set(keys(vars["testDatetime"][1, 1])) == Set(["__class__", "tz", "data", "fmt"])
+        end
+        @test vars["testDatetime"][1, 1]["__class__"] == "datetime"
+        @test vars["testDatetime"][1, 1]["tz"] === ""
+        @test vars["testDatetime"][1, 1]["fmt"] === ""
+        @test vars["testDatetime"][1, 1]["data"] === 1.575304969634e12 + 0.0im
+    end
 end
 
 # test reading of old-style Matlab object in v7.3 format

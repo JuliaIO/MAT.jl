@@ -29,6 +29,8 @@ module MAT_v5
 using CodecZlib, BufferedStreams, HDF5, SparseArrays
 import Base: read, write, close
 
+using ..MAT_subsys
+
 round_uint8(data) = round.(UInt8, data)
 complex_array(a, b) = complex.(a, b)
 
@@ -246,7 +248,7 @@ function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::
     end
     if length(ir) > length(pr)
         # Fix for Issue #169, xref https://github.com/JuliaLang/julia/pull/40523
-        #= 
+        #=
         # The following expression must be obeyed according to
         # https://github.com/JuliaLang/julia/blob/b3e4341d43da32f4ab6087230d98d00b89c8c004/stdlib/SparseArrays/src/sparsematrix.jl#L86-L90
         @debug "SparseMatrixCSC" m n jc ir pr
@@ -311,6 +313,18 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
     data
 end
 
+function read_opaque(f::IO, swap_bytes::Bool)
+    type_name = String(read_element(f, swap_bytes, UInt8))
+    classname = String(read_element(f, swap_bytes, UInt8))
+
+    if classname == "FileWrapper__"
+        return read_matrix(f, swap_bytes)
+    end
+
+    _, metadata = read_matrix(f, swap_bytes)
+    return MAT_subsys.load_mcos_object(metadata, type_name)
+end
+
 # Read matrix data
 function read_matrix(f::IO, swap_bytes::Bool)
     (dtype, nbytes) = read_header(f, swap_bytes)
@@ -332,15 +346,10 @@ function read_matrix(f::IO, swap_bytes::Bool)
     flags = read_element(f, swap_bytes, UInt32)
     class = flags[1] & 0xFF
 
-    if class == mxOPAQUE_CLASS
-        s0 = read_data(f, swap_bytes)
-        s1 = read_data(f, swap_bytes)
-        s2 = read_data(f, swap_bytes)
-        arr = read_matrix(f, swap_bytes)
-        return ("__opaque__", Dict("s0"=>s0, "s1"=>s1, "s2"=>s2, "arr"=>arr))
+    if class != mxOPAQUE_CLASS
+        dimensions = read_element(f, swap_bytes, Int32)
     end
 
-    dimensions = read_element(f, swap_bytes, Int32)
     name = String(read_element(f, swap_bytes, UInt8))
 
     local data
@@ -354,6 +363,8 @@ function read_matrix(f::IO, swap_bytes::Bool)
         data = read_string(f, swap_bytes, dimensions)
     elseif class == mxFUNCTION_CLASS
         data = read_matrix(f, swap_bytes)
+    elseif class == mxOPAQUE_CLASS
+        data = read_opaque(f, swap_bytes)
     else
         if (flags[1] & (1 << 9)) != 0 # logical
             data = read_data(f, swap_bytes, Bool, dimensions)
@@ -375,14 +386,41 @@ matopen(ios::IOStream, endian_indicator::UInt16) =
 
 # Read whole MAT file
 function read(matfile::Matlabv5File)
-    seek(matfile.ios, 128)
     vars = Dict{String, Any}()
+
+    seek(matfile.ios, 116)
+    subsys_offset = read_bswap(matfile.ios, matfile.swap_bytes, UInt64)
+    if subsys_offset == 0x2020202020202020
+        subsys_offset = 0
+    end
+    if subsys_offset != 0
+        read_subsystem(matfile.ios, matfile.swap_bytes, subsys_offset)
+    end
+
+    seek(matfile.ios, 128)
     while !eof(matfile.ios)
+        offset = position(matfile.ios)
+        if offset == subsys_offset
+            # Skip reading subsystem again
+            (_, nbytes) = read_header(matfile.ios, matfile.swap_bytes)
+            skip(matfile.ios, nbytes)
+            continue
+        end
         (name, data) = read_matrix(matfile.ios, matfile.swap_bytes)
         vars[name] = data
     end
     vars
 end
+
+function read_subsystem(ios::IOStream, swap_bytes::Bool, offset::UInt64)
+    seek(ios, offset)
+    (_, subsystem_data) = read_matrix(ios, swap_bytes)
+    buf = IOBuffer(vec(subsystem_data))
+    seek(buf, 8) # Skip subsystem header
+    _, subsys_data = read_matrix(buf, swap_bytes)
+    MAT_subsys.load_subsys!(subsys_data, swap_bytes)
+end
+
 # Read only variable names from an HDF5 file
 function getvarnames(matfile::Matlabv5File)
     if !isdefined(matfile, :varnames)
