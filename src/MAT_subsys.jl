@@ -118,11 +118,11 @@ function load_subsys!(subsystem_data::Dict{String,Any}, swap_bytes::Bool)
     subsys_cache[].obj_prop_metadata = reinterpret(UInt32, swap_bytes ? reverse(fwrap_metadata[region_offsets[4]+1:region_offsets[5]]) : fwrap_metadata[region_offsets[4]+1:region_offsets[5]])
     subsys_cache[].dynprop_metadata = reinterpret(UInt32, swap_bytes ? reverse(fwrap_metadata[region_offsets[5]+1:region_offsets[6]]) : fwrap_metadata[region_offsets[5]+1:region_offsets[6]])
 
-    if region_offsets[6] != 0
+    if region_offsets[7] != 0
         subsys_cache[]._u6_metadata = reinterpret(UInt32, swap_bytes ? reverse(fwrap_metadata[region_offsets[6]+1:region_offsets[7]]) : fwrap_metadata[region_offsets[6]+1:region_offsets[7]])
     end
 
-    if region_offsets[7] != 0
+    if region_offsets[8] != 0
         subsys_cache[]._u7_metadata = reinterpret(UInt32, swap_bytes ? reverse(fwrap_metadata[region_offsets[7]+1:region_offsets[8]]) : fwrap_metadata[region_offsets[7]+1:region_offsets[8]])
     end
 
