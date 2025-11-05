@@ -515,6 +515,47 @@ function _write_references!(mfile::MatlabHDF5File, parent::HDF5Parent, data::Abs
     return refs
 end
 
+
+# Struct array: Array of Dict => MATLAB struct array
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String,
+                 arr::AbstractArray{<:AbstractDict})
+
+    # Collect and validate fields from first element
+    fields = collect(keys(first(arr)))
+    asckeys = check_struct_keys(fields) # validates & String-ifies
+    # Ensure same field set for all elements
+    for d in arr
+        if !issetequal(keys(d), fields)
+            error("All struct elements must share identical field names. If you want a cell array, please use `Array{Any}` instead")
+        end
+    end
+
+    g = create_group(parent, name)
+    try
+        write_attribute(g, name_type_attr_matlab, "struct")
+        write_attribute(g, "MATLAB_fields", HDF5.VLen(asckeys))
+
+        # For each field, build an array dataset with same shape as arr
+        for f in asckeys
+            vals = Array{Any}(undef, size(arr))
+            for (idx, d) in enumerate(arr)
+                vals[idx] = d[f]
+            end
+            refs = _write_references!(mfile, parent, vals)
+
+            # Create field dataset from refs WITHOUT tagging as MATLAB cell
+            dset, dtype = create_dataset(g, f, refs)
+            try
+                write_dataset(dset, dtype, refs)
+            finally
+                close(dtype); close(dset)
+            end
+        end
+    finally
+        close(g)
+    end
+end
+
 # Check that keys are valid for a struct, and convert them to an array of ASCIIStrings
 function check_struct_keys(k::Vector)
     asckeys = Vector{String}(undef, length(k))

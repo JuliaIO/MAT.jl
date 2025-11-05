@@ -136,3 +136,18 @@ test_write(Dict("reshape_arr"=>reshape([1 2 3;4 5 6;7 8 9]',1,9)))
 
 test_write(Dict("adjoint_arr"=>Any[1 2 3;4 5 6;7 8 9]'))
 test_write(Dict("reshape_arr"=>reshape(Any[1 2 3;4 5 6;7 8 9]',1,9)))
+
+# test struct array
+sarr = Dict{String, Any}[
+    Dict("x"=>[1.0,2.0], "y"=>[3.0,4.0]),
+    Dict("x"=>[5.0,6.0], "y"=>[7.0,8.0])
+]
+test_write(Dict("s_array" => sarr))
+
+# test error of unequal structs
+wrong_arr = Dict{String, Any}[
+    Dict("x"=>[1.0,2.0], "y"=>[3.0,4.0]),
+    Dict("x"=>[5.0,6.0], "z"=>[7.0,8.0])
+]
+msg = "All struct elements must share identical field names. If you want a cell array, please use `Array{Any}` instead"
+@test_throws ErrorException(msg) matwrite(tmpfile, Dict("s_array" => sarr))
