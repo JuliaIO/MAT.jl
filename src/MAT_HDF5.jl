@@ -456,6 +456,19 @@ end
 # Write cell arrays
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::AbstractArray{T}) where T
     data = _normalize_arr(data)
+    refs = _write_references!(mfile, parent, data)
+    # Write the references as the chosen variable
+    cset, ctype = create_dataset(parent, name, refs)
+    try
+        write_dataset(cset, ctype, refs)
+        write_attribute(cset, name_type_attr_matlab, "cell")
+    finally
+        close(ctype)
+        close(cset)
+    end
+end
+
+function _write_references!(mfile::MatlabHDF5File, parent::HDF5Parent, data::AbstractArray)
     pathrefs = "/#refs#"
     fid = HDF5.file(parent)
     local g
@@ -499,15 +512,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::
     finally
         close(g)
     end
-    # Write the references as the chosen variable
-    cset, ctype = create_dataset(parent, name, refs)
-    try
-        write_dataset(cset, ctype, refs)
-        write_attribute(cset, name_type_attr_matlab, "cell")
-    finally
-        close(ctype)
-        close(cset)
-    end
+    return refs
 end
 
 # Check that keys are valid for a struct, and convert them to an array of ASCIIStrings
