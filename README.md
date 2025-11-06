@@ -86,6 +86,59 @@ end
 close(file)
 ```
 
+## Cell versus struct array writing
+
+Cell arrays are written for Any arrays `Array{Any}` or any other unsupported element type:
+
+```julia
+sarr = Any[
+    Dict("x"=>1.0, "y"=>2.0),
+    Dict("x"=>3.0, "y"=>4.0)
+]
+matwrite("matfile.mat", Dict("cell" => sarr))
+
+```
+
+Inside MATLAB you will find:
+
+```matlab
+>> load('matfile.mat')
+>> cell
+
+cell =
+
+  2×1 cell array
+
+    {1×1 struct}
+    {1×1 struct}
+```
+
+Struct arrays, instead of cell arrays, can now be written with MAT.jl using Dict arrays `AbstractArray{<:AbstractDict}` if all the Dicts have equal keys:
+
+```julia
+sarr = Dict{String, Any}[
+    Dict("x"=>1.0, "y"=>2.0),
+    Dict("x"=>3.0, "y"=>4.0)
+]
+matwrite("matfile.mat", Dict("struct_array" => sarr))
+
+```
+
+Now you'll find the following inside MATLAB:
+
+```matlab
+>> load('matfile.mat')
+>> struct_array
+
+struct_array =
+
+[2x1 struct, 576 bytes]
+x: 1
+y: 2
+```
+
+Note that MAT.jl v0.10 will read struct arrays as a struct with arrays in the fields, which is how they are stored inside the .mat HDF5 file. This behavior this might change in future versions.
+
 ## Caveats
 
 * All files are written in MATLAB v7.3 format by default.
