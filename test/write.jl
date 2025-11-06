@@ -139,15 +139,23 @@ test_write(Dict("reshape_arr"=>reshape(Any[1 2 3;4 5 6;7 8 9]',1,9)))
 
 # test struct array
 sarr = Dict{String, Any}[
-    Dict("x"=>[1.0,2.0], "y"=>[3.0,4.0]),
-    Dict("x"=>[5.0,6.0], "y"=>[7.0,8.0])
+    Dict("x"=>[1.0,2.0], SubString("y")=>[3.0,4.0]),
+    Dict("x"=>[5.0,6.0], "y"=>[Dict("a"=>7), Dict("a"=>8)])
 ]
-test_write(Dict("s_array" => sarr))
+# we have to test Array size is maintained inside mat files
+sarr = reshape(sarr, 1, 2)
+# we cannot yet use `test_write()` because struct arrays are read as a struct with arrays of field values
+matwrite(tmpfile, Dict("s_array" => sarr))
+read_sarr = matread(tmpfile)["s_array"]
+@test size(read_sarr["x"]) == size(sarr)
+@test size(read_sarr["y"]) == size(sarr)
+@test read_sarr["y"][1] == sarr[1]["y"]
+@test read_sarr["y"][2]["a"] == [7,8]
 
 # test error of unequal structs
-wrong_arr = Dict{String, Any}[
+wrong_sarr = Dict{String, Any}[
     Dict("x"=>[1.0,2.0], "y"=>[3.0,4.0]),
-    Dict("x"=>[5.0,6.0], "z"=>[7.0,8.0])
+    Dict("x"=>[5.0,6.0])
 ]
-msg = "All struct elements must share identical field names. If you want a cell array, please use `Array{Any}` instead"
-@test_throws ErrorException(msg) matwrite(tmpfile, Dict("s_array" => sarr))
+msg = "Incorrect struct array. All elements must share identical field names. If you want a cell array, please use `Array{Any}` instead"
+@test_throws ErrorException(msg) matwrite(tmpfile, Dict("s_array" => wrong_sarr))

@@ -526,7 +526,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String,
     # Ensure same field set for all elements
     for d in arr
         if !issetequal(keys(d), fields)
-            error("All struct elements must share identical field names. If you want a cell array, please use `Array{Any}` instead")
+            error("Incorrect struct array. All elements must share identical field names. If you want a cell array, please use `Array{Any}` instead")
         end
     end
 
@@ -537,11 +537,11 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String,
 
         # For each field, build an array dataset with same shape as arr
         for f in asckeys
-            vals = Array{Any}(undef, size(arr))
+            field_values = Array{Any}(undef, size(arr))
             for (idx, d) in enumerate(arr)
-                vals[idx] = d[f]
+                field_values[idx] = d[f]
             end
-            refs = _write_references!(mfile, parent, vals)
+            refs = _write_references!(mfile, parent, field_values)
 
             # Create field dataset from refs WITHOUT tagging as MATLAB cell
             dset, dtype = create_dataset(g, f, refs)
