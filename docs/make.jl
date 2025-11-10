@@ -26,14 +26,17 @@ binder_root_url =
 repo = eval(:($reps))
 DocMeta.setdocmeta!(repo, :DocTestSetup, :(using $reps); recursive=true)
 
-for (root, _, files) in walkdir(lit), file in files
-    splitext(file)[2] == ".jl" || continue # process .jl files only
-    ipath = joinpath(root, file)
-    opath = splitdir(replace(ipath, lit => gen))[1]
-    Literate.markdown(ipath, opath; documenter = execute, # run examples
-        repo_root_url, nbviewer_root_url, binder_root_url)
-    Literate.notebook(ipath, opath; execute = false, # no-run notebooks
-        repo_root_url, nbviewer_root_url, binder_root_url)
+# can all Literate docs code be removed? because there is no folder docs/src/lit
+if isdir(lit)
+    for (root, _, files) in walkdir(lit), file in files
+        splitext(file)[2] == ".jl" || continue # process .jl files only
+        ipath = joinpath(root, file)
+        opath = splitdir(replace(ipath, lit => gen))[1]
+        Literate.markdown(ipath, opath; documenter = execute, # run examples
+            repo_root_url, nbviewer_root_url, binder_root_url)
+        Literate.notebook(ipath, opath; execute = false, # no-run notebooks
+            repo_root_url, nbviewer_root_url, binder_root_url)
+    end
 end
 
 
