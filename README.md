@@ -113,7 +113,7 @@ cell =
     {1×1 struct}
 ```
 
-Struct arrays, instead of cell arrays, can now be written with MAT.jl using Dict arrays `AbstractArray{<:AbstractDict}` if all the Dicts have equal keys:
+Read and write behavior for struct arrays is different. For struct arrays (in .mat v7.3 files) we use the `MAT.MatlabStructArray` type. You can also write with MAT.jl using Dict arrays `AbstractArray{<:AbstractDict}` if all the Dicts have equal keys, which will automatically convert internally to `MAT.MatlabStructArray`.
 
 ```julia
 sarr = Dict{String, Any}[
@@ -122,6 +122,8 @@ sarr = Dict{String, Any}[
 ]
 matwrite("matfile.mat", Dict("struct_array" => sarr))
 
+# which is the same as:
+matwrite("matfile.mat", Dict("struct_array" => MAT.MatlabStructArray(sarr)))
 ```
 
 Now you'll find the following inside MATLAB:
@@ -137,7 +139,27 @@ x: 1
 y: 2
 ```
 
-Note that MAT.jl v0.10 will read struct arrays as a struct with arrays in the fields, which is how they are stored inside the .mat HDF5 file. This behavior this might change in future versions.
+Note that when you read the file again, you'll find the `MAT.MatlabStructArray`, which you can convert back to the Dict array with `Array`:
+
+```julia
+julia> sarr = matread("matfile.mat")["struct_array"]
+MAT.MAT_types.MatlabStructArray{1}
+ "x": Any[1.0, 3.0]
+ "y": Any[2.0, 4.0]
+
+julia> sarr["x"]
+2-element Vector{Any}:
+ 1.0
+ 3.0
+
+julia> Array(sarr)
+2-element Vector{Dict{String, Any}}:
+ Dict("x" => 1.0, "y" => 2.0)
+ Dict("x" => 3.0, "y" => 4.0)
+
+```
+
+Note that in MAT.jl v0.10 and older, or .mat versions before v7.3, will read struct arrays as a Dict with concatenated arrays in the fields/keys, which is equal to `Dict(sarr)`.
 
 ## Caveats
 

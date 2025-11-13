@@ -546,7 +546,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::M
     try
         write_attribute(g, name_type_attr_matlab, "struct")
         write_attribute(g, "MATLAB_fields", HDF5.VLen(arr.names))
-        for (fieldname, field_values) in zip(arr.names, arr.values)
+        for (fieldname, field_values) in arr
             refs = _write_references!(mfile, parent, field_values)
             dset, dtype = create_dataset(g, fieldname, refs)
             try

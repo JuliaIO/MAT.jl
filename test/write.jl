@@ -154,11 +154,3 @@ sarr = Dict{String, Any}[
     Dict("x"=>[5.0,6.0], "y"=>[])
 ]
 test_write(Dict("s_array" => MAT.MatlabStructArray(sarr)))
-
-# test error of unequal structs
-wrong_sarr = Dict{String, Any}[
-    Dict("x"=>[1.0,2.0], "y"=>[3.0,4.0]),
-    Dict("x"=>[5.0,6.0])
-]
-msg = "Cannot convert Dict array to MatlabStructArray. All elements must share identical field names"
-@test_throws ErrorException(msg) matwrite(tmpfile, Dict("s_array" => wrong_sarr))

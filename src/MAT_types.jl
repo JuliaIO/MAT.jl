@@ -36,6 +36,25 @@ module MAT_types
         values::Vector{Array{Any,N}}
     end
 
+    Base.eltype(::Type{MatlabStructArray{N}}) where N = Pair{String, Array{Any,N}}
+    Base.length(arr::MatlabStructArray) = length(arr.names)
+
+    function Base.iterate(arr::T, i=next_state(arr)) where T<:MatlabStructArray
+        if i == 0 
+            return nothing
+        else
+            return (eltype(T)(arr.names[i], arr.values[i]), next_state(arr,i))
+        end
+    end
+    next_state(arr, i=0) = length(arr)==i ? 0 : i+1
+
+    function Base.show(io::IO, ::MIME"text/plain", arr::MatlabStructArray)
+        summary(io, arr)
+        for (k,v) in arr
+            print(io, "\n \"$k\": $v")
+        end
+    end
+
     function Base.isequal(m1::MatlabStructArray{N},m2::MatlabStructArray{N}) where N
         return isequal(m1.names, m2.names) && isequal(m1.values, m2.values)
     end
@@ -54,7 +73,7 @@ module MAT_types
     end
 
     # convert Dict array to MatlabStructArray
-    function MatlabStructArray(arr::Array{<:AbstractDict{T}, N}) where {T<:AbstractString, N}
+    function MatlabStructArray(arr::AbstractArray{<:AbstractDict{T}, N}) where {T<:AbstractString, N}
         field_names = string.(keys(first(arr)))
         # Ensure same field set for all elements
         for d in arr
