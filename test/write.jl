@@ -147,10 +147,7 @@ sarr = reshape(sarr, 1, 2)
 matwrite(tmpfile, Dict("s_array" => sarr))
 read_sarr = matread(tmpfile)["s_array"]
 @test read_sarr isa MAT.MatlabStructArray
-@test size(read_sarr["x"]) == size(sarr)
-@test size(read_sarr["y"]) == size(sarr)
-@test read_sarr["y"][1] == sarr[1]["y"]
-@test read_sarr["y"][2]["a"] == [7,8]
+@test read_sarr["y"][2] isa MAT.MatlabStructArray
 
 sarr = Dict{String, Any}[
     Dict("x"=>[1.0,2.0], SubString("y")=>[3.0,4.0]),

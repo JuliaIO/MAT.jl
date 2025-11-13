@@ -80,6 +80,17 @@ module MAT_types
         Base.Dict{String, Any}(arr.names .=> arr.values)
     end
 
+    function Base.Array(arr::MatlabStructArray{N}) where N
+        first_field = first(arr.values)
+        sz = size(first_field)
+        result = Array{Dict{String,Any}, N}(undef, sz)
+        for idx in eachindex(first_field)
+            element_values = [v[idx] for v in arr.values]
+            result[idx] = Dict{String, Any}(arr.names .=> element_values)
+        end
+        return result
+    end
+
     struct StructArrayField{N}
         values::Array{Any,N}
     end
