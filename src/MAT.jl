@@ -26,6 +26,9 @@ module MAT
 
 using HDF5, SparseArrays
 
+include("MAT_types.jl")
+using .MAT_types
+
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")
 include("MAT_v4.jl")

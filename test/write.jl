@@ -137,25 +137,31 @@ test_write(Dict("reshape_arr"=>reshape([1 2 3;4 5 6;7 8 9]',1,9)))
 test_write(Dict("adjoint_arr"=>Any[1 2 3;4 5 6;7 8 9]'))
 test_write(Dict("reshape_arr"=>reshape(Any[1 2 3;4 5 6;7 8 9]',1,9)))
 
-# test struct array
+# test nested struct array - interface via Dict array
 sarr = Dict{String, Any}[
     Dict("x"=>[1.0,2.0], SubString("y")=>[3.0,4.0]),
     Dict("x"=>[5.0,6.0], "y"=>[Dict("a"=>7), Dict("a"=>8)])
 ]
 # we have to test Array size is maintained inside mat files
 sarr = reshape(sarr, 1, 2)
-# we cannot yet use `test_write()` because struct arrays are read as a struct with arrays of field values
 matwrite(tmpfile, Dict("s_array" => sarr))
 read_sarr = matread(tmpfile)["s_array"]
+@test read_sarr isa MAT.MatlabStructArray
 @test size(read_sarr["x"]) == size(sarr)
 @test size(read_sarr["y"]) == size(sarr)
 @test read_sarr["y"][1] == sarr[1]["y"]
 @test read_sarr["y"][2]["a"] == [7,8]
+
+sarr = Dict{String, Any}[
+    Dict("x"=>[1.0,2.0], SubString("y")=>[3.0,4.0]),
+    Dict("x"=>[5.0,6.0], "y"=>[])
+]
+test_write(Dict("s_array" => MAT.MatlabStructArray(sarr)))
 
 # test error of unequal structs
 wrong_sarr = Dict{String, Any}[
     Dict("x"=>[1.0,2.0], "y"=>[3.0,4.0]),
     Dict("x"=>[5.0,6.0])
 ]
-msg = "Incorrect struct array. All elements must share identical field names. If you want a cell array, please use `Array{Any}` instead"
+msg = "Cannot convert Dict array to MatlabStructArray. All elements must share identical field names"
 @test_throws ErrorException(msg) matwrite(tmpfile, Dict("s_array" => wrong_sarr))
