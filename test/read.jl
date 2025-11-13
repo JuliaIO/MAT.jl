@@ -101,15 +101,18 @@ for _format in ["v6", "v7", "v7.3"]
     )
     check("cell.mat", result)
 
-    result = Dict(
+    result = Dict{String,Any}(
         "s" => Dict{String,Any}(
             "a" => 1.0,
             "b" => [1.0 2.0],
             "c" => [1.0 2.0 3.0]
         ),
-        "s2" => MAT.MatlabStructArray(["a"], [Any[1.0 2.0]])
+        "s2" => Dict{String,Any}("a" => Any[1.0 2.0])
     )
-    #check("struct.mat", result)
+    if _format == "v7.3"
+        result["s2"] = MAT.MatlabStructArray(["a"], [Any[1.0 2.0]])
+    end
+    check("struct.mat", result)
 
     result = Dict(
         "logical" => false,
