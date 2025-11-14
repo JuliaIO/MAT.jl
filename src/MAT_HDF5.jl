@@ -485,6 +485,11 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, str::A
     end
 end
 
+# Char
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, c::AbstractChar)
+    m_write(mfile, parent, name, string(c))
+end
+
 # Write cell arrays
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::AbstractArray{T}) where T
     data = _normalize_arr(data)

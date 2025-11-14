@@ -83,6 +83,12 @@ test_write(Dict(
     "string" => "string"
 ))
 
+# cannot distinguish char from single element string
+test_write(Dict("char" => 'a'))
+# inconsistent behavior in v4
+matwrite(tmpfile, Dict("char" => 'a'), version="v4")
+@test matread(tmpfile)["char"] == "a"
+
 test_write(Dict(
     "cell" => Any[1 2.01 "string" Any["string1" "string2"]]
 ))
