@@ -155,7 +155,8 @@ function m_read(dset::HDF5.Dataset)
             # Not sure if this check is necessary but it is checked in
             # `m_read(g::HDF5.Group)`
             if haskey(dset, "MATLAB_fields")
-                return Dict{String,Any}(join(n)=>[] for n in read_attribute(dset, "MATLAB_fields"))
+                field_names = [join(n) for n in read_attribute(dset, "MATLAB_fields")]
+                return MatlabStructArray(field_names, tuple(dims...))
             else
                 return Dict{String,Any}()
             end
@@ -171,7 +172,7 @@ function m_read(dset::HDF5.Dataset)
         # Cell arrays, represented as an array of refs
         return read_references(dset)
     elseif mattype == "struct_array_field"
-        # TODO: check it has references?
+        # This will be converted into MatlabStructArray in `m_read(g::HDF5.Group)`
         return StructArrayField(read_references(dset))
     elseif !haskey(str2type_matlab,mattype)
         @warn "MATLAB $mattype values are currently not supported"
@@ -540,23 +541,38 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String,
     m_write(mfile, parent, name, MatlabStructArray(arr))
 end
 
-# Struct array: Array of Dict => MATLAB struct array
+# MATLAB struct array
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::MatlabStructArray)
-    g = create_group(parent, name)
-    try
-        write_attribute(g, name_type_attr_matlab, "struct")
-        write_attribute(g, "MATLAB_fields", HDF5.VLen(arr.names))
-        for (fieldname, field_values) in arr
-            refs = _write_references!(mfile, parent, field_values)
-            dset, dtype = create_dataset(g, fieldname, refs)
-            try
-                write_dataset(dset, dtype, refs)
-            finally
-                close(dtype); close(dset)
-            end
+    first_value = first(arr.values)
+    if isempty(first_value)
+        # write an empty struct array
+        adata = [size(first_value)...]
+        dset, dtype = create_dataset(parent, name, adata)
+        try
+            write_attribute(dset, empty_attr_matlab, 0x01)
+            write_attribute(dset, name_type_attr_matlab, "struct")
+            write_attribute(dset, "MATLAB_fields", HDF5.VLen(arr.names))
+            write_dataset(dset, dtype, adata)
+        finally
+            close(dtype); close(dset)
         end
-    finally
-        close(g)
+    else
+        g = create_group(parent, name)
+        try
+            write_attribute(g, name_type_attr_matlab, "struct")
+            write_attribute(g, "MATLAB_fields", HDF5.VLen(arr.names))
+            for (fieldname, field_values) in arr
+                refs = _write_references!(mfile, parent, field_values)
+                dset, dtype = create_dataset(g, fieldname, refs)
+                try
+                    write_dataset(dset, dtype, refs)
+                finally
+                    close(dtype); close(dset)
+                end
+            end
+        finally
+            close(g)
+        end
     end
 end
 

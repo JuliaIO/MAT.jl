@@ -200,14 +200,6 @@ let objtestfile = "obj.mat"
     @test vars["A"]["class"] == "Assoc"
 end
 
-# test reading of empty struct
-let objtestfile = "empty_struct.mat"
-    vars = matread(joinpath(dirname(@__FILE__), objtestfile))
-    @test "a" in keys(vars)
-    @test vars["a"]["size"] == []
-    @test vars["a"]["params"] == []
-end
-
 # test reading of a Matlab figure
 let objtestfile = "figure.fig"
     vars = matread(joinpath(dirname(@__FILE__), objtestfile))
@@ -239,4 +231,22 @@ let objtestfile = "old_class.mat"
     vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))
     @test "tc_old" in keys(vars)
     @test "foo" in keys(vars["tc_old"])
+end
+
+let objtestfile = "empty_struct_arrays.mat"
+    folder = dirname(@__FILE__)
+    for _format in ["v6", "v7", "v7.3"]
+        vars = matread(joinpath(folder, _format, objtestfile))
+        @test vars["s00"]["a"] == Matrix{Any}(undef, 0, 0)
+        @test vars["s10"]["a"] == Matrix{Any}(undef, 1, 0)
+        @test vars["s01"]["a"] == Matrix{Any}(undef, 0, 1)
+    end
+end
+
+let objtestfile = "empty_cell_struct.mat"
+    folder = dirname(@__FILE__)
+    for _format in ["v6", "v7", "v7.3"]
+        vars = matread(joinpath(folder, _format, objtestfile))
+        @test vars["s"]["a"] == Matrix{Any}(undef, 0, 0)
+    end
 end

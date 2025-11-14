@@ -34,7 +34,37 @@ module MAT_types
     struct MatlabStructArray{N}
         names::Vector{String}
         values::Vector{Array{Any,N}}
+        function MatlabStructArray(names::Vector{String}, values::Vector{Array{Any,N}}) where N
+            # call MatlabStructArray{N}() to avoid the check
+            check_struct_array(names, values)
+            return new{N}(names, values)
+        end
+        function MatlabStructArray{N}(names::Vector{String}, values::Vector{Array{Any,N}}) where N
+            return new{N}(names, values)
+        end
     end
+
+    function check_struct_array(names::Vector{String}, values::Vector{Array{Any,N}}) where N
+        if length(names) != length(values)
+            error("MatlabStructArray requires equal number of names and values")
+        end
+        first_value, rest_values = Iterators.peel(values)
+        first_len = length(first_value)
+        if !all(x->length(x)==first_len, rest_values)
+            error("MatlabStructArray requires all value columns to be of equal length")
+        end
+    end
+
+    function MatlabStructArray(names::AbstractVector{<:AbstractString}, values::AbstractArray{<:AbstractArray{T,N}}) where {T,N}
+        MatlabStructArray{N}(string.(names), Vector{Array{Any,N}}(values))
+    end
+
+    # empty array
+    function MatlabStructArray(names::AbstractVector{<:AbstractString}, dims::Tuple)
+        N = length(dims)
+        return MatlabStructArray{N}(names, [Array{Any, N}(undef, dims...) for n in names])
+    end
+    MatlabStructArray(names::AbstractVector{<:AbstractString}) = MatlabStructArray(names, (0,0))
 
     Base.eltype(::Type{MatlabStructArray{N}}) where N = Pair{String, Array{Any,N}}
     Base.length(arr::MatlabStructArray) = length(arr.names)
@@ -55,8 +85,12 @@ module MAT_types
         end
     end
 
-    function Base.isequal(m1::MatlabStructArray{N},m2::MatlabStructArray{N}) where N
+    function Base.:(==)(m1::MatlabStructArray{N},m2::MatlabStructArray{N}) where N
         return isequal(m1.names, m2.names) && isequal(m1.values, m2.values)
+    end
+
+    function Base.isapprox(m1::MatlabStructArray,m2::MatlabStructArray; kwargs...)
+        return isequal(m1.names, m2.names) && isapprox(m1.values, m2.values; kwargs...)
     end
 
     function find_index(m::MatlabStructArray, s::AbstractString)
@@ -73,19 +107,20 @@ module MAT_types
     end
 
     # convert Dict array to MatlabStructArray
-    function MatlabStructArray(arr::AbstractArray{<:AbstractDict{T}, N}) where {T<:AbstractString, N}
-        field_names = string.(keys(first(arr)))
+    function MatlabStructArray(arr::AbstractArray{<:AbstractDict, N}) where N
+        first_keys = keys(first(arr))
+        field_names = string.(first_keys)
         # Ensure same field set for all elements
         for d in arr
-            if !issetequal(keys(d), field_names)
+            if !issetequal(keys(d), first_keys)
                 error("Cannot convert Dict array to MatlabStructArray. All elements must share identical field names")
             end
         end
         field_values = Vector{Array{Any,N}}(undef, length(field_names))
-        for (idx,f) in enumerate(field_names)
+        for (idx,k) in enumerate(first_keys)
             this_field_values = Array{Any, N}(undef, size(arr))
             for (idx, d) in enumerate(arr)
-                this_field_values[idx] = d[f]
+                this_field_values[idx] = d[k]
             end
             field_values[idx] = this_field_values
         end
@@ -99,13 +134,14 @@ module MAT_types
         Base.Dict{String, Any}(arr.names .=> arr.values)
     end
 
-    function Base.Array(arr::MatlabStructArray{N}) where N
+    Base.Array(arr::MatlabStructArray) = Array{Dict{String,Any}}(arr)
+    function Base.Array{D}(arr::MatlabStructArray{N}) where {T,D<:AbstractDict{T},N}
         first_field = first(arr.values)
         sz = size(first_field)
-        result = Array{Dict{String,Any}, N}(undef, sz)
+        result = Array{D, N}(undef, sz)
         for idx in eachindex(first_field)
-            element_values = [v[idx] for v in arr.values]
-            result[idx] = Dict{String, Any}(arr.names .=> element_values)
+            element_values = (v[idx] for v in arr.values)
+            result[idx] = D(T.(arr.names) .=> element_values)
         end
         return result
     end
@@ -113,12 +149,13 @@ module MAT_types
     struct StructArrayField{N}
         values::Array{Any,N}
     end
+    dimension(::StructArrayField{N}) where N = N
 
     function convert_struct_array(d::Dict{String, Any})
         # there is no possibility of having cell arrays mixed with struct arrays (afaik)
         field_values = first(values(d))
         if field_values isa StructArrayField
-            return MatlabStructArray(
+            return MatlabStructArray{dimension(field_values)}(
                 collect(keys(d)),
                 [arr.values for arr in values(d)],
             )

@@ -154,3 +154,6 @@ sarr = Dict{String, Any}[
     Dict("x"=>[5.0,6.0], "y"=>[])
 ]
 test_write(Dict("s_array" => MAT.MatlabStructArray(sarr)))
+
+empty_sarr = MAT.MatlabStructArray(["a", "b", "c"])
+test_write(Dict("s_array" => empty_sarr))
