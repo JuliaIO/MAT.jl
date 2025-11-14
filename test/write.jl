@@ -34,6 +34,15 @@ function test_compression_effective(data)
     end
 end
 
+@testset "write error messages" begin
+    msg = "writing for \"v7\" is not supported"
+    @test_throws ErrorException(msg) matwrite(tmpfile, Dict("s" => 1); version="v7")
+
+    msg = "matwrite requires a Dict with ASCII keys"
+    @test_throws ErrorException(msg) matwrite(tmpfile, Dict(:s => 1))
+    @test_throws ErrorException(msg) matwrite(tmpfile, Dict(:s => 1); version="v4")
+end
+
 test_write(Dict(
     "int8" => Int8(1),
     "uint8" => UInt8(1),

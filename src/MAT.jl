@@ -144,47 +144,37 @@ end
 
 # Write a dict to a MATLAB file
 """
-    matwrite(filename, d::Dict; compress::Bool = false, version::String)
+    matwrite(filename, d::Dict; compress::Bool = false, version::String = "v7.3")
 
 Write a dictionary containing variable names as keys and values as values
 to a Matlab file, opening and closing it automatically.
 """
-function matwrite(filename::AbstractString, dict::AbstractDict{S, T}; compress::Bool = false, version::String ="") where {S, T}
-
+function matwrite(filename::AbstractString, dict::AbstractDict{S, T}; compress::Bool = false, version::String ="v7.3") where {S, T}
     if version == "v4"
         file = open(filename, "w")
         m = MAT_v4.Matlabv4File(file, false)
-        try
-            for (k, v) in dict
-                local kstring
-                try
-                    kstring = ascii(convert(String, k))
-                catch x
-                    error("matwrite requires a Dict with ASCII keys")
-                end
-                write(m, kstring, v)
-            end
-        finally
-            close(file)
-        end
-
-    else
-        
+        _write_dict(m, dict)
+    elseif version == "v7.3"
         file = matopen(filename, "w"; compress = compress)
-        try
-            for (k, v) in dict
-                local kstring
-                try
-                    kstring = ascii(convert(String, k))
-                catch x
-                    error("matwrite requires a Dict with ASCII keys")
-                end
-                write(file, kstring, v)
-            end
-        finally
-            close(file)
-        end
+        _write_dict(file, dict)
+    else
+        error("writing for \"$(version)\" is not supported")
+    end
+end
 
+function _write_dict(fileio, dict::AbstractDict)
+    try
+        for (k, v) in dict
+            local kstring
+            try
+                kstring = ascii(convert(String, k))
+            catch x
+                error("matwrite requires a Dict with ASCII keys")
+            end
+            write(fileio, kstring, v)
+        end
+    finally
+        close(fileio)
     end
 end
 

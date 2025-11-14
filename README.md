@@ -124,7 +124,7 @@ matwrite("matfile.mat", Dict("s" => sarr))
 # which is the same as:
 matwrite("matfile.mat", Dict("s" => MatlabStructArray(sarr)))
 # which is the same as:
-matwrite("matfile.mat", Dict("s" => MatlabStructArray(["x", "y"], [[1.0, 3.0], [3.0, 4.0]])))
+matwrite("matfile.mat", Dict("s" => MatlabStructArray(["x", "y"], [[1.0, 3.0], [2.0, 4.0]])))
 ```
 
 Now you'll find the following inside MATLAB:
@@ -140,7 +140,7 @@ x: 1
 y: 2
 ```
 
-Note that when you read the file again, you'll find the `MAT.MatlabStructArray`, which you can convert back to the Dict array with `Array`:
+Note that when you read the file again, you'll find the `MatlabStructArray`, which you can convert back to the Dict array with `Array`:
 
 ```julia
 julia> sarr = matread("matfile.mat")["struct_array"]
