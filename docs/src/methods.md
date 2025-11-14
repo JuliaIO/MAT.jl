@@ -6,5 +6,5 @@
 ## Methods usage
 
 ```@autodocs
-Modules = [MAT]
+Modules = [MAT, MAT.MAT_types]
 ```
