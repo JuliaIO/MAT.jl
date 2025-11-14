@@ -147,11 +147,12 @@ module MAT_types
     end
 
     # convert Dict array to MatlabStructArray
-    function MatlabStructArray(arr::AbstractArray{<:AbstractDict, N}) where N
-        first_keys = keys(first(arr))
+    function MatlabStructArray(arr::AbstractArray{<:AbstractDict, N}, class::String="") where N
+        first_dict, remaining_dicts = Iterators.peel(arr)
+        first_keys = keys(first_dict)
         field_names = string.(first_keys)
         # Ensure same field set for all elements
-        for d in arr
+        for d in remaining_dicts
             if !issetequal(keys(d), first_keys)
                 error("Cannot convert Dict array to MatlabStructArray. All elements must share identical field names")
             end
@@ -164,7 +165,7 @@ module MAT_types
             end
             field_values[idx] = this_field_values
         end
-        return MatlabStructArray{N}(field_names, field_values)
+        return MatlabStructArray{N}(field_names, field_values, class)
     end
 
     function Base.Dict(arr::MatlabStructArray)
@@ -216,6 +217,15 @@ module MAT_types
     Base.iterate(m::MatlabClassObject) = iterate(m.d)
     Base.haskey(m::MatlabClassObject, k) = haskey(m.d, k)
     Base.get(m::MatlabClassObject, k, default) = get(m.d, k, default)
+
+    function MatlabStructArray(arr::AbstractArray{MatlabClassObject})
+        first_obj, remaining_obj = Iterators.peel(arr)
+        class = first_obj.class
+        if !all(x->isequal(class, x.class), remaining_obj)
+            error("to write a MatlabClassObject array all classes must be equal. Use `Array{Any}` to write a cell array")
+        end
+        return MatlabStructArray(arr, class)
+    end
 
     function convert_struct_array(d::Dict{String, Any}, class::String="")
         # there is no possibility of having cell arrays mixed with struct arrays (afaik)

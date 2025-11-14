@@ -608,6 +608,10 @@ function check_struct_keys(k::Vector)
     asckeys
 end
 
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::AbstractArray{MatlabClassObject})
+    m_write(mfile, parent, name, MatlabStructArray(arr))
+end
+
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::MatlabClassObject)
     g = create_group(parent, name)
     try

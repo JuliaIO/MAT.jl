@@ -65,4 +65,11 @@ end
 
     obj["b"] = 7
     @test obj["b"] == 7
+
+    c_arr = [MatlabClassObject(d, "TestClassOld"), MatlabClassObject(d, "TestClassOld")]
+    s_arr = MatlabStructArray(c_arr)
+    @test s_arr.class == "TestClassOld"
+
+    wrong_arr = [MatlabClassObject(d, "TestClassOld"), MatlabClassObject(d, "Bah")]
+    @test_throws ErrorException MatlabStructArray(wrong_arr)
 end

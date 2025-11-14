@@ -174,3 +174,8 @@ test_write(Dict("class_array" => carr))
 d = Dict{String,Any}("foo" => 5)
 obj = MatlabClassObject(d, "TestClassOld")
 test_write(Dict("tc_old" => obj))
+
+carr = [MatlabClassObject(d, "TestClassOld"), MatlabClassObject(d, "TestClassOld")]
+matwrite(tmpfile, Dict("class_array" => carr))
+carr_read = matread(tmpfile)["class_array"]
+@test carr_read == MatlabStructArray(carr)
