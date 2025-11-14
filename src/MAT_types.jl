@@ -34,13 +34,14 @@ module MAT_types
     struct MatlabStructArray{N}
         names::Vector{String}
         values::Vector{Array{Any,N}}
-        function MatlabStructArray(names::Vector{String}, values::Vector{Array{Any,N}}) where N
+        class::String
+        function MatlabStructArray(names::Vector{String}, values::Vector{Array{Any,N}}, class::String="") where N
             # call MatlabStructArray{N}() to avoid the check
             check_struct_array(names, values)
-            return new{N}(names, values)
+            return new{N}(names, values, class)
         end
-        function MatlabStructArray{N}(names::Vector{String}, values::Vector{Array{Any,N}}) where N
-            return new{N}(names, values)
+        function MatlabStructArray{N}(names::Vector{String}, values::Vector{Array{Any,N}}, class::String="") where N
+            return new{N}(names, values, class)
         end
     end
 
@@ -80,6 +81,10 @@ module MAT_types
 
     function Base.show(io::IO, ::MIME"text/plain", arr::MatlabStructArray)
         summary(io, arr)
+        ncol = length(arr.values)
+        print(io, " with $(ncol) ")
+        col_word = ncol==1 ? "column" : "columns"
+        print(io, col_word, ":")
         for (k,v) in arr
             print(io, "\n \"$k\": $v")
         end

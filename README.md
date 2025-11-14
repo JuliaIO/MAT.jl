@@ -113,26 +113,27 @@ cell =
     {1×1 struct}
 ```
 
-Read and write behavior for struct arrays is different. For struct arrays (in .mat v7.3 files) we use the `MAT.MatlabStructArray` type. You can also write with MAT.jl using Dict arrays `AbstractArray{<:AbstractDict}` if all the Dicts have equal keys, which will automatically convert internally to `MAT.MatlabStructArray`.
+Read and write behavior for struct arrays is different. For struct arrays we use the `MatlabStructArray` type. You can also write with MAT.jl using Dict arrays `AbstractArray{<:AbstractDict}` if all the Dicts have equal keys, which will automatically convert internally to `MatlabStructArray`.
 
 ```julia
 sarr = Dict{String, Any}[
     Dict("x"=>1.0, "y"=>2.0),
     Dict("x"=>3.0, "y"=>4.0)
 ]
-matwrite("matfile.mat", Dict("struct_array" => sarr))
-
+matwrite("matfile.mat", Dict("s" => sarr))
 # which is the same as:
-matwrite("matfile.mat", Dict("struct_array" => MAT.MatlabStructArray(sarr)))
+matwrite("matfile.mat", Dict("s" => MatlabStructArray(sarr)))
+# which is the same as:
+matwrite("matfile.mat", Dict("s" => MatlabStructArray(["x", "y"], [[1.0, 3.0], [3.0, 4.0]])))
 ```
 
 Now you'll find the following inside MATLAB:
 
 ```matlab
 >> load('matfile.mat')
->> struct_array
+>> s
 
-struct_array =
+s =
 
 [2x1 struct, 576 bytes]
 x: 1
@@ -143,7 +144,7 @@ Note that when you read the file again, you'll find the `MAT.MatlabStructArray`,
 
 ```julia
 julia> sarr = matread("matfile.mat")["struct_array"]
-MAT.MAT_types.MatlabStructArray{1}
+MatlabStructArray{1} with 2 columns:
  "x": Any[1.0, 3.0]
  "y": Any[2.0, 4.0]
 
@@ -159,7 +160,7 @@ julia> Array(sarr)
 
 ```
 
-Note that in MAT.jl v0.10 and older, or .mat versions before v7.3, will read struct arrays as a Dict with concatenated arrays in the fields/keys, which is equal to `Dict(sarr)`.
+Note that before v0.11 MAT.jl will read struct arrays as a Dict with concatenated arrays in the fields/keys, which is equal to `Dict(sarr)`.
 
 ## Caveats
 
