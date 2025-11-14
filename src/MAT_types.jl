@@ -104,6 +104,9 @@ module MAT_types
 
     Base.eltype(::Type{MatlabStructArray{N}}) where N = Pair{String, Array{Any,N}}
     Base.length(arr::MatlabStructArray) = length(arr.names)
+    Base.keys(arr::MatlabStructArray) = arr.names
+    Base.values(arr::MatlabStructArray) = arr.values
+    Base.haskey(arr::MatlabStructArray, k::AbstractString) = k in keys(arr)
 
     function Base.iterate(arr::T, i=next_state(arr)) where T<:MatlabStructArray
         if i == 0 
@@ -144,6 +147,15 @@ module MAT_types
     function Base.getindex(m::MatlabStructArray, s::AbstractString)
         idx = find_index(m, s)
         return getindex(m.values, idx)
+    end
+
+    function Base.get(m::MatlabStructArray, s::AbstractString, default)
+        idx = findfirst(isequal(s), m.names)
+        if isnothing(idx)
+            return default
+        else
+            return getindex(m.values, idx)
+        end
     end
 
     # convert Dict array to MatlabStructArray

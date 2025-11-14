@@ -31,11 +31,15 @@ using MAT, Test
     s_arr = MatlabStructArray(d_arr)
     d = Dict(s_arr)
     @test d isa Dict{String, Any}
-    @test collect(keys(d)) == s_arr.names
-    @test collect(values(d)) == s_arr.values
-    # iteration similar to Dict
+    @test collect(keys(d)) == keys(s_arr)
+    @test collect(values(d)) == values(s_arr)
+    # Dict like interfaces
     @test length(s_arr) == 2
     @test collect(Dict(s_arr)) == collect(s_arr)
+    @test haskey(s_arr, "x")
+    @test get(s_arr, "x", nothing) == s_arr["x"]
+    @test !haskey(s_arr, "wrong")
+    @test get(s_arr, "wrong", nothing) === nothing
 
     # possibility to convert back to dict array via `Array`
     s_arr = MatlabStructArray(d_arr)

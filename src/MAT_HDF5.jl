@@ -526,6 +526,7 @@ function _write_references!(mfile::MatlabHDF5File, parent::HDF5Parent, data::Abs
         else
             a = g["a"]
             if !haskey(attributes(a), "MATLAB_empty")
+                close(a)
                 error("Must create the empty item, with name a, first")
             end
             close(a)
