@@ -29,8 +29,43 @@
 module MAT_types
 
     export MatlabStructArray, StructArrayField, convert_struct_array
+    export MatlabClassObject
 
     # struct arrays are stored as columns per field name
+    """
+        MatlabStructArray{N}(
+            names::Vector{String},
+            values::Vector{Array{Any,N}},
+            class::String = "",
+        )
+
+    Data structure to store matlab struct arrays, which stores the field names separate from the field values.
+    The field values are stored as columns of `Array{Any,N}` per Matlab field, which is how MAT files store these structures.
+
+    These are distinct from cell arrays of structs, 
+    which are handled as in MAT.jl as `Array{Any,N}` with `Dict{String,Any}` inside, 
+    for example `Any[Dict("x"=>1), Dict("x"=>2)]`.
+
+    Old class object arrays can be handled by providing a non-empty class name.
+
+    # Example
+
+    ```julia
+    using MAT
+
+    s_arr = MatlabStructArray(["a", "b"], [[1, 2],["foo", 5]])
+
+    # write-read
+    matwrite("matfile.mat", Dict("struct_array" => s_arr))
+    read_s_arr = matread("matfile.mat")["struct_array"]
+
+    # convert to Dict Array
+    dict_array = Array{Dict{String,Any}}(s_arr)
+
+    # convert to Dict (with arrays as fields)
+    dict = Dict{String,Any}(s_arr)
+    ```
+    """
     struct MatlabStructArray{N}
         names::Vector{String}
         values::Vector{Array{Any,N}}
@@ -56,8 +91,8 @@ module MAT_types
         end
     end
 
-    function MatlabStructArray(names::AbstractVector{<:AbstractString}, values::AbstractArray{<:AbstractArray{T,N}}) where {T,N}
-        MatlabStructArray{N}(string.(names), Vector{Array{Any,N}}(values))
+    function MatlabStructArray(names::AbstractVector{<:AbstractString}, values::AbstractArray{<:AbstractArray{T,N}}, class="") where {T,N}
+        MatlabStructArray{N}(string.(names), Vector{Array{Any,N}}(values), string(class))
     end
 
     # empty array
@@ -91,7 +126,7 @@ module MAT_types
     end
 
     function Base.:(==)(m1::MatlabStructArray{N},m2::MatlabStructArray{N}) where N
-        return isequal(m1.names, m2.names) && isequal(m1.values, m2.values)
+        return isequal(m1.names, m2.names) && isequal(m1.values, m2.values) && isequal(m1.class, m2.class)
     end
 
     function Base.isapprox(m1::MatlabStructArray,m2::MatlabStructArray; kwargs...)
@@ -156,17 +191,47 @@ module MAT_types
     end
     dimension(::StructArrayField{N}) where N = N
 
-    function convert_struct_array(d::Dict{String, Any})
+    """
+        MatlabClassObject(
+            d::Dict{String, Any},
+            class::String,
+        ) <: AbstractDict{String, Any}
+
+    Type to store old class objects. Inside MATLAB a class named \"TestClassOld\" would be defined within `@TestClassOld` folders.
+
+    If you want to write these objects you have to make sure the keys in the Dict match the class defined properties/fields.
+    """
+    struct MatlabClassObject <: AbstractDict{String, Any}
+        d::Dict{String, Any}
+        class::String
+    end
+
+    Base.eltype(::Type{MatlabClassObject}) = Pair{String, Any}
+    Base.length(m::MatlabClassObject) = length(m.d)
+    Base.keys(m::MatlabClassObject) = keys(m.d)
+    Base.values(m::MatlabClassObject) = values(m.d)
+    Base.getindex(m::MatlabClassObject, i) = getindex(m.d, i)
+    Base.setindex!(m::MatlabClassObject, v, k) = setindex!(m.d, v, k)
+    Base.iterate(m::MatlabClassObject, i) = iterate(m.d, i)
+    Base.iterate(m::MatlabClassObject) = iterate(m.d)
+    Base.haskey(m::MatlabClassObject, k) = haskey(m.d, k)
+    Base.get(m::MatlabClassObject, k, default) = get(m.d, k, default)
+
+    function convert_struct_array(d::Dict{String, Any}, class::String="")
         # there is no possibility of having cell arrays mixed with struct arrays (afaik)
         field_values = first(values(d))
         if field_values isa StructArrayField
             return MatlabStructArray{dimension(field_values)}(
                 collect(keys(d)),
                 [arr.values for arr in values(d)],
+                class,
             )
         else
-            return d
+            if isempty(class)
+                return d
+            else
+                return MatlabClassObject(d, class)
+            end
         end
-    end
-
+    end 
 end

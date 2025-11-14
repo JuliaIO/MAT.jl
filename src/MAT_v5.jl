@@ -28,7 +28,7 @@
 module MAT_v5
 using CodecZlib, BufferedStreams, HDF5, SparseArrays
 import Base: read, write, close
-import ..MAT_types: MatlabStructArray
+import ..MAT_types: MatlabStructArray, MatlabClassObject
 
 round_uint8(data) = round.(UInt8, data)
 complex_array(a, b) = complex.(a, b)
@@ -192,11 +192,11 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
         # Read a single struct into a dict
         data = Dict{String, Any}()
         sizehint!(data, n_fields+1)
-        if is_object
-            data["class"] = class
-        end
         for field_name in field_name_strings
             data[field_name] = read_matrix(f, swap_bytes)[2]
+        end
+        if is_object
+            data = MatlabClassObject(data, class)
         end
     else
         # Read empty or multiple structs

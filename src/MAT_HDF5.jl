@@ -32,7 +32,7 @@ using HDF5, SparseArrays
 
 import Base: names, read, write, close
 import HDF5: Reference
-import ..MAT_types: MatlabStructArray, StructArrayField, convert_struct_array
+import ..MAT_types: MatlabStructArray, StructArrayField, convert_struct_array, MatlabClassObject
 
 const HDF5Parent = Union{HDF5.File, HDF5.Group}
 const HDF5BitsOrBool = Union{HDF5.BitsType,Bool}
@@ -119,6 +119,7 @@ const name_type_attr_matlab = "MATLAB_class"
 const empty_attr_matlab = "MATLAB_empty"
 const sparse_attr_matlab = "MATLAB_sparse"
 const int_decode_attr_matlab = "MATLAB_int_decode"
+const object_decode_attr_matlab = "MATLAB_object_decode"
 
 ### Reading
 function read_complex(dtype::HDF5.Datatype, dset::HDF5.Dataset, ::Type{T}) where T
@@ -252,19 +253,31 @@ end
 # reading a struct, struct array, or sparse matrix
 function m_read(g::HDF5.Group)
     mattype = read_attribute(g, name_type_attr_matlab)
+    is_object = false
     if mattype != "struct"
+        attr = attributes(g)
         # Check if this is a sparse matrix.
-        if haskey(attributes(g), sparse_attr_matlab)
+        if haskey(attr, sparse_attr_matlab)
             return read_sparse_matrix(g, mattype)
         elseif mattype == "function_handle"
             @warn "MATLAB $mattype values are currently not supported"
             return missing
         else
-            @warn "Unknown non-struct group of type $mattype detected; attempting to read as struct"
+            if haskey(attr, object_decode_attr_matlab) && read_attribute(g, object_decode_attr_matlab)==2
+                # I think this means it's an old object class similar to mXOBJECT_CLASS in MAT_v5
+                is_object = true
+            else
+                @warn "Unknown non-struct group of type $mattype detected; attempting to read as struct"
+            end
         end
     end
+    if is_object
+        class = mattype
+    else
+        class = ""
+    end
     s = read_struct_as_dict(g)
-    out = convert_struct_array(s)
+    out = convert_struct_array(s, class)
     return out
 end
 
@@ -559,8 +572,13 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::M
     else
         g = create_group(parent, name)
         try
-            write_attribute(g, name_type_attr_matlab, "struct")
-            write_attribute(g, "MATLAB_fields", HDF5.VLen(arr.names))
+            if isempty(arr.class)
+                write_attribute(g, name_type_attr_matlab, "struct")
+                write_attribute(g, "MATLAB_fields", HDF5.VLen(arr.names))
+            else
+                write_attribute(g, name_type_attr_matlab, arr.class)
+                write_attribute(g, object_decode_attr_matlab, UInt32(2))
+            end
             for (fieldname, field_values) in arr
                 refs = _write_references!(mfile, parent, field_values)
                 dset, dtype = create_dataset(g, fieldname, refs)
@@ -590,14 +608,31 @@ function check_struct_keys(k::Vector)
     asckeys
 end
 
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::MatlabClassObject)
+    g = create_group(parent, name)
+    try
+        write_attribute(g, name_type_attr_matlab, obj.class)
+        write_attribute(g, object_decode_attr_matlab, UInt32(2))
+        for (ki, vi) in zip(keys(obj), values(obj))
+            m_write(mfile, g, ki, vi)
+        end
+    finally
+        close(g)
+    end
+end
+
 # Write a struct from arrays of keys and values
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, k::Vector{String}, v::Vector)
     g = create_group(parent, name)
-    write_attribute(g, name_type_attr_matlab, "struct")
-    for i = 1:length(k)
-        m_write(mfile, g, k[i], v[i])
+    try
+        write_attribute(g, name_type_attr_matlab, "struct")
+        for i = 1:length(k)
+            m_write(mfile, g, k[i], v[i])
+        end
+        write_attribute(g, "MATLAB_fields", HDF5.VLen(k))
+    finally
+        close(g)
     end
-    write_attribute(g, "MATLAB_fields", HDF5.VLen(k))
 end
 
 # Write Associative as a struct

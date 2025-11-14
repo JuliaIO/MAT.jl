@@ -155,14 +155,22 @@ sarr = Dict{String, Any}[
 sarr = reshape(sarr, 1, 2)
 matwrite(tmpfile, Dict("s_array" => sarr))
 read_sarr = matread(tmpfile)["s_array"]
-@test read_sarr isa MAT.MatlabStructArray
-@test read_sarr["y"][2] isa MAT.MatlabStructArray
+@test read_sarr isa MatlabStructArray
+@test read_sarr["y"][2] isa MatlabStructArray
 
 sarr = Dict{String, Any}[
     Dict("x"=>[1.0,2.0], SubString("y")=>[3.0,4.0]),
     Dict("x"=>[5.0,6.0], "y"=>[])
 ]
-test_write(Dict("s_array" => MAT.MatlabStructArray(sarr)))
+test_write(Dict("s_array" => MatlabStructArray(sarr)))
 
-empty_sarr = MAT.MatlabStructArray(["a", "b", "c"])
+empty_sarr = MatlabStructArray(["a", "b", "c"])
 test_write(Dict("s_array" => empty_sarr))
+
+# old matlab class object array
+carr = MatlabStructArray(["foo"], [[5, "bar"]], "TestClassOld")
+test_write(Dict("class_array" => carr))
+
+d = Dict{String,Any}("foo" => 5)
+obj = MatlabClassObject(d, "TestClassOld")
+test_write(Dict("tc_old" => obj))

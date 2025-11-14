@@ -206,7 +206,7 @@ let objtestfile = "obj.mat"
         @test key in keys(vars)
     end
     # check if class name was read correctly
-    @test vars["A"]["class"] == "Assoc"
+    @test vars["A"].class == "Assoc"
 end
 
 # test reading of a Matlab figure
@@ -240,4 +240,21 @@ let objtestfile = "old_class.mat"
     vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))
     @test "tc_old" in keys(vars)
     @test "foo" in keys(vars["tc_old"])
+    @test vars["tc_old"].class == "TestClassOld"
 end
+
+let objtestfile = "old_class_array.mat"
+    vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))
+    c_arr = vars["class_arr"]
+    @test c_arr isa MatlabStructArray
+    @test c_arr.class == "TestClassOld"
+    @test c_arr["foo"] == Any[5.0 "test"]
+
+    vars = matread(joinpath(dirname(@__FILE__), "v7", objtestfile))
+    c_arr = vars["class_arr"]
+    @test c_arr isa MatlabStructArray
+    @test c_arr.class == "TestClassOld"
+    @test c_arr["foo"] == Any[5.0 "test"]
+end
+
+
