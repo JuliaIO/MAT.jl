@@ -311,7 +311,7 @@ module MAT_types
     # for reference: https://github.com/foreverallama/matio/blob/main/matio/utils/converters/matstring.py
     function to_string(obj::MatlabOpaque, encoding::String = "UTF-16LE")
         data = obj["any"]
-        if isnothing(dat) || isempty(data)
+        if isnothing(data) || isempty(data)
             return String[]
         end
         if data[1, 1] != 1
@@ -349,7 +349,7 @@ module MAT_types
             return DateTime[]
         end
         if !isempty(obj["tz"])
-            @warn "no timezone conversion yet for datetime objects"
+            @warn "no timezone conversion yet for datetime objects. timezone ignored"
         end
         #isdate = obj["isDateOnly"] # optional: convert to Date instead of DateTime?
         if dat isa AbstractArray
