@@ -28,6 +28,7 @@
 module MAT_v5
 using CodecZlib, BufferedStreams, HDF5, SparseArrays
 import Base: read, write, close
+import ..MAT_types: MatlabStructArray, MatlabClassObject
 
 using ..MAT_subsys
 
@@ -172,6 +173,8 @@ end
 function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_object::Bool)
     if is_object
         class = String(read_element(f, swap_bytes, UInt8))
+    else
+        class = ""
     end
     field_length = read_element(f, swap_bytes, Int32)[1]
     field_names = read_element(f, swap_bytes, UInt8)
@@ -186,27 +189,28 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
         field_name_strings[i] = String(index == 0 ? sname : sname[1:index-1])
     end
 
-    data = Dict{String, Any}()
-    sizehint!(data, n_fields+1)
-    if is_object
-        data["class"] = class
-    end
-
+    local data
     if n_el == 1
         # Read a single struct into a dict
+        data = Dict{String, Any}()
+        sizehint!(data, n_fields+1)
         for field_name in field_name_strings
             data[field_name] = read_matrix(f, swap_bytes)[2]
         end
-    else
-        # Read multiple structs into a dict of arrays
-        for field_name in field_name_strings
-            data[field_name] = Array{Any}(undef, dimensions...)
+        if is_object
+            data = MatlabClassObject(data, class)
         end
+    else
+        # Read empty or multiple structs
+        nfields = length(field_name_strings)
+        N = length(dimensions)
+        field_values = Array{Any, N}[Array{Any}(undef, dimensions...) for _ in 1:nfields]
         for i = 1:n_el
-            for field_name in field_name_strings
-                data[field_name][i] = read_matrix(f, swap_bytes)[2]
+            for field in 1:nfields
+                field_values[field][i] = read_matrix(f, swap_bytes)[2]
             end
         end
+        data = MatlabStructArray{N}(field_name_strings, field_values, class)
     end
 
     data

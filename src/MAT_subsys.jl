@@ -24,6 +24,8 @@
 
 module MAT_subsys
 
+import ..MAT_types: MatlabStructArray
+
 const FWRAP_VERSION = 4
 
 mutable struct Subsys
@@ -158,8 +160,13 @@ function get_object_metadata(object_id::UInt32)
 end
 
 function get_default_properties(class_id::UInt32)
-    # FIXME Should we use deepcopy here
-    return copy(subsys_cache[].prop_vals_defaults[class_id+1, 1])
+    prop_vals_class = subsys_cache[].prop_vals_defaults[class_id+1, 1]
+    if prop_vals_class isa MatlabStructArray
+        prop_vals_class = Dict{String,Any}(prop_vals_class)
+    end
+    # FIXME Should we use deepcopy here?
+    r = copy(prop_vals_class)
+    return r
 end
 
 function get_property_idxs(obj_type_id::UInt32, saveobj_ret_type::Bool)

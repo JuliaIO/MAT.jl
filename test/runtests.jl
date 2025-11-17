@@ -1,5 +1,9 @@
 using SparseArrays, LinearAlgebra
+using Test, MAT
 
-include("read.jl")
-include("readwrite4.jl")
-include("write.jl")
+@testset "MAT" begin
+    include("types.jl")
+    include("read.jl")
+    include("readwrite4.jl")
+    include("write.jl")
+end
