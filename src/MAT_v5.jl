@@ -39,9 +39,16 @@ mutable struct Matlabv5File <: HDF5.H5DataStore
     ios::IOStream
     swap_bytes::Bool
     subsystem::Subsystem
+    subsystem_position::UInt64 # nr of bytes taken by subsystem
     varnames::Dict{String, Int64}
 
-    Matlabv5File(ios, swap_bytes) = new(ios, swap_bytes, Subsystem())
+    Matlabv5File(ios, swap_bytes) = new(ios, swap_bytes, Subsystem(), UInt64(0))
+end
+
+function Base.show(io::IO, f::Matlabv5File)
+    print(io, "Matlabv5File(")
+    print(io, f.ios, ", ")
+    print(io, f.swap_bytes, ")")
 end
 
 const miINT8 = 1
@@ -386,28 +393,31 @@ function read_matrix(f::IO, swap_bytes::Bool, subsys::Subsystem)
     return (name, data)
 end
 
-# FIXME: read subsystem here
 # Open MAT file for reading
-matopen(ios::IOStream, endian_indicator::UInt16) =
-    Matlabv5File(ios, endian_indicator == 0x494D)
+function matopen(ios::IOStream, endian_indicator::UInt16)
+    matfile = Matlabv5File(ios, endian_indicator == 0x494D)
+
+    seek(matfile.ios, 116)
+    subsys_offset = read_bswap(matfile.ios, matfile.swap_bytes, UInt64)
+    if subsys_offset == 0x2020202020202020
+        subsys_offset = UInt64(0)
+    end
+    if subsys_offset != 0
+        matfile.subsystem_position = subsys_offset
+        read_subsystem!(matfile)
+    end
+
+    return matfile
+end
 
 # Read whole MAT file
 function read(matfile::Matlabv5File)
     vars = Dict{String, Any}()
 
-    seek(matfile.ios, 116)
-    subsys_offset = read_bswap(matfile.ios, matfile.swap_bytes, UInt64)
-    if subsys_offset == 0x2020202020202020
-        subsys_offset = 0
-    end
-    if subsys_offset != 0
-        read_subsystem!(matfile, subsys_offset)
-    end
-
     seek(matfile.ios, 128)
     while !eof(matfile.ios)
-        offset = position(matfile.ios)
-        if offset == subsys_offset
+        pos = position(matfile.ios)
+        if pos == matfile.subsystem_position
             # Skip reading subsystem again
             (_, nbytes) = read_header(matfile.ios, matfile.swap_bytes)
             skip(matfile.ios, nbytes)
@@ -419,10 +429,10 @@ function read(matfile::Matlabv5File)
     vars
 end
 
-function read_subsystem!(matfile::Matlabv5File, offset::UInt64)
+function read_subsystem!(matfile::Matlabv5File)
     ios = matfile.ios
     swap_bytes = matfile.swap_bytes
-    seek(ios, offset)
+    seek(ios, matfile.subsystem_position)
     (_, subsystem_data) = read_matrix(ios, swap_bytes, matfile.subsystem)
     buf = IOBuffer(vec(subsystem_data))
     seek(buf, 8) # Skip subsystem header

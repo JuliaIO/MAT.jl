@@ -55,6 +55,15 @@ mutable struct MatlabHDF5File <: HDF5.H5DataStore
     end
 end
 
+function Base.show(io::IO, f::MatlabHDF5File)
+    print(io, "MatlabHDF5File(")
+    print(io, f.plain, ", ")
+    print(io, f.toclose, ", ")
+    print(io, f.writeheader, ", ")
+    print(io, f.refcounter, ", ")
+    print(io, f.compress, ")")
+end
+
 """
     close(matfile_handle)
 

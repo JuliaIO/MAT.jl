@@ -230,8 +230,19 @@ end
 
 for format in ["v7", "v7.3"]
     let objtestfile = "struct_table_datetime.mat"
-        vars = matread(joinpath(dirname(@__FILE__), format, objtestfile))["s"]
-        @test "testTable" in keys(vars)
+        filepath = joinpath(dirname(@__FILE__), format, objtestfile)
+
+        # make sure read(matopen(filepath), ::String) works
+        fid = matopen(filepath)
+        @test haskey(fid, "s")
+        vars = read(fid, "s")
+        @test haskey(vars, "testTable")
+        @test haskey(vars, "testDatetime")
+        close(fid)
+
+        # matread interface
+        vars = matread(filepath)["s"]
+        @test haskey(vars, "testTable")
         @test size(vars["testTable"]) == (1, 1)
         @test Set(keys(vars["testTable"][1, 1])) == Set(["props", "varnames", "nrows", "data", "rownames", "ndims", "nvars"])
         @test vars["testTable"][1, 1].class == "table"
