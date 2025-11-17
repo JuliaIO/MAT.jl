@@ -86,3 +86,38 @@ end
     wrong_arr = [MatlabClassObject(d, "TestClassOld"), MatlabClassObject(d, "Bah")]
     @test_throws ErrorException MatlabStructArray(wrong_arr)
 end
+
+@testset "MatlabOpaque to_string" begin
+    dat = UInt64[
+        0x0000000000000001
+        0x0000000000000002
+        0x0000000000000003
+        0x0000000000000001
+        0x0000000000000005
+        0x0000000000000005
+        0x0000000000000005
+        0x0065006e006f004a
+        0x006f007200420073
+        0x006d0053006e0077
+        0x0000006800740069
+    ]
+    dat = reshape(dat, 1, length(str))
+    obj = MatlabOpaque(Dict{String, Any}("any" => str), "string")
+    str = MAT.MAT_types.to_string(obj)
+    @test size(str) == (3,1)
+    @test vec(str) == ["Jones", "Brown", "Smith"]
+
+    dat = [
+        0x0000000000000001
+        0x0000000000000002
+        0x0000000000000001
+        0x0000000000000001
+        0x0000000000000005
+        0x0065006e006f004a
+        0x0000000000000073
+    ]
+    dat = reshape(dat, 1, length(str))
+    obj = MatlabOpaque(Dict{String, Any}("any" => str), "string")
+    str = MAT.MAT_types.to_string(obj)
+    @test str == "Jones"
+end

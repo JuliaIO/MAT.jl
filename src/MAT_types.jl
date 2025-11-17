@@ -28,8 +28,11 @@
 
 module MAT_types
 
+    import StringEncodings
+
     export MatlabStructArray, StructArrayField, convert_struct_array
     export MatlabClassObject
+    export MatlabOpaque
 
     # struct arrays are stored as columns per field name
     """
@@ -303,4 +306,36 @@ module MAT_types
     Base.iterate(m::MatlabOpaque) = iterate(m.d)
     Base.haskey(m::MatlabOpaque, k) = haskey(m.d, k)
     Base.get(m::MatlabOpaque, k, default) = get(m.d, k, default)
+
+    # for reference: https://github.com/foreverallama/matio/blob/main/matio/utils/converters/matstring.py
+    function to_string(obj::MatlabOpaque, encoding::String = "UTF-16LE")
+        data = obj["any"]
+        if data[1, 1] != 1
+            @warn "String saved from a different MAT-file version. Returning empty string"
+            return ""
+        end
+        ndims = data[1, 2]
+        shape = data[1, 3 : (2 + ndims)]
+        num_strings = prod(shape)
+        char_counts = data[1, (3 + ndims) : (2 + ndims + num_strings)]
+        byte_data = data[1, (3 + ndims + num_strings) : end]
+        bytes = reinterpret(UInt8, byte_data)
+
+        strings = String[]
+        pos = 1
+
+        for char_count in char_counts
+            byte_length = char_count * 2  # UTF-16 encoding
+            extracted_bytes = bytes[pos : pos + byte_length - 1]
+            str = StringEncodings.decode(extracted_bytes, encoding)
+            push!(strings, str)
+            pos += byte_length
+        end
+        
+        if num_strings==1
+            return first(strings)
+        else
+            return reshape(strings, shape...)
+        end
+    end
 end

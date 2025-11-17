@@ -302,15 +302,18 @@ function load_mcos_object(metadata::Array{UInt32}, type_name::String, subsys::Su
     class_id = metadata[end, 1]
     classname = get_classname(subsys, class_id)
 
-    object_arr = Array{MatlabOpaque}(undef, convert(Vector{Int}, dims)...)
-
-    for i = 1:length(object_arr)
-        oid = object_ids[i]
-        obj = get_object!(subsys, oid, classname)
-        object_arr[i] = obj
+    if nobjects == 1
+        oid = object_ids[1]
+        return get_object!(subsys, oid, classname)
+    else
+        object_arr = Array{MatlabOpaque}(undef, convert(Vector{Int}, dims)...)
+        for i = 1:length(object_arr)
+            oid = object_ids[i]
+            obj = get_object!(subsys, oid, classname)
+            object_arr[i] = obj
+        end
+        return object_arr
     end
-
-    return object_arr
 end
 
 end

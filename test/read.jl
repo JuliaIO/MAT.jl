@@ -235,39 +235,37 @@ for format in ["v7", "v7.3"]
         # make sure read(matopen(filepath), ::String) works
         fid = matopen(filepath)
         @test haskey(fid, "s")
-        vars = read(fid, "s")
-        @test haskey(vars, "testTable")
-        @test haskey(vars, "testDatetime")
+        var_s = read(fid, "s")
+        @test haskey(var_s, "testTable")
+        @test haskey(var_s, "testDatetime")
         close(fid)
 
         # matread interface
         vars = matread(filepath)["s"]
         @test haskey(vars, "testTable")
-        @test size(vars["testTable"]) == (1, 1)
-        @test Set(keys(vars["testTable"][1, 1])) == Set(["props", "varnames", "nrows", "data", "rownames", "ndims", "nvars"])
-        @test vars["testTable"][1, 1].class == "table"
-        @test vars["testTable"][1, 1]["ndims"] === 2.0
-        @test vars["testTable"][1, 1]["nvars"] === 5.0
-        @test vars["testTable"][1, 1]["nrows"] === 3.0
-        @test vars["testTable"][1, 1]["data"][1, 1] == reshape([1261.0, 547.0, 3489.0], 3, 1)
-        @test vars["testTable"][1, 1]["data"][1, 2][1, 1].class == "string"
-        @test vars["testTable"][1, 1]["data"][1, 3][1, 1].class == "datetime"
-        @test vars["testTable"][1, 1]["data"][1, 4][1, 1].class == "categorical"
-        @test vars["testTable"][1, 1]["data"][1, 5][1, 1].class == "string"
+        @test Set(keys(vars["testTable"])) == Set(["props", "varnames", "nrows", "data", "rownames", "ndims", "nvars"])
+        @test vars["testTable"].class == "table"
+        @test vars["testTable"]["ndims"] === 2.0
+        @test vars["testTable"]["nvars"] === 5.0
+        @test vars["testTable"]["nrows"] === 3.0
+        @test vars["testTable"]["data"][1, 1] == reshape([1261.0, 547.0, 3489.0], 3, 1)
+        @test vars["testTable"]["data"][1, 2].class == "string"
+        @test vars["testTable"]["data"][1, 3].class == "datetime"
+        @test vars["testTable"]["data"][1, 4].class == "categorical"
+        @test vars["testTable"]["data"][1, 5].class == "string"
 
         @test "testDatetime" in keys(vars)
-        @test size(vars["testDatetime"]) == (1, 1)
         if format == "v7.3"
-            @test Set(keys(vars["testDatetime"][1, 1])) == Set(["tz", "data", "fmt", "isDateOnly"])
-            @test vars["testDatetime"][1, 1]["isDateOnly"] === false
+            @test Set(keys(vars["testDatetime"])) == Set(["tz", "data", "fmt", "isDateOnly"])
+            @test vars["testDatetime"]["isDateOnly"] === false
         else
             # MATLAB removed property "isDateOnly" in later versions
-            @test Set(keys(vars["testDatetime"][1, 1])) == Set(["tz", "data", "fmt"])
+            @test Set(keys(vars["testDatetime"])) == Set(["tz", "data", "fmt"])
         end
-        @test vars["testDatetime"][1, 1].class == "datetime"
-        @test vars["testDatetime"][1, 1]["tz"] === ""
-        @test vars["testDatetime"][1, 1]["fmt"] === ""
-        @test vars["testDatetime"][1, 1]["data"] === 1.575304969634e12 + 0.0im
+        @test vars["testDatetime"].class == "datetime"
+        @test vars["testDatetime"]["tz"] === ""
+        @test vars["testDatetime"]["fmt"] === ""
+        @test vars["testDatetime"]["data"] === 1.575304969634e12 + 0.0im
     end
 end
 
