@@ -44,9 +44,10 @@ mutable struct MatlabHDF5File <: HDF5.H5DataStore
     writeheader::Bool
     refcounter::Int
     compress::Bool
+    subsystem::Subsystem
 
     function MatlabHDF5File(plain, toclose::Bool=true, writeheader::Bool=false, refcounter::Int=0, compress::Bool=false)
-        f = new(plain, toclose, writeheader, refcounter, compress)
+        f = new(plain, toclose, writeheader, refcounter, compress, Subsystem())
         if toclose
             finalizer(close, f)
         end
@@ -118,8 +119,8 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     end
     subsys_refs = "#subsystem#"
     if haskey(fid.plain, subsys_refs)
-        subsys_data = m_read(fid.plain[subsys_refs])
-        MAT_subsys.load_subsys!(subsys_data, endian_indicator)
+        subsys_data = m_read(fid.plain[subsys_refs], fid.subsystem)
+        MAT_subsys.load_subsys!(fid.subsystem, subsys_data, endian_indicator)
     end
     fid
 end
@@ -142,14 +143,14 @@ function read_complex(dtype::HDF5.Datatype, dset::HDF5.Dataset, ::Type{T}) where
     return read(dset, Complex{T})
 end
 
-function read_cell(dset::HDF5.Dataset)
+function read_cell(dset::HDF5.Dataset, subsys::Subsystem)
     refs = read(dset, Reference)
     out = Array{Any}(undef, size(refs))
     f = HDF5.file(dset)
     for i = 1:length(refs)
         dset = f[refs[i]]
         try
-            out[i] = m_read(dset)
+            out[i] = m_read(dset, subsys)
         finally
             close(dset)
         end
@@ -157,7 +158,7 @@ function read_cell(dset::HDF5.Dataset)
     return out
 end
 
-function m_read(dset::HDF5.Dataset)
+function m_read(dset::HDF5.Dataset, subsys::Subsystem)
     if haskey(dset, empty_attr_matlab)
         # Empty arrays encode the dimensions as the dataset
         dims = convert(Vector{Int}, read(dset))
@@ -184,14 +185,14 @@ function m_read(dset::HDF5.Dataset)
 
     if mattype == "cell" && objecttype === nothing
         # Cell arrays, represented as an array of refs
-        return read_cell(dset)
+        return read_cell(dset, subsys)
     elseif objecttype !== nothing
         if objecttype != 3
             @warn "MATLAB Object Type $mattype is currently not supported."
             return missing
         end
         if mattype == "FileWrapper__"
-            return read_cell(dset)
+            return read_cell(dset, subsys)
         end
         if haskey(dset, "MATLAB_fields")
             @warn "Enumeration Instances are not supported currently."
@@ -199,7 +200,7 @@ function m_read(dset::HDF5.Dataset)
         end
     elseif mattype == "struct_array_field"
         # This will be converted into MatlabStructArray in `m_read(g::HDF5.Group)`
-        return StructArrayField(read_cell(dset))
+        return StructArrayField(read_cell(dset, subsys))
     elseif !haskey(str2type_matlab,mattype)
         @warn "MATLAB $mattype values are currently not supported."
         return missing
@@ -219,7 +220,7 @@ function m_read(dset::HDF5.Dataset)
         class_id = HDF5.API.h5t_get_class(dtype.id)
         d = class_id == HDF5.API.H5T_COMPOUND ? read_complex(dtype, dset, T) : read(dset, T)
         if objecttype !== nothing
-            return MAT_subsys.load_mcos_object(d, "MCOS")
+            return MAT_subsys.load_mcos_object(d, "MCOS", subsys)
         else
             return length(d) == 1 ? d[1] : d
         end
@@ -265,7 +266,7 @@ function read_sparse_matrix(g::HDF5.Group, mattype::String)
     return SparseMatrixCSC(convert(Int, read_attribute(g, sparse_attr_matlab)), length(jc)-1, jc, ir, data)
 end
 
-function read_struct_as_dict(g::HDF5.Group)
+function read_struct_as_dict(g::HDF5.Group, subsys::Subsystem)
     if haskey(g, "MATLAB_fields")
         fn = [join(f) for f in read_attribute(g, "MATLAB_fields")]
     else
@@ -275,7 +276,7 @@ function read_struct_as_dict(g::HDF5.Group)
     for i = 1:length(fn)
         dset = g[fn[i]]
         try
-            s[fn[i]] = m_read(dset)
+            s[fn[i]] = m_read(dset, subsys)
         finally
             close(dset)
         end
@@ -284,7 +285,7 @@ function read_struct_as_dict(g::HDF5.Group)
 end
 
 # reading a struct, struct array, or sparse matrix
-function m_read(g::HDF5.Group)
+function m_read(g::HDF5.Group, subsys::Subsystem)
     if HDF5.name(g) == "/#subsystem#"
         mattype = "#subsystem#"
     else
@@ -312,7 +313,7 @@ function m_read(g::HDF5.Group)
     else
         class = ""
     end
-    s = read_struct_as_dict(g)
+    s = read_struct_as_dict(g, subsys)
     out = convert_struct_array(s, class)
     return out
 end
@@ -328,7 +329,7 @@ function read(f::MatlabHDF5File, name::String)
     local val
     obj = f.plain[name]
     try
-        val = m_read(obj)
+        val = m_read(obj, f.subsystem)
     finally
         close(obj)
     end

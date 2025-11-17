@@ -38,9 +38,10 @@ complex_array(a, b) = complex.(a, b)
 mutable struct Matlabv5File <: HDF5.H5DataStore
     ios::IOStream
     swap_bytes::Bool
+    subsystem::Subsystem
     varnames::Dict{String, Int64}
 
-    Matlabv5File(ios, swap_bytes) = new(ios, swap_bytes)
+    Matlabv5File(ios, swap_bytes) = new(ios, swap_bytes, Subsystem())
 end
 
 const miINT8 = 1
@@ -162,15 +163,15 @@ function read_data(f::IO, swap_bytes::Bool, ::Type{T}, dimensions::Vector{Int32}
     read_array ? convert(Array{T}, data) : convert(T, data)
 end
 
-function read_cell(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
+function read_cell(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, subsys::Subsystem)
     data = Array{Any}(undef, convert(Vector{Int}, dimensions)...)
     for i = 1:length(data)
-        (ignored_name, data[i]) = read_matrix(f, swap_bytes)
+        (ignored_name, data[i]) = read_matrix(f, swap_bytes, subsys)
     end
     data
 end
 
-function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_object::Bool)
+function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_object::Bool, subsys::Subsystem)
     if is_object
         class = String(read_element(f, swap_bytes, UInt8))
     else
@@ -195,7 +196,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
         data = Dict{String, Any}()
         sizehint!(data, n_fields+1)
         for field_name in field_name_strings
-            data[field_name] = read_matrix(f, swap_bytes)[2]
+            data[field_name] = read_matrix(f, swap_bytes, subsys)[2]
         end
         if is_object
             data = MatlabClassObject(data, class)
@@ -207,7 +208,7 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
         field_values = Array{Any, N}[Array{Any}(undef, dimensions...) for _ in 1:nfields]
         for i = 1:n_el
             for field in 1:nfields
-                field_values[field][i] = read_matrix(f, swap_bytes)[2]
+                field_values[field][i] = read_matrix(f, swap_bytes, subsys)[2]
             end
         end
         data = MatlabStructArray{N}(field_name_strings, field_values, class)
@@ -317,23 +318,24 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
     data
 end
 
-function read_opaque(f::IO, swap_bytes::Bool)
+function read_opaque(f::IO, swap_bytes::Bool, subsys::Subsystem)
     type_name = String(read_element(f, swap_bytes, UInt8))
     classname = String(read_element(f, swap_bytes, UInt8))
 
     if classname == "FileWrapper__"
-        return read_matrix(f, swap_bytes)
+        return read_matrix(f, swap_bytes, subsys)
     end
 
-    _, metadata = read_matrix(f, swap_bytes)
-    return MAT_subsys.load_mcos_object(metadata, type_name)
+    _, metadata = read_matrix(f, swap_bytes, subsys)
+    return MAT_subsys.load_mcos_object(metadata, type_name, subsys)
 end
 
 # Read matrix data
-function read_matrix(f::IO, swap_bytes::Bool)
+function read_matrix(f::IO, swap_bytes::Bool, subsys::Subsystem)
     (dtype, nbytes) = read_header(f, swap_bytes)
     if dtype == miCOMPRESSED
-        return read_matrix(ZlibDecompressorStream(IOBuffer(read!(f, Vector{UInt8}(undef, nbytes)))), swap_bytes)
+        decompressed_ios = ZlibDecompressorStream(IOBuffer(read!(f, Vector{UInt8}(undef, nbytes))))
+        return read_matrix(decompressed_ios, swap_bytes, subsys)
     elseif dtype != miMATRIX
         error("Unexpected data type")
     elseif nbytes == 0
@@ -358,17 +360,17 @@ function read_matrix(f::IO, swap_bytes::Bool)
 
     local data
     if class == mxCELL_CLASS
-        data = read_cell(f, swap_bytes, dimensions)
+        data = read_cell(f, swap_bytes, dimensions, subsys)
     elseif class == mxSTRUCT_CLASS || class == mxOBJECT_CLASS
-        data = read_struct(f, swap_bytes, dimensions, class == mxOBJECT_CLASS)
+        data = read_struct(f, swap_bytes, dimensions, class == mxOBJECT_CLASS, subsys)
     elseif class == mxSPARSE_CLASS
         data = read_sparse(f, swap_bytes, dimensions, flags)
     elseif class == mxCHAR_CLASS && length(dimensions) <= 2
         data = read_string(f, swap_bytes, dimensions)
     elseif class == mxFUNCTION_CLASS
-        data = read_matrix(f, swap_bytes)
+        data = read_matrix(f, swap_bytes, subsys)
     elseif class == mxOPAQUE_CLASS
-        data = read_opaque(f, swap_bytes)
+        data = read_opaque(f, swap_bytes, subsys)
     else
         if (flags[1] & (1 << 9)) != 0 # logical
             data = read_data(f, swap_bytes, Bool, dimensions)
@@ -384,6 +386,7 @@ function read_matrix(f::IO, swap_bytes::Bool)
     return (name, data)
 end
 
+# FIXME: read subsystem here
 # Open MAT file for reading
 matopen(ios::IOStream, endian_indicator::UInt16) =
     Matlabv5File(ios, endian_indicator == 0x494D)
@@ -398,7 +401,7 @@ function read(matfile::Matlabv5File)
         subsys_offset = 0
     end
     if subsys_offset != 0
-        read_subsystem(matfile.ios, matfile.swap_bytes, subsys_offset)
+        read_subsystem!(matfile, subsys_offset)
     end
 
     seek(matfile.ios, 128)
@@ -410,19 +413,21 @@ function read(matfile::Matlabv5File)
             skip(matfile.ios, nbytes)
             continue
         end
-        (name, data) = read_matrix(matfile.ios, matfile.swap_bytes)
+        (name, data) = read_matrix(matfile.ios, matfile.swap_bytes, matfile.subsystem)
         vars[name] = data
     end
     vars
 end
 
-function read_subsystem(ios::IOStream, swap_bytes::Bool, offset::UInt64)
+function read_subsystem!(matfile::Matlabv5File, offset::UInt64)
+    ios = matfile.ios
+    swap_bytes = matfile.swap_bytes
     seek(ios, offset)
-    (_, subsystem_data) = read_matrix(ios, swap_bytes)
+    (_, subsystem_data) = read_matrix(ios, swap_bytes, matfile.subsystem)
     buf = IOBuffer(vec(subsystem_data))
     seek(buf, 8) # Skip subsystem header
-    _, subsys_data = read_matrix(buf, swap_bytes)
-    MAT_subsys.load_subsys!(subsys_data, swap_bytes)
+    _, subsys_data = read_matrix(buf, swap_bytes, matfile.subsystem)
+    MAT_subsys.load_subsys!(matfile.subsystem, subsys_data, swap_bytes)
 end
 
 # Read only variable names from an HDF5 file
@@ -464,7 +469,7 @@ function read(matfile::Matlabv5File, varname::String)
         error("no variable $varname in file")
     end
     seek(matfile.ios, varnames[varname])
-    (name, data) = read_matrix(matfile.ios, matfile.swap_bytes)
+    (name, data) = read_matrix(matfile.ios, matfile.swap_bytes, matfile.subsystem)
     data
 end
 

@@ -138,7 +138,6 @@ function matread(filename::AbstractString)
     try
         vars = read(file)
     finally
-        MAT_subsys.clear_subsys!()
         close(file)
     end
     vars
