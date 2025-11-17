@@ -33,7 +33,7 @@ module MAT_types
 
     export MatlabStructArray, StructArrayField, convert_struct_array
     export MatlabClassObject
-    export MatlabOpaque
+    export MatlabOpaque, convert_opaque
 
     # struct arrays are stored as columns per field name
     """
@@ -308,6 +308,18 @@ module MAT_types
     Base.haskey(m::MatlabOpaque, k) = haskey(m.d, k)
     Base.get(m::MatlabOpaque, k, default) = get(m.d, k, default)
 
+    function convert_opaque(obj::MatlabOpaque)
+        if obj.class == "string"
+            return to_string(obj)
+        elseif obj.class == "datetime"
+            return to_datetime(obj)
+        elseif obj.class == "duration"
+            return to_duration(obj)
+        else
+            return obj
+        end
+    end
+
     # for reference: https://github.com/foreverallama/matio/blob/main/matio/utils/converters/matstring.py
     function to_string(obj::MatlabOpaque, encoding::String = "UTF-16LE")
         data = obj["any"]
@@ -352,11 +364,7 @@ module MAT_types
             @warn "no timezone conversion yet for datetime objects. timezone ignored"
         end
         #isdate = obj["isDateOnly"] # optional: convert to Date instead of DateTime?
-        if dat isa AbstractArray
-            return map(ms_to_datetime, dat)
-        else
-            return ms_to_datetime(dat)
-        end
+        return map_or_not(ms_to_datetime, dat)
     end
 
     # is the complex part the submilliseconds?
@@ -365,5 +373,17 @@ module MAT_types
         s, ms_rem = fldmod(ms, 1_000)  # whole seconds and remainder milliseconds
         return DateTime(1970,1,1) + Second(s) + Millisecond(ms_rem)
     end
+
+    function to_duration(obj::MatlabOpaque)
+        dat = obj["millis"]
+        #fmt = obj["fmt"] # TODO: format, e.g. 'd' to Day
+        if isnothing(dat) || isempty(dat)
+            return Millisecond[]
+        end
+        return map_or_not(Millisecond, dat)
+    end
+
+    map_or_not(f, dat::AbstractArray) = map(f, dat)
+    map_or_not(f, dat) = f(dat)
 
 end

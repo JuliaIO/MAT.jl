@@ -104,10 +104,11 @@ end
     ]
     dat = reshape(dat, 1, length(dat))
     obj = MatlabOpaque(Dict{String, Any}("any" => dat), "string")
-    str = MAT.MAT_types.to_string(obj)
+    str = MAT.convert_opaque(obj)
     @test size(str) == (3,1)
     @test vec(str) == ["Jones", "Brown", "Smith"]
 
+    # single element string array is a single string in matlab, ofcourse
     dat = [
         0x0000000000000001
         0x0000000000000002
@@ -119,7 +120,7 @@ end
     ]
     dat = reshape(dat, 1, length(dat))
     obj = MatlabOpaque(Dict{String, Any}("any" => dat), "string")
-    str = MAT.MAT_types.to_string(obj)
+    str = MAT.convert_opaque(obj)
     @test str == "Jones"
 end
 
@@ -140,7 +141,7 @@ end
         DateTime(2016, 12, 21) # 21-Dec-2016
         DateTime(2016, 12, 22) # 22-Dec-2016
     ]
-    @test all(MAT.MAT_types.to_datetime(obj) .== expected_dates)
+    @test all(MAT.convert_opaque(obj) .== expected_dates)
 
     d = Dict{String, Any}(
         "tz"         => "",
@@ -151,5 +152,21 @@ end
     obj = MatlabOpaque(d, "datetime")
     # "02-Dec-2019 16:42:49"
     expected_dt = DateTime(2019, 12, 2, 16, 42, 49)
-    @test MAT.MAT_types.to_datetime(obj) - expected_dt < Second(1)
+    @test MAT.convert_opaque(obj) - expected_dt < Second(1)
+end
+
+@testset "MatlabOpaque to_duration" begin
+    d = Dict(
+        "millis" => [3.6e6 7.2e6],
+        "fmt"    => 'h',
+    )
+    obj = MatlabOpaque(d, "duration")
+    @test MAT.convert_opaque(obj) == map(Millisecond, d["millis"])
+
+    d = Dict(
+        "millis" => 12000.0,
+        "fmt"    => 'h',
+    )
+    obj = MatlabOpaque(d, "duration")
+    @test MAT.convert_opaque(obj) == Millisecond(d["millis"])
 end
