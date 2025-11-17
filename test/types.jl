@@ -2,7 +2,7 @@ using MAT, Test
 
 @testset "MatlabStructArray" begin
     d_arr = Dict{String, Any}[
-        Dict("x"=>[1.0,2.0], SubString("y")=>[3.0,4.0]),
+        Dict("x"=>[1.0,2.0], SubString("y")=>3.0),
         Dict("x"=>[5.0,6.0], "y"=>[])
     ]
     s_arr = MatlabStructArray(d_arr)
@@ -44,9 +44,18 @@ using MAT, Test
     # possibility to convert back to dict array via `Array`
     s_arr = MatlabStructArray(d_arr)
     @test Array(s_arr) == d_arr
+    d_arr_reshape = reshape(d_arr, 1, 2)
+    @test Array(MatlabStructArray(d_arr_reshape)) == d_arr_reshape
     d_symbol = Array{Dict{Symbol,Any}}(MatlabStructArray(d_arr))
     @test d_symbol[2][:x] == d_arr[2]["x"]
     @test Array(MatlabStructArray(d_symbol)) == d_arr
+
+    # class object array conversion
+    s_arr = MatlabStructArray(d_arr, "TestClass")
+    c_arr = Array(s_arr)
+    @test c_arr isa Array{MatlabClassObject}
+    @test all(c->c.class=="TestClass", c_arr)
+    @test MatlabStructArray(c_arr) == s_arr
 
     # test error of unequal structs
     wrong_sarr = Dict{String, Any}[

@@ -70,9 +70,8 @@ module MAT_types
         names::Vector{String}
         values::Vector{Array{Any,N}}
         class::String
-        function MatlabStructArray(names::Vector{String}, values::Vector{Array{Any,N}}, class::String="") where N
-            # call MatlabStructArray{N}() to avoid the check
-            check_struct_array(names, values)
+        function MatlabStructArray(names::Vector{String}, values::Vector{Array{Any,N}}, class::String=""; check::Bool=true) where N
+            check && check_struct_array(names, values)
             return new{N}(names, values, class)
         end
         function MatlabStructArray{N}(names::Vector{String}, values::Vector{Array{Any,N}}, class::String="") where N
@@ -91,8 +90,11 @@ module MAT_types
         end
     end
 
-    function MatlabStructArray(names::AbstractVector{<:AbstractString}, values::AbstractArray{<:AbstractArray{T,N}}, class="") where {T,N}
-        MatlabStructArray{N}(string.(names), Vector{Array{Any,N}}(values), string(class))
+    function MatlabStructArray(names::AbstractVector{<:AbstractString}, values::AbstractArray{A}, class=""; check::Bool=true) where {N, A<:AbstractArray{T, N} where {T}}
+        MatlabStructArray(string.(names), Vector{Array{Any,N}}(values), string(class); check=check)
+    end
+    function MatlabStructArray(names::Vector{String}, values::AbstractArray{A}, class=""; check::Bool=true) where {N, A<:AbstractArray{T, N} where {T}}
+        MatlabStructArray(names, Vector{Array{Any,N}}(values), string(class); check=check)
     end
 
     # empty array
@@ -187,16 +189,21 @@ module MAT_types
         Base.Dict{String, Any}(arr.names .=> arr.values)
     end
 
-    Base.Array(arr::MatlabStructArray) = Array{Dict{String,Any}}(arr)
-    function Base.Array{D}(arr::MatlabStructArray{N}) where {T,D<:AbstractDict{T},N}
+    Base.Array{D}(arr::MatlabStructArray{N}) where {D<:AbstractDict,N} = Array{D,N}(arr)
+
+    function Base.Array{D, N}(arr::MatlabStructArray{N}) where {D<:AbstractDict,N}
         first_field = first(arr.values)
         sz = size(first_field)
         result = Array{D, N}(undef, sz)
         for idx in eachindex(first_field)
             element_values = (v[idx] for v in arr.values)
-            result[idx] = D(T.(arr.names) .=> element_values)
+            result[idx] = create_struct(D, arr.names, element_values, arr.class)
         end
         return result
+    end
+
+    function create_struct(::Type{D}, keys, values, class::String) where {T, D<:AbstractDict{T}}
+        return D(T.(keys) .=> values)
     end
 
     struct StructArrayField{N}
@@ -256,4 +263,17 @@ module MAT_types
             end
         end
     end 
+
+    function Base.Array(arr::MatlabStructArray{N}) where N 
+        if isempty(arr.class)
+            return Array{Dict{String,Any}, N}(arr)
+        else
+            return Array{MatlabClassObject, N}(arr)
+        end
+    end
+
+    function create_struct(::Type{D}, keys, values, class::String) where D<:MatlabClassObject
+        d = Dict{String, Any}(string.(keys) .=> values)
+        return MatlabClassObject(d, class)
+    end
 end

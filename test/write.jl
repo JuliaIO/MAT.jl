@@ -153,35 +153,37 @@ test_write(Dict("adjoint_arr"=>Any[1 2 3;4 5 6;7 8 9]'))
 test_write(Dict("reshape_arr"=>reshape(Any[1 2 3;4 5 6;7 8 9]',1,9)))
 
 # test nested struct array - interface via Dict array
-sarr = Dict{String, Any}[
-    Dict("x"=>[1.0,2.0], SubString("y")=>[3.0,4.0]),
-    Dict("x"=>[5.0,6.0], "y"=>[Dict("a"=>7), Dict("a"=>8)])
-]
-# we have to test Array size is maintained inside mat files
-sarr = reshape(sarr, 1, 2)
-matwrite(tmpfile, Dict("s_array" => sarr))
-read_sarr = matread(tmpfile)["s_array"]
-@test read_sarr isa MatlabStructArray
-@test read_sarr["y"][2] isa MatlabStructArray
+@testset "MatlabStructArray writing" begin
+    sarr = Dict{String, Any}[
+        Dict("x"=>[1.0,2.0], SubString("y")=>3.0),
+        Dict("x"=>[5.0,6.0], "y"=>[Dict("a"=>7), Dict("a"=>8)])
+    ]
+    # we have to test Array size is maintained inside mat files
+    sarr = reshape(sarr, 1, 2)
+    matwrite(tmpfile, Dict("s_array" => sarr))
+    read_sarr = matread(tmpfile)["s_array"]
+    @test read_sarr isa MatlabStructArray
+    @test read_sarr["y"][2] isa MatlabStructArray
 
-sarr = Dict{String, Any}[
-    Dict("x"=>[1.0,2.0], SubString("y")=>[3.0,4.0]),
-    Dict("x"=>[5.0,6.0], "y"=>[])
-]
-test_write(Dict("s_array" => MatlabStructArray(sarr)))
+    sarr = Dict{String, Any}[
+        Dict("x"=>[1.0,2.0], SubString("y")=>3.0),
+        Dict("x"=>[5.0,6.0], "y"=>[])
+    ]
+    test_write(Dict("s_array" => MatlabStructArray(sarr)))
 
-empty_sarr = MatlabStructArray(["a", "b", "c"])
-test_write(Dict("s_array" => empty_sarr))
+    empty_sarr = MatlabStructArray(["a", "b", "c"])
+    test_write(Dict("s_array" => empty_sarr))
 
-# old matlab class object array
-carr = MatlabStructArray(["foo"], [[5, "bar"]], "TestClassOld")
-test_write(Dict("class_array" => carr))
+    # old matlab class object array
+    carr = MatlabStructArray(["foo"], [[5, "bar"]], "TestClassOld")
+    test_write(Dict("class_array" => carr))
 
-d = Dict{String,Any}("foo" => 5)
-obj = MatlabClassObject(d, "TestClassOld")
-test_write(Dict("tc_old" => obj))
+    d = Dict{String,Any}("foo" => 5)
+    obj = MatlabClassObject(d, "TestClassOld")
+    test_write(Dict("tc_old" => obj))
 
-carr = [MatlabClassObject(d, "TestClassOld"), MatlabClassObject(d, "TestClassOld")]
-matwrite(tmpfile, Dict("class_array" => carr))
-carr_read = matread(tmpfile)["class_array"]
-@test carr_read == MatlabStructArray(carr)
+    carr = [MatlabClassObject(d, "TestClassOld"), MatlabClassObject(d, "TestClassOld")]
+    matwrite(tmpfile, Dict("class_array" => carr))
+    carr_read = matread(tmpfile)["class_array"]
+    @test carr_read == MatlabStructArray(carr)
+end
