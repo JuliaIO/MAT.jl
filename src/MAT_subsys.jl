@@ -24,7 +24,7 @@
 
 module MAT_subsys
 
-import ..MAT_types: MatlabStructArray, MatlabOpaque
+import ..MAT_types: MatlabStructArray, MatlabOpaque, convert_opaque
 
 export Subsystem
 
@@ -304,13 +304,14 @@ function load_mcos_object(metadata::Array{UInt32}, type_name::String, subsys::Su
 
     if nobjects == 1
         oid = object_ids[1]
-        return get_object!(subsys, oid, classname)
+        obj = get_object!(subsys, oid, classname)
+        return convert_opaque(obj)
     else
-        object_arr = Array{MatlabOpaque}(undef, convert(Vector{Int}, dims)...)
+        object_arr = Array{Any}(undef, convert(Vector{Int}, dims)...)
         for i = 1:length(object_arr)
             oid = object_ids[i]
             obj = get_object!(subsys, oid, classname)
-            object_arr[i] = obj
+            object_arr[i] = convert_opaque(obj)
         end
         return object_arr
     end

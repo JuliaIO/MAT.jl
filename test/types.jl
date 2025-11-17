@@ -133,7 +133,7 @@ end
             1482364800000.0+0.0im;;
             ],
         "fmt"        => "",
-        "isDateOnly" => true,
+        "isDateOnly" => true, # Note: "isDateOnly" not in all versions
     )
     obj = MatlabOpaque(d, "datetime")
     expected_dates = [
@@ -152,6 +152,7 @@ end
     obj = MatlabOpaque(d, "datetime")
     # "02-Dec-2019 16:42:49"
     expected_dt = DateTime(2019, 12, 2, 16, 42, 49)
+    # still have some millisecond rounding issue?
     @test MAT.convert_opaque(obj) - expected_dt < Second(1)
 end
 

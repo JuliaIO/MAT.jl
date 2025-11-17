@@ -1,4 +1,5 @@
 using MAT, Test
+using Dates
 
 function check(filename, result)
     matfile = matopen(filename)
@@ -248,24 +249,17 @@ for format in ["v7", "v7.3"]
         @test vars["testTable"]["ndims"] === 2.0
         @test vars["testTable"]["nvars"] === 5.0
         @test vars["testTable"]["nrows"] === 3.0
-        @test vars["testTable"]["data"][1, 1] == reshape([1261.0, 547.0, 3489.0], 3, 1)
-        @test vars["testTable"]["data"][1, 2].class == "string"
-        @test vars["testTable"]["data"][1, 3].class == "datetime"
-        @test vars["testTable"]["data"][1, 4].class == "categorical"
-        @test vars["testTable"]["data"][1, 5].class == "string"
+        @test vars["testTable"]["data"][1] == reshape([1261.0, 547.0, 3489.0], 3, 1)
+        @test vars["testTable"]["data"][2] isa Matrix{String}
+        @test vars["testTable"]["data"][3] isa Matrix{DateTime}
+        @test vars["testTable"]["data"][4].class == "categorical"
+        @test vars["testTable"]["data"][5] isa Matrix{String}
+        @test all(x->length(x)==3, vars["testTable"]["data"][[1,2,3,5]])
 
         @test "testDatetime" in keys(vars)
-        if format == "v7.3"
-            @test Set(keys(vars["testDatetime"])) == Set(["tz", "data", "fmt", "isDateOnly"])
-            @test vars["testDatetime"]["isDateOnly"] === false
-        else
-            # MATLAB removed property "isDateOnly" in later versions
-            @test Set(keys(vars["testDatetime"])) == Set(["tz", "data", "fmt"])
-        end
-        @test vars["testDatetime"].class == "datetime"
-        @test vars["testDatetime"]["tz"] === ""
-        @test vars["testDatetime"]["fmt"] === ""
-        @test vars["testDatetime"]["data"] === 1.575304969634e12 + 0.0im
+        dt = vars["testDatetime"] 
+        @test dt isa DateTime
+        @test dt - DateTime(2019, 12, 2, 16, 42, 49) < Second(1)
     end
 end
 
