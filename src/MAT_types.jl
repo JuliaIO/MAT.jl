@@ -29,6 +29,7 @@
 module MAT_types
 
     import StringEncodings
+    import Dates: Date, DateTime, Second, Millisecond, Nanosecond
 
     export MatlabStructArray, StructArrayField, convert_struct_array
     export MatlabClassObject
@@ -310,6 +311,9 @@ module MAT_types
     # for reference: https://github.com/foreverallama/matio/blob/main/matio/utils/converters/matstring.py
     function to_string(obj::MatlabOpaque, encoding::String = "UTF-16LE")
         data = obj["any"]
+        if isnothing(dat) || isempty(data)
+            return String[]
+        end
         if data[1, 1] != 1
             @warn "String saved from a different MAT-file version. Returning empty string"
             return ""
@@ -338,4 +342,28 @@ module MAT_types
             return reshape(strings, shape...)
         end
     end
+
+    function to_datetime(obj::MatlabOpaque)
+        dat = obj["data"]
+        if isnothing(dat) || isempty(dat)
+            return DateTime[]
+        end
+        if !isempty(obj["tz"])
+            @warn "no timezone conversion yet for datetime objects"
+        end
+        #isdate = obj["isDateOnly"] # optional: convert to Date instead of DateTime?
+        if dat isa AbstractArray
+            return map(ms_to_datetime, dat)
+        else
+            return ms_to_datetime(dat)
+        end
+    end
+
+    # is the complex part the submilliseconds?
+    ms_to_datetime(ms::Complex) = ms_to_datetime(real(ms))
+    function ms_to_datetime(ms::Real)
+        s, ms_rem = fldmod(ms, 1_000)  # whole seconds and remainder milliseconds
+        return DateTime(1970,1,1) + Second(s) + Millisecond(ms_rem)
+    end
+
 end

@@ -1,4 +1,5 @@
 using MAT, Test
+using Dates
 
 @testset "MatlabStructArray" begin
     d_arr = Dict{String, Any}[
@@ -120,4 +121,35 @@ end
     obj = MatlabOpaque(Dict{String, Any}("any" => str), "string")
     str = MAT.MAT_types.to_string(obj)
     @test str == "Jones"
+end
+
+@testset "MatlabOpaque to_datetime" begin
+    d = Dict{String, Any}(
+        "tz"         => "",
+        "data"       => ComplexF64[
+            1482192000000.0+0.0im;
+            1482278400000.0+0.0im;
+            1482364800000.0+0.0im;;
+            ],
+        "fmt"        => "",
+        "isDateOnly" => true,
+    )
+    obj = MatlabOpaque(d, "datetime")
+    expected_dates = [
+        DateTime(2016, 12, 20) # 20-Dec-2016
+        DateTime(2016, 12, 21) # 21-Dec-2016
+        DateTime(2016, 12, 22) # 22-Dec-2016
+    ]
+    @test all(MAT.MAT_types.to_datetime(obj) .== expected_dates)
+
+    d = Dict{String, Any}(
+        "tz"         => "",
+        "data"       => 1575304969634.0+0.0im,
+        "fmt"        => "",
+        "isDateOnly" => false,
+    )
+    obj = MatlabOpaque(d, "datetime")
+    # "02-Dec-2019 16:42:49"
+    expected_dt = DateTime(2019, 12, 2, 16, 42, 49)
+    @test MAT.MAT_types.to_datetime(obj) - expected_dt < Second(1)
 end

@@ -25,7 +25,6 @@
 module MAT
 
 using HDF5, SparseArrays
-import StringEncodings
 
 include("MAT_types.jl")
 using .MAT_types
