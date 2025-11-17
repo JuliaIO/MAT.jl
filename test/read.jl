@@ -101,15 +101,27 @@ for _format in ["v6", "v7", "v7.3"]
     )
     check("cell.mat", result)
 
-    result = Dict(
+    result = Dict{String,Any}(
         "s" => Dict{String,Any}(
             "a" => 1.0,
             "b" => [1.0 2.0],
             "c" => [1.0 2.0 3.0]
         ),
-        "s2" => Dict{String,Any}("a" => Any[1.0 2.0])
+        "s2" => MAT.MatlabStructArray(["a"], [Any[1.0 2.0]])
     )
     check("struct.mat", result)
+
+    result = Dict(
+        "s00" => MAT.MatlabStructArray(["a", "b", "c"], (0,0)),
+        "s01" => MAT.MatlabStructArray(["a", "b", "c"], (0,1)),
+        "s10" => MAT.MatlabStructArray(["a", "b", "c"], (1,0))
+    )
+    check("empty_struct_arrays.mat", result)
+
+    result = Dict{String,Any}(
+        "s" => Dict{String, Any}("c"=>Matrix{Any}(undef, 0, 0), "b"=>Matrix{Any}(undef, 0, 0), "a"=>Matrix{Any}(undef, 0, 0)),
+    )
+    check("empty_cell_struct.mat", result)
 
     result = Dict(
         "logical" => false,
@@ -194,15 +206,7 @@ let objtestfile = "obj.mat"
         @test key in keys(vars)
     end
     # check if class name was read correctly
-    @test vars["A"]["class"] == "Assoc"
-end
-
-# test reading of empty struct
-let objtestfile = "empty_struct.mat"
-    vars = matread(joinpath(dirname(@__FILE__), objtestfile))
-    @test "a" in keys(vars)
-    @test vars["a"]["size"] == []
-    @test vars["a"]["params"] == []
+    @test vars["A"].class == "Assoc"
 end
 
 # test reading of a Matlab figure
@@ -236,4 +240,21 @@ let objtestfile = "old_class.mat"
     vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))
     @test "tc_old" in keys(vars)
     @test "foo" in keys(vars["tc_old"])
+    @test vars["tc_old"].class == "TestClassOld"
 end
+
+let objtestfile = "old_class_array.mat"
+    vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))
+    c_arr = vars["class_arr"]
+    @test c_arr isa MatlabStructArray
+    @test c_arr.class == "TestClassOld"
+    @test c_arr["foo"] == Any[5.0 "test"]
+
+    vars = matread(joinpath(dirname(@__FILE__), "v7", objtestfile))
+    c_arr = vars["class_arr"]
+    @test c_arr isa MatlabStructArray
+    @test c_arr.class == "TestClassOld"
+    @test c_arr["foo"] == Any[5.0 "test"]
+end
+
+

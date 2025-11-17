@@ -227,6 +227,10 @@ function colvals(A::AbstractSparseMatrix)
     cols
 end
 
+function write(parent::Matlabv4File, name::String, s::AbstractChar)
+    write(parent, name, string(s))
+end
+
 function write(parent::Matlabv4File, name::String, s)
     M = Int(parent.swap_bytes)
     O = 0

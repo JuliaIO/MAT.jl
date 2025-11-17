@@ -26,6 +26,9 @@ module MAT
 
 using HDF5, SparseArrays
 
+include("MAT_types.jl")
+using .MAT_types
+
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")
 include("MAT_v4.jl")
@@ -33,6 +36,7 @@ include("MAT_v4.jl")
 using .MAT_HDF5, .MAT_v5, .MAT_v4
 
 export matopen, matread, matwrite, @read, @write
+export MatlabStructArray, MatlabClassObject
 
 # Open a MATLAB file
 const HDF5_HEADER = UInt8[0x89, 0x48, 0x44, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]
@@ -140,47 +144,37 @@ end
 
 # Write a dict to a MATLAB file
 """
-    matwrite(filename, d::Dict; compress::Bool = false, version::String)
+    matwrite(filename, d::Dict; compress::Bool = false, version::String = "v7.3")
 
 Write a dictionary containing variable names as keys and values as values
 to a Matlab file, opening and closing it automatically.
 """
-function matwrite(filename::AbstractString, dict::AbstractDict{S, T}; compress::Bool = false, version::String ="") where {S, T}
-
+function matwrite(filename::AbstractString, dict::AbstractDict{S, T}; compress::Bool = false, version::String ="v7.3") where {S, T}
     if version == "v4"
         file = open(filename, "w")
         m = MAT_v4.Matlabv4File(file, false)
-        try
-            for (k, v) in dict
-                local kstring
-                try
-                    kstring = ascii(convert(String, k))
-                catch x
-                    error("matwrite requires a Dict with ASCII keys")
-                end
-                write(m, kstring, v)
-            end
-        finally
-            close(file)
-        end
-
-    else
-        
+        _write_dict(m, dict)
+    elseif version == "v7.3"
         file = matopen(filename, "w"; compress = compress)
-        try
-            for (k, v) in dict
-                local kstring
-                try
-                    kstring = ascii(convert(String, k))
-                catch x
-                    error("matwrite requires a Dict with ASCII keys")
-                end
-                write(file, kstring, v)
-            end
-        finally
-            close(file)
-        end
+        _write_dict(file, dict)
+    else
+        error("writing for \"$(version)\" is not supported")
+    end
+end
 
+function _write_dict(fileio, dict::AbstractDict)
+    try
+        for (k, v) in dict
+            local kstring
+            try
+                kstring = ascii(convert(String, k))
+            catch x
+                error("matwrite requires a Dict with ASCII keys")
+            end
+            write(fileio, kstring, v)
+        end
+    finally
+        close(fileio)
     end
 end
 

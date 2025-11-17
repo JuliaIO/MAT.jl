@@ -34,6 +34,15 @@ function test_compression_effective(data)
     end
 end
 
+@testset "write error messages" begin
+    msg = "writing for \"v7\" is not supported"
+    @test_throws ErrorException(msg) matwrite(tmpfile, Dict("s" => 1); version="v7")
+
+    msg = "matwrite requires a Dict with ASCII keys"
+    @test_throws ErrorException(msg) matwrite(tmpfile, Dict(:s => 1))
+    @test_throws ErrorException(msg) matwrite(tmpfile, Dict(:s => 1); version="v4")
+end
+
 test_write(Dict(
     "int8" => Int8(1),
     "uint8" => UInt8(1),
@@ -73,6 +82,12 @@ test_write(Dict(
     "bitarray" => trues(3, 3),
     "string" => "string"
 ))
+
+# cannot distinguish char from single element string
+test_write(Dict("char" => 'a'))
+# inconsistent behavior in v4
+matwrite(tmpfile, Dict("char" => 'a'), version="v4")
+@test matread(tmpfile)["char"] == "a"
 
 test_write(Dict(
     "cell" => Any[1 2.01 "string" Any["string1" "string2"]]
@@ -136,3 +151,39 @@ test_write(Dict("reshape_arr"=>reshape([1 2 3;4 5 6;7 8 9]',1,9)))
 
 test_write(Dict("adjoint_arr"=>Any[1 2 3;4 5 6;7 8 9]'))
 test_write(Dict("reshape_arr"=>reshape(Any[1 2 3;4 5 6;7 8 9]',1,9)))
+
+# test nested struct array - interface via Dict array
+@testset "MatlabStructArray writing" begin
+    sarr = Dict{String, Any}[
+        Dict("x"=>[1.0,2.0], SubString("y")=>3.0),
+        Dict("x"=>[5.0,6.0], "y"=>[Dict("a"=>7), Dict("a"=>8)])
+    ]
+    # we have to test Array size is maintained inside mat files
+    sarr = reshape(sarr, 1, 2)
+    matwrite(tmpfile, Dict("s_array" => sarr))
+    read_sarr = matread(tmpfile)["s_array"]
+    @test read_sarr isa MatlabStructArray
+    @test read_sarr["y"][2] isa MatlabStructArray
+
+    sarr = Dict{String, Any}[
+        Dict("x"=>[1.0,2.0], SubString("y")=>3.0),
+        Dict("x"=>[5.0,6.0], "y"=>[])
+    ]
+    test_write(Dict("s_array" => MatlabStructArray(sarr)))
+
+    empty_sarr = MatlabStructArray(["a", "b", "c"])
+    test_write(Dict("s_array" => empty_sarr))
+
+    # old matlab class object array
+    carr = MatlabStructArray(["foo"], [[5, "bar"]], "TestClassOld")
+    test_write(Dict("class_array" => carr))
+
+    d = Dict{String,Any}("foo" => 5)
+    obj = MatlabClassObject(d, "TestClassOld")
+    test_write(Dict("tc_old" => obj))
+
+    carr = [MatlabClassObject(d, "TestClassOld"), MatlabClassObject(d, "TestClassOld")]
+    matwrite(tmpfile, Dict("class_array" => carr))
+    carr_read = matread(tmpfile)["class_array"]
+    @test carr_read == MatlabStructArray(carr)
+end
