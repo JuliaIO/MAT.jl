@@ -24,11 +24,12 @@
 
 module MAT_subsys
 
-import ..MAT_types: MatlabStructArray
+import ..MAT_types: MatlabStructArray, MatlabOpaque
 
 const FWRAP_VERSION = 4
 
 mutable struct Subsys
+    object_cache::Dict{UInt32, MatlabOpaque}
     num_names::UInt32
     mcos_names::Vector{String}
     class_id_metadata::Vector{UInt32}
@@ -46,6 +47,7 @@ mutable struct Subsys
     java_data::Any
 
     Subsys() = new(
+        Dict{UInt32, MatlabOpaque}(),
         UInt32(0),
         String[],
         UInt32[],
@@ -64,17 +66,28 @@ mutable struct Subsys
     )
 end
 
+function get_object!(subsys::Subsys, oid::UInt32, classname::String)
+    if haskey(subsys.object_cache, oid)
+        # object is already cached, just retrieve it
+        obj = subsys.object_cache[oid]
+    else
+        prop_dict = Dict{String,Any}()
+        merge!(prop_dict, get_properties(oid))
+        # cache it
+        obj = MatlabOpaque(prop_dict, classname)
+        subsys.object_cache[oid] = obj
+    end
+    return obj
+end
+
 const subsys_cache = Ref{Union{Nothing,Subsys}}(nothing)
-const object_cache = Ref{Union{Nothing, Dict{UInt32, Dict{String,Any}}}}(nothing)
 
 function clear_subsys!()
     subsys_cache[] = nothing
-    object_cache[] = nothing
 end
 
 function load_subsys!(subsystem_data::Dict{String,Any}, swap_bytes::Bool)
     subsys_cache[] = Subsys()
-    object_cache[] = Dict{UInt32, Dict{String,Any}}()
     subsys_cache[].handle_data = get(subsystem_data, "handle", nothing)
     subsys_cache[].java_data = get(subsystem_data, "java", nothing)
     mcos_data = get(subsystem_data, "MCOS", nothing)
@@ -161,6 +174,7 @@ end
 
 function get_default_properties(class_id::UInt32)
     prop_vals_class = subsys_cache[].prop_vals_defaults[class_id+1, 1]
+    # is it always a MatlabStructArray?
     if prop_vals_class isa MatlabStructArray
         prop_vals_class = Dict{String,Any}(prop_vals_class)
     end
@@ -184,31 +198,36 @@ function get_property_idxs(obj_type_id::UInt32, saveobj_ret_type::Bool)
     return prop_field_idxs[offset:offset+nprops*nfields-1]
 end
 
-function find_nested_prop(prop_value::Any)
-    # Hacky way to find a nested object
+update_nested_props!(prop_value) = prop_value
+
+function update_nested_props!(prop_value::Union{AbstractDict, MatlabStructArray})
+    # Handle nested objects in structs
+    for (key, value) in prop_value
+        prop_value[key] = update_nested_props!(value)
+    end
+    return prop_value
+end
+
+function update_nested_props!(prop_value::Array{Any})
+    # Handle nested objects in a Cell
+    for i in eachindex(prop_value)
+        prop_value[i] = update_nested_props!(prop_value[i])
+    end
+    return prop_value
+end
+
+function update_nested_props!(prop_value::Array{UInt32})
+    # Hacky way to find and update nested objects
     # Nested objects are stored as a uint32 Matrix with a unique signature
     # MATLAB probably uses some kind of placeholders to decode
     # But this should work here
-    if prop_value isa Dict
-        # Handle nested objects in a dictionary (struct)
-        for (key, value) in prop_value
-            prop_value[key] = find_nested_prop(value)
-        end
-    end
 
-    if prop_value isa Matrix{Any}
-        # Handle nested objects in a Cell
-        for i in eachindex(prop_value)
-            prop_value[i] = find_nested_prop(prop_value[i])
-        end
-    end
-
-    if prop_value isa Matrix{UInt32} && prop_value[1,1] == 0xdd000000
+    if first(prop_value) == 0xdd000000
         # MATLAB identifies any uint32 array with first value 0xdd000000 as an MCOS object
         return load_mcos_object(prop_value, "MCOS")
+    else
+        return prop_value
     end
-
-    return prop_value
 end
 
 function get_saved_properties(obj_type_id::UInt32, saveobj_ret_type::Bool)
@@ -227,7 +246,7 @@ function get_saved_properties(obj_type_id::UInt32, saveobj_ret_type::Bool)
         else
             error("Unknown property type ID: $prop_type encountered during deserialization")
         end
-        save_prop_map[prop_name] = find_nested_prop(prop_value)
+        save_prop_map[prop_name] = update_nested_props!(prop_value)
     end
     return save_prop_map
 end
@@ -253,19 +272,18 @@ function get_properties(object_id::UInt32)
 end
 
 function load_mcos_object(metadata::Any, type_name::String)
+    @warn "Expected MCOS metadata to be an Array{UInt32}, got $(typeof(metadata)). Returning metadata."
+    return metadata
+end
+
+function load_mcos_object(metadata::Dict, type_name::String)
+    @warn "Loading enumeration instances are not supported. Returning Metadata"
+    return metadata
+end
+
+function load_mcos_object(metadata::Array{UInt32}, type_name::String)
     if type_name != "MCOS"
         @warn "Loading Type:$type_name is not implemented. Returning metadata."
-        return metadata
-    end
-
-    if isa(metadata, Dict)
-        # TODO: Load Enumeration Instances
-        @warn "Loading enumeration instances are not supported. Returning Metadata"
-        return metadata
-    end
-
-    if !(metadata isa Array{UInt32})
-        @warn "Expected MCOS metadata to be an Array{UInt32}, got $(typeof(metadata)). Returning metadata."
         return metadata
     end
 
@@ -282,23 +300,15 @@ function load_mcos_object(metadata::Any, type_name::String)
     class_id = metadata[end, 1]
     classname = get_classname(class_id)
 
-    object_arr = Array{Dict{String,Any}}(undef, convert(Vector{Int}, dims)...)
+    object_arr = Array{MatlabOpaque}(undef, convert(Vector{Int}, dims)...)
 
     for i = 1:length(object_arr)
         oid = object_ids[i]
-        if haskey(object_cache[], oid)
-            prop_dict = object_cache[][oid]
-        else
-            prop_dict = Dict{String,Any}()
-            object_cache[][oid] = prop_dict
-            merge!(prop_dict, get_properties(oid))
-            prop_dict["__class__"] = classname
-        end
-        object_arr[i] = prop_dict
+        obj = get_object!(subsys_cache[], oid, classname)
+        object_arr[i] = obj
     end
 
     return object_arr
-
 end
 
 end

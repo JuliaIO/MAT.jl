@@ -277,4 +277,30 @@ module MAT_types
         d = Dict{String, Any}(string.(keys) .=> values)
         return MatlabClassObject(d, class)
     end
+
+    """
+        MatlabOpaque(
+            d::Dict{String, Any},
+            class::String,
+        ) <: AbstractDict{String, Any}
+
+    Type to store opaque class objects.
+    These are the 'modern' Matlab classes, different from the old `MatlabClassObject` types.
+
+    """
+    struct MatlabOpaque <: AbstractDict{String, Any}
+        d::Dict{String, Any}
+        class::String
+    end
+
+    Base.eltype(::Type{MatlabOpaque}) = Pair{String, Any}
+    Base.length(m::MatlabOpaque) = length(m.d)
+    Base.keys(m::MatlabOpaque) = keys(m.d)
+    Base.values(m::MatlabOpaque) = values(m.d)
+    Base.getindex(m::MatlabOpaque, i) = getindex(m.d, i)
+    Base.setindex!(m::MatlabOpaque, v, k) = setindex!(m.d, v, k)
+    Base.iterate(m::MatlabOpaque, i) = iterate(m.d, i)
+    Base.iterate(m::MatlabOpaque) = iterate(m.d)
+    Base.haskey(m::MatlabOpaque, k) = haskey(m.d, k)
+    Base.get(m::MatlabOpaque, k, default) = get(m.d, k, default)
 end
