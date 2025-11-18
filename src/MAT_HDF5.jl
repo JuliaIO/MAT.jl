@@ -33,7 +33,8 @@ using ..MAT_subsys
 
 import Base: names, read, write, close
 import HDF5: Reference
-import ..MAT_types: MatlabStructArray, StructArrayField, convert_struct_array, MatlabClassObject
+import Dates
+import ..MAT_types: MatlabStructArray, StructArrayField, convert_struct_array, MatlabClassObject, MatlabOpaque
 
 const HDF5Parent = Union{HDF5.File, HDF5.Group}
 const HDF5BitsOrBool = Union{HDF5.BitsType,Bool}
@@ -601,8 +602,7 @@ end
 
 
 # Struct array: Array of Dict => MATLAB struct array
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String,
-                 arr::AbstractArray{<:AbstractDict})
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::AbstractArray{<:AbstractDict})
     m_write(mfile, parent, name, MatlabStructArray(arr))
 end
 
@@ -695,6 +695,11 @@ end
 m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::AbstractDict) =
     m_write(mfile, parent, name, check_struct_keys(collect(keys(s))), collect(values(s)))
 
+# Write named tuple as a struct
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, nt::NamedTuple)
+    m_write(mfile, parent, name, [string(x) for x in keys(nt)], collect(nt))
+end
+
 # Write generic CompositeKind as a struct
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s)
     if isbits(s)
@@ -702,6 +707,14 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s)
     end
     T = typeof(s)
     m_write(mfile, parent, name, check_struct_keys([string(x) for x in fieldnames(T)]), [getfield(s, x) for x in fieldnames(T)])
+end
+
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat::Dates.AbstractTime)
+    error("writing of Dates types is not yet supported")
+end
+
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::MatlabOpaque)
+    error("writing of MatlabOpaque types is not yet supported")
 end
 
 # Check whether a variable name is valid, then write it

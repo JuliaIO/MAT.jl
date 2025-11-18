@@ -152,6 +152,13 @@ test_write(Dict("reshape_arr"=>reshape([1 2 3;4 5 6;7 8 9]',1,9)))
 test_write(Dict("adjoint_arr"=>Any[1 2 3;4 5 6;7 8 9]'))
 test_write(Dict("reshape_arr"=>reshape(Any[1 2 3;4 5 6;7 8 9]',1,9)))
 
+# named tuple
+nt = (x = 5, y = Any[6, "string"])
+matwrite(tmpfile, Dict("nt" => nt))
+nt_read = matread(tmpfile)["nt"]
+@test nt_read["x"] == 5
+@test nt_read["y"] == nt.y
+
 # test nested struct array - interface via Dict array
 @testset "MatlabStructArray writing" begin
     sarr = Dict{String, Any}[

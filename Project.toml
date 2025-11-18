@@ -13,7 +13,7 @@ StringEncodings = "69024149-9ee7-55f6-a4c4-859efe599b68"
 [compat]
 BufferedStreams = "0.4.1, 1"
 CodecZlib = "0.5, 0.6, 0.7"
-Dates = "1.11.0"
+Dates = "1"
 HDF5 = "0.16, 0.17"
 StringEncodings = "0.3.7"
 julia = "1.6"
