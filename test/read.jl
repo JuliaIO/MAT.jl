@@ -230,6 +230,7 @@ let objtestfile = "function_handles.mat"
 end
 
 for format in ["v7", "v7.3"]
+    @testset "struct_table_datetime $format" begin
     let objtestfile = "struct_table_datetime.mat"
         filepath = joinpath(dirname(@__FILE__), format, objtestfile)
 
@@ -244,22 +245,33 @@ for format in ["v7", "v7.3"]
         # matread interface
         vars = matread(filepath)["s"]
         @test haskey(vars, "testTable")
-        @test Set(keys(vars["testTable"])) == Set(["props", "varnames", "nrows", "data", "rownames", "ndims", "nvars"])
-        @test vars["testTable"].class == "table"
-        @test vars["testTable"]["ndims"] === 2.0
-        @test vars["testTable"]["nvars"] === 5.0
-        @test vars["testTable"]["nrows"] === 3.0
-        @test vars["testTable"]["data"][1] == reshape([1261.0, 547.0, 3489.0], 3, 1)
-        @test vars["testTable"]["data"][2] isa Matrix{String}
-        @test vars["testTable"]["data"][3] isa Matrix{DateTime}
-        @test vars["testTable"]["data"][4] isa AbstractMatrix{String}
-        @test vars["testTable"]["data"][5] isa Matrix{String}
-        @test all(x->size(x)==(3,1), vars["testTable"]["data"])
+        t = vars["testTable"]
+        @test t isa MatlabTable
+        @test t.names == [:FlightNum, :Customer, :Date, :Rating, :Comment]
+        @test t[:Date] isa Vector{DateTime}
+        @test t[:Rating] isa AbstractVector{String}
+        @test all(x->length(x)==3, t.columns)
+
+        # using Nothing will keep the MatlabOpaque
+        vars = matread(filepath; table=Nothing)["s"]
+        t = vars["testTable"]
+        @test Set(keys(t)) == Set(["props", "varnames", "nrows", "data", "rownames", "ndims", "nvars"])
+        @test t.class == "table"
+        @test t["ndims"] === 2.0
+        @test t["nvars"] === 5.0
+        @test t["nrows"] === 3.0
+        @test t["data"][1] == reshape([1261.0, 547.0, 3489.0], 3, 1)
+        @test t["data"][2] isa Matrix{String}
+        @test t["data"][3] isa Matrix{DateTime}
+        @test t["data"][4] isa AbstractMatrix{String}
+        @test t["data"][5] isa Matrix{String}
+        @test all(x->size(x)==(3,1), t["data"])
 
         @test "testDatetime" in keys(vars)
         dt = vars["testDatetime"] 
         @test dt isa DateTime
         @test dt - DateTime(2019, 12, 2, 16, 42, 49) < Second(1)
+    end
     end
 end
 

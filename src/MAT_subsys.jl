@@ -47,6 +47,7 @@ mutable struct Subsystem
     prop_vals_defaults::Any
     handle_data::Any
     java_data::Any
+    table_type::Type
 
     Subsystem() = new(
         Dict{UInt32, MatlabOpaque}(),
@@ -64,7 +65,8 @@ mutable struct Subsystem
         nothing,
         nothing,
         nothing,
-        nothing
+        nothing,
+        Nothing
     )
 end
 
@@ -305,13 +307,13 @@ function load_mcos_object(metadata::Array{UInt32}, type_name::String, subsys::Su
     if nobjects == 1
         oid = object_ids[1]
         obj = get_object!(subsys, oid, classname)
-        return convert_opaque(obj)
+        return convert_opaque(obj; table=subsys.table_type)
     else
         object_arr = Array{Any}(undef, convert(Vector{Int}, dims)...)
         for i = 1:length(object_arr)
             oid = object_ids[i]
             obj = get_object!(subsys, oid, classname)
-            object_arr[i] = convert_opaque(obj)
+            object_arr[i] = convert_opaque(obj; table=subsys.table_type)
         end
         return object_arr
     end

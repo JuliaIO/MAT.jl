@@ -28,7 +28,7 @@
 module MAT_v5
 using CodecZlib, BufferedStreams, HDF5, SparseArrays
 import Base: read, write, close
-import ..MAT_types: MatlabStructArray, MatlabClassObject
+import ..MAT_types: MatlabStructArray, MatlabClassObject, MatlabTable
 
 using ..MAT_subsys
 
@@ -394,7 +394,7 @@ function read_matrix(f::IO, swap_bytes::Bool, subsys::Subsystem)
 end
 
 # Open MAT file for reading
-function matopen(ios::IOStream, endian_indicator::UInt16)
+function matopen(ios::IOStream, endian_indicator::UInt16; table::Type=MatlabTable)
     matfile = Matlabv5File(ios, endian_indicator == 0x494D)
 
     seek(matfile.ios, 116)
@@ -404,6 +404,7 @@ function matopen(ios::IOStream, endian_indicator::UInt16)
     end
     if subsys_offset != 0
         matfile.subsystem_position = subsys_offset
+        matfile.subsystem.table_type = table
         read_subsystem!(matfile)
     end
 
@@ -413,7 +414,6 @@ end
 # Read whole MAT file
 function read(matfile::Matlabv5File)
     vars = Dict{String, Any}()
-
     seek(matfile.ios, 128)
     while !eof(matfile.ios)
         pos = position(matfile.ios)

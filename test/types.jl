@@ -189,3 +189,32 @@ end
     ]
     
 end
+
+@testset "MatlabOpaque table" begin
+    # simplified table struct; there's some other properties as well
+    d = Dict{String,Any}(
+        "varnames" => Any["FlightNum" "Customer"],
+        "nrows" => 3.0,
+        "data"  => reshape(Any[[1261.0; 547.0; 3489.0;;], ["Jones"; "Brown"; "Smith";;]], 1, 2),
+        "ndims" => 2.0,
+        "nvars" => 2.0,
+    )
+    obj = MatlabOpaque(d, "table")
+
+    t = MAT.convert_opaque(obj; table = MatlabTable)
+    @test t.names == [:FlightNum, :Customer]
+    @test t[:FlightNum] isa Vector{Float64}
+    @test t[:FlightNum] == [1261.0, 547.0, 3489.0]
+    @test t[:Customer] isa Vector{String}
+    @test t["Customer"] == ["Jones", "Brown", "Smith"]
+
+    t = MAT.convert_opaque(obj; table = MatlabStructArray{1})
+    @test t isa MatlabStructArray{1}
+    @test t["FlightNum"] == [1261.0, 547.0, 3489.0]
+    @test t["Customer"] == ["Jones", "Brown", "Smith"]
+
+    t = MAT.convert_opaque(obj; table = Nothing)
+    @test t === obj
+
+    # Note: this should all work with DataFrames.DataFrame, but that's a big dependency to add for testing
+end

@@ -31,10 +31,12 @@ module MAT_types
     import StringEncodings
     import Dates: DateTime, Second, Millisecond
     import PooledArrays: PooledArray, RefArray
+    import Tables
 
     export MatlabStructArray, StructArrayField, convert_struct_array
     export MatlabClassObject
     export MatlabOpaque, convert_opaque
+    export MatlabTable
 
     # struct arrays are stored as columns per field name
     """
@@ -212,6 +214,21 @@ module MAT_types
         return D(T.(keys) .=> values)
     end
 
+    # 1D MatlabStructArray also counts as table (mostly for testing purposes)
+    Tables.istable(::Type{MatlabStructArray{1}}) = true
+    Tables.columns(t::MatlabStructArray{1}) = Symbol.(t.values)
+    Tables.columnnames(t::MatlabStructArray{1}) = t.names
+    Tables.getcolumn(t::MatlabStructArray{1}, nm::String) = t[nm]
+    Tables.getcolumn(t::MatlabStructArray{1}, nm::Symbol) = Tables.getcolumn(t, string(nm))
+    function MatlabStructArray{1}(t::Tables.CopiedColumns)
+        col_names = Tables.columnnames(t)
+        MatlabStructArray{1}(
+            string.(col_names),
+            [Vector{Any}(Tables.getcolumn(t, nm)) for nm in col_names]
+        )
+    end
+    MatlabStructArray(t::Tables.CopiedColumns) = MatlabStructArray{1}(t)
+
     struct StructArrayField{N}
         values::Array{Any,N}
     end
@@ -309,7 +326,7 @@ module MAT_types
     Base.haskey(m::MatlabOpaque, k) = haskey(m.d, k)
     Base.get(m::MatlabOpaque, k, default) = get(m.d, k, default)
 
-    function convert_opaque(obj::MatlabOpaque)
+    function convert_opaque(obj::MatlabOpaque; table::Type=Nothing)
         if obj.class == "string"
             return from_string(obj)
         elseif obj.class == "datetime"
@@ -318,6 +335,8 @@ module MAT_types
             return from_duration(obj)
         elseif obj.class == "categorical"
             return from_categorical(obj)
+        elseif obj.class == "table"
+            return from_table(obj, table)
         else
             return obj
         end
@@ -408,5 +427,36 @@ module MAT_types
 
     map_or_not(f, dat::AbstractArray) = map(f, dat)
     map_or_not(f, dat) = f(dat)
+
+    struct MatlabTable
+        names::Vector{Symbol}
+        columns::Vector
+    end
+    Tables.istable(::Type{MatlabTable}) = true
+    Tables.columns(t::MatlabTable) = t.columns
+    Tables.columnnames(t::MatlabTable) = t.names
+    Tables.getcolumn(t::MatlabTable, nm::Symbol) = t[nm]
+    function find_index(m::MatlabTable, s::Symbol)
+        idx = findfirst(isequal(s), m.names)
+        if isnothing(idx)
+            error("column :$s not found in MatlabTable")
+        end
+        return idx
+    end
+    function Base.getindex(m::MatlabTable, s::Symbol)
+        idx = find_index(m, s)
+        return getindex(m.columns, idx)
+    end
+    Base.getindex(m::MatlabTable, s::AbstractString) = getindex(m, Symbol(s)) 
+    MatlabTable(t::Tables.CopiedColumns{MatlabTable}) = Tables.source(t)
+
+    function from_table(obj::MatlabOpaque, ::Type{T} = MatlabTable) where T
+        names = vec(Symbol.(obj["varnames"]))
+        cols = vec([vec(c) for c in obj["data"]])
+        t = MatlabTable(names, cols)
+        return T(Tables.CopiedColumns(t))
+    end
+    # option to not convert and get the MatlabOpaque as table
+    from_table(obj::MatlabOpaque, ::Type{Nothing}) = obj
 
 end

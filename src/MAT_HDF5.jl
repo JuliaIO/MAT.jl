@@ -34,7 +34,8 @@ using ..MAT_subsys
 import Base: names, read, write, close
 import HDF5: Reference
 import Dates
-import ..MAT_types: MatlabStructArray, StructArrayField, convert_struct_array, MatlabClassObject, MatlabOpaque
+import Tables
+import ..MAT_types: MatlabStructArray, StructArrayField, convert_struct_array, MatlabClassObject, MatlabOpaque, MatlabTable
 
 const HDF5Parent = Union{HDF5.File, HDF5.Group}
 const HDF5BitsOrBool = Union{HDF5.BitsType,Bool}
@@ -98,7 +99,7 @@ function close(f::MatlabHDF5File)
     nothing
 end
 
-function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool, endian_indicator::Bool)
+function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool, endian_indicator::Bool; table::Type=MatlabTable)
     local f
     if ff && !wr
         error("Cannot append to a read-only file")
@@ -129,6 +130,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     end
     subsys_refs = "#subsystem#"
     if haskey(fid.plain, subsys_refs)
+        fid.subsystem.table_type = table
         subsys_data = m_read(fid.plain[subsys_refs], fid.subsystem)
         MAT_subsys.load_subsys!(fid.subsystem, subsys_data, endian_indicator)
     end
@@ -704,6 +706,8 @@ end
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s)
     if isbits(s)
         error("This is the write function for CompositeKind, but the input doesn't fit")
+    elseif Tables.istable(s)
+        error("writing tables is not yet supported")
     end
     T = typeof(s)
     m_write(mfile, parent, name, check_struct_keys([string(x) for x in fieldnames(T)]), [getfield(s, x) for x in fieldnames(T)])
