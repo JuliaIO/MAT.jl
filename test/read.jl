@@ -252,9 +252,9 @@ for format in ["v7", "v7.3"]
         @test vars["testTable"]["data"][1] == reshape([1261.0, 547.0, 3489.0], 3, 1)
         @test vars["testTable"]["data"][2] isa Matrix{String}
         @test vars["testTable"]["data"][3] isa Matrix{DateTime}
-        @test vars["testTable"]["data"][4].class == "categorical"
+        @test vars["testTable"]["data"][4] isa AbstractMatrix{String}
         @test vars["testTable"]["data"][5] isa Matrix{String}
-        @test all(x->length(x)==3, vars["testTable"]["data"][[1,2,3,5]])
+        @test all(x->size(x)==(3,1), vars["testTable"]["data"])
 
         @test "testDatetime" in keys(vars)
         dt = vars["testDatetime"] 

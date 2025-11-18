@@ -29,7 +29,8 @@
 module MAT_types
 
     import StringEncodings
-    import Dates: Date, DateTime, Second, Millisecond, Nanosecond
+    import Dates: DateTime, Second, Millisecond
+    import PooledArrays: PooledArray, RefArray
 
     export MatlabStructArray, StructArrayField, convert_struct_array
     export MatlabClassObject
@@ -310,18 +311,20 @@ module MAT_types
 
     function convert_opaque(obj::MatlabOpaque)
         if obj.class == "string"
-            return to_string(obj)
+            return from_string(obj)
         elseif obj.class == "datetime"
-            return to_datetime(obj)
+            return from_datetime(obj)
         elseif obj.class == "duration"
-            return to_duration(obj)
+            return from_duration(obj)
+        elseif obj.class == "categorical"
+            return from_categorical(obj)
         else
             return obj
         end
     end
 
     # for reference: https://github.com/foreverallama/matio/blob/main/matio/utils/converters/matstring.py
-    function to_string(obj::MatlabOpaque, encoding::String = "UTF-16LE")
+    function from_string(obj::MatlabOpaque, encoding::String = "UTF-16LE")
         data = obj["any"]
         if isnothing(data) || isempty(data)
             return String[]
@@ -331,7 +334,7 @@ module MAT_types
             return ""
         end
         ndims = data[1, 2]
-        shape = data[1, 3 : (2 + ndims)]
+        shape = Int.(data[1, 3 : (2 + ndims)])
         num_strings = prod(shape)
         char_counts = data[1, (3 + ndims) : (2 + ndims + num_strings)]
         byte_data = data[1, (3 + ndims + num_strings) : end]
@@ -355,7 +358,7 @@ module MAT_types
         end
     end
 
-    function to_datetime(obj::MatlabOpaque)
+    function from_datetime(obj::MatlabOpaque)
         dat = obj["data"]
         if isnothing(dat) || isempty(dat)
             return DateTime[]
@@ -374,13 +377,33 @@ module MAT_types
         return DateTime(1970,1,1) + Second(s) + Millisecond(ms_rem)
     end
 
-    function to_duration(obj::MatlabOpaque)
+    function from_duration(obj::MatlabOpaque)
         dat = obj["millis"]
         #fmt = obj["fmt"] # TODO: format, e.g. 'd' to Day
         if isnothing(dat) || isempty(dat)
             return Millisecond[]
         end
         return map_or_not(Millisecond, dat)
+    end
+
+    function from_categorical(obj::MatlabOpaque)
+        category_names = obj["categoryNames"]
+        codes = obj["codes"]
+        pool = vec(Array{element_type(category_names)}(category_names))
+        code_type = eltype(codes)
+        invpool = Dict{eltype(pool), code_type}(pool .=> code_type.(1:length(pool)))
+        refs = RefArray(codes)
+        return PooledArray(refs, invpool, pool)
+    end
+
+    function element_type(v::AbstractArray{T}) where T
+        isempty(v) && return T
+        first_el, remaining = Iterators.peel(v)
+        T_out = typeof(first_el)
+        for el in remaining
+            T_out = promote_type(T_out, typeof(el))
+        end
+        return T_out
     end
 
     map_or_not(f, dat::AbstractArray) = map(f, dat)

@@ -88,7 +88,7 @@ end
     @test_throws ErrorException MatlabStructArray(wrong_arr)
 end
 
-@testset "MatlabOpaque to_string" begin
+@testset "MatlabOpaque string" begin
     dat = UInt64[
         0x0000000000000001
         0x0000000000000002
@@ -124,7 +124,7 @@ end
     @test str == "Jones"
 end
 
-@testset "MatlabOpaque to_datetime" begin
+@testset "MatlabOpaque datetime" begin
     d = Dict{String, Any}(
         "tz"         => "",
         "data"       => ComplexF64[
@@ -156,7 +156,7 @@ end
     @test MAT.convert_opaque(obj) - expected_dt < Second(1)
 end
 
-@testset "MatlabOpaque to_duration" begin
+@testset "MatlabOpaque duration" begin
     d = Dict(
         "millis" => [3.6e6 7.2e6],
         "fmt"    => 'h',
@@ -170,4 +170,22 @@ end
     )
     obj = MatlabOpaque(d, "duration")
     @test MAT.convert_opaque(obj) == Millisecond(d["millis"])
+end
+
+@testset "MatlabOpaque categorical" begin
+    d = Dict(
+        "isProtected"   => false,
+        "codes"         => UInt8[0x02; 0x03; 0x01;; 0x01; 0x01; 0x02],
+        "categoryNames" => Any["Fair"; "Good"; "Poor";;],
+        "isOrdinal"     => false,
+    )
+    obj = MatlabOpaque(d, "categorical")
+
+    c = MAT.convert_opaque(obj)
+    @test c == [ 
+        "Good"  "Fair"
+        "Poor"  "Fair"
+        "Fair"  "Good"
+    ]
+    
 end

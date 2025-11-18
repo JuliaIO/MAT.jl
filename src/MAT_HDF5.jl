@@ -717,6 +717,10 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::M
     error("writing of MatlabOpaque types is not yet supported")
 end
 
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::AbstractArray{MatlabOpaque})
+    error("writing of MatlabOpaque types is not yet supported")
+end
+
 # Check whether a variable name is valid, then write it
 """
     write(matfile_handle, varname, value)
