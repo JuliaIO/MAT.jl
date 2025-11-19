@@ -123,7 +123,8 @@ keyword argument only affects write operations.
 
 Use with `read`, `write`, `close`, `keys`, and `haskey`.
 
-Optional keyword argument is the `table` type, for automatic conversion of Matlab Tables.
+Optional keyword argument is the `table` type, for automatic conversion of Matlab tables.
+Note that Matlab tables may contain non-vector colums which cannot always be converted to a Julia table, like `DataFrame`.
 
 # Example
 

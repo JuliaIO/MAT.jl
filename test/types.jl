@@ -201,6 +201,7 @@ end
     )
     obj = MatlabOpaque(d, "table")
 
+    # Note: this should work with DataFrames.DataFrame, but that's a big dependency to add for testing
     t = MAT.convert_opaque(obj; table = MatlabTable)
     @test t.names == [:FlightNum, :Customer]
     @test t[:FlightNum] isa Vector{Float64}
@@ -216,5 +217,33 @@ end
     t = MAT.convert_opaque(obj; table = Nothing)
     @test t === obj
 
-    # Note: this should all work with DataFrames.DataFrame, but that's a big dependency to add for testing
+    nd_array = reshape(1:12, 2, 3, 2)    
+
+    # ND-arrays as columns
+    # Note: does not convert to DataFrame
+    d = Dict{String,Any}(
+        "varnames" => Any["Floats" "NDArray"],
+        "nrows" => 2.0,
+        "data"  => reshape(Any[[1261.0; 547.0;;], nd_array], 1, 2),
+        "ndims" => 2.0,
+        "nvars" => 2.0,
+    )
+    obj = MatlabOpaque(d, "table")
+    t = MAT.convert_opaque(obj; table = MatlabTable)
+    @test size(t[:Floats]) == (2,)
+    @test size(t[:NDArray]) == (2,3,2)
+
+    # single row table
+    d = Dict{String,Any}(
+        "varnames" => Any["Age" "Name" "Matrix"],
+        "nrows" => 1.0,
+        "data"  => reshape([25.0, "Smith", [1.0 2.0]], 1, 3),
+        "ndims" => 2.0,
+        "nvars" => 2.0,
+    )
+    obj = MatlabOpaque(d, "table")
+    t = MAT.convert_opaque(obj; table = MatlabTable)
+    @test t[:Age] == [25.0]
+    @test t[:Name] == ["Smith"]
+    @test t[:Matrix] == [1.0 2.0]
 end

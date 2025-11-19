@@ -408,14 +408,14 @@ module MAT_types
     function from_categorical(obj::MatlabOpaque)
         category_names = obj["categoryNames"]
         codes = obj["codes"]
-        pool = vec(Array{element_type(category_names)}(category_names))
+        pool = vec(Array{promoted_eltype(category_names)}(category_names))
         code_type = eltype(codes)
         invpool = Dict{eltype(pool), code_type}(pool .=> code_type.(1:length(pool)))
         refs = RefArray(codes)
         return PooledArray(refs, invpool, pool)
     end
 
-    function element_type(v::AbstractArray{T}) where T
+    function promoted_eltype(v::AbstractArray{Any})
         isempty(v) && return T
         first_el, remaining = Iterators.peel(v)
         T_out = typeof(first_el)
@@ -424,6 +424,7 @@ module MAT_types
         end
         return T_out
     end
+    promoted_eltype(::AbstractArray{T}) where T = T
 
     map_or_not(f, dat::AbstractArray) = map(f, dat)
     map_or_not(f, dat) = f(dat)
@@ -452,11 +453,17 @@ module MAT_types
 
     function from_table(obj::MatlabOpaque, ::Type{T} = MatlabTable) where T
         names = vec(Symbol.(obj["varnames"]))
-        cols = vec([vec(c) for c in obj["data"]])
+        cols = vec([try_vec(c) for c in obj["data"]])
         t = MatlabTable(names, cols)
         return T(Tables.CopiedColumns(t))
     end
     # option to not convert and get the MatlabOpaque as table
     from_table(obj::MatlabOpaque, ::Type{Nothing}) = obj
+
+    try_vec(c::Vector) = c
+    try_vec(c) = [c]
+    function try_vec(c::AbstractArray)
+        return (size(c, 2) == 1) ? vec(c) : c
+    end
 
 end
