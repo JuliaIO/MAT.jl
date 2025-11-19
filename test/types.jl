@@ -175,7 +175,7 @@ end
 @testset "MatlabOpaque categorical" begin
     d = Dict(
         "isProtected"   => false,
-        "codes"         => UInt8[0x02; 0x03; 0x01;; 0x01; 0x01; 0x02],
+        "codes"         => reshape(UInt8[0x02, 0x03, 0x01, 0x01, 0x01, 0x02], 3, 2),
         "categoryNames" => Any["Fair"; "Good"; "Poor";;],
         "isOrdinal"     => false,
     )
