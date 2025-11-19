@@ -256,6 +256,34 @@ function get_saved_properties(subsys::Subsystem, obj_type_id::UInt32, saveobj_re
     return save_prop_map
 end
 
+function get_dynamic_properties(subsys::Subsystem, dep_id::UInt32)
+    offset = 1
+    while dep_id > 0
+        nprops = subsys.dynprop_metadata[offset]
+        offset += 1 + nprops
+        offset += (offset + 1) % 2  # Padding
+        dep_id -= 1
+    end
+
+    ndynprops = subsys.dynprop_metadata[offset]
+    offset += 1
+    dyn_prop_obj_ids = subsys.dynprop_metadata[offset:offset+ndynprops-1]
+
+    if dyn_prop_obj_ids == UInt32[]
+        return Dict{String,Any}()
+    end
+    dyn_prop_map = Dict{String,Any}()
+    for (i, obj_id) in enumerate(dyn_prop_obj_ids)
+        dyn_class_id = get_object_metadata(subsys, obj_id)[1]
+        classname = get_classname(subsys, dyn_class_id)
+        dynobj_props = Dict{String,Any}()
+        dynobj = MatlabOpaque(dynobj_props, classname)
+        merge!(dynobj_props, get_properties(subsys, obj_id))
+        dyn_prop_map["__dynamic_property_$(i)__"] = dynobj
+    end
+    return dyn_prop_map
+end
+
 function get_properties(subsys::Subsystem, object_id::UInt32)
     if object_id == 0
         return Dict{String,Any}()
@@ -272,7 +300,8 @@ function get_properties(subsys::Subsystem, object_id::UInt32)
 
     defaults = get_default_properties(subsys, class_id)
     prop_map = merge(defaults, get_saved_properties(subsys, obj_type_id, saveobj_ret_type))
-    # TODO: Add dynamic properties
+    dyn_props = get_dynamic_properties(subsys, object_id)
+    merge!(prop_map, dyn_props)
     return prop_map
 end
 

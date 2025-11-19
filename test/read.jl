@@ -331,6 +331,21 @@ for format in ["v7", "v7.3"]
     end
     end
 
+    @testset "dynamic property" begin
+    let objtestfile = "dynamicprops.mat"
+        filepath = joinpath(dirname(@__FILE__), format, objtestfile)
+
+        vars = matread(filepath)
+        @test haskey(vars, "obj")
+        obj = vars["obj"]
+        @test obj isa MatlabOpaque
+        @test obj.class == "TestClasses.BasicDynamic"
+        @test haskey(obj, "__dynamic_property_1__")
+        @test obj["__dynamic_property_1__"]["Name"] == "DynamicData"
+        @test obj["__dynamic_property_1__"]["DynamicValue_"] == 42.0
+    end
+    end
+
 end
 
 # test reading of old-style Matlab object in v7.3 format
