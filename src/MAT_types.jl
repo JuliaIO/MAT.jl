@@ -382,8 +382,9 @@ module MAT_types
         if isnothing(dat) || isempty(dat)
             return DateTime[]
         end
-        if !isempty(obj["tz"])
-            @warn "no timezone conversion yet for datetime objects. timezone ignored"
+        if haskey(obj, "tz") && !isempty(obj["tz"])
+            tz = obj["tz"]
+            @warn "no timezone conversion yet for datetime objects. timezone of \"$tz\" ignored"
         end
         #isdate = obj["isDateOnly"] # optional: convert to Date instead of DateTime?
         return map_or_not(ms_to_datetime, dat)

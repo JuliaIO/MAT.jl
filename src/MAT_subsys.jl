@@ -74,12 +74,13 @@ function get_object!(subsys::Subsystem, oid::UInt32, classname::String)
     if haskey(subsys.object_cache, oid)
         # object is already cached, just retrieve it
         obj = subsys.object_cache[oid]
-    else
+    else # it's a new object
         prop_dict = Dict{String,Any}()
-        merge!(prop_dict, get_properties(subsys, oid))
-        # cache it
         obj = MatlabOpaque(prop_dict, classname)
+        # cache the new object
         subsys.object_cache[oid] = obj
+        # caching must be done before a next call to `get_properties` to avoid any infinite recursion
+        merge!(prop_dict, get_properties(subsys, oid))
     end
     return obj
 end
@@ -154,6 +155,9 @@ function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_
     end
 
     subsys.prop_vals_defaults = mcos_data[end, 1]
+    for el in subsys.prop_vals_defaults
+        update_nested_props!(el, subsys) # just in case
+    end
 
     return subsys
 end
@@ -177,14 +181,7 @@ function get_object_metadata(subsys::Subsystem, object_id::UInt32)
 end
 
 function get_default_properties(subsys::Subsystem, class_id::UInt32)
-    prop_vals_class = subsys.prop_vals_defaults[class_id+1, 1]
-    # is it always a MatlabStructArray?
-    if prop_vals_class isa MatlabStructArray
-        prop_vals_class = Dict{String,Any}(prop_vals_class)
-    end
-    # FIXME Should we use deepcopy here?
-    r = copy(prop_vals_class)
-    return r
+    return Dict{String,Any}(subsys.prop_vals_defaults[class_id+1, 1])
 end
 
 function get_property_idxs(subsys::Subsystem, obj_type_id::UInt32, saveobj_ret_type::Bool)
@@ -269,8 +266,8 @@ function get_properties(subsys::Subsystem, object_id::UInt32)
         obj_type_id = normobj_id
     end
 
-    prop_map = get_default_properties(subsys, class_id)
-    merge!(prop_map, get_saved_properties(subsys, obj_type_id, saveobj_ret_type))
+    defaults = get_default_properties(subsys, class_id)
+    prop_map = merge(defaults, get_saved_properties(subsys, obj_type_id, saveobj_ret_type))
     # TODO: Add dynamic properties
     return prop_map
 end
