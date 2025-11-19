@@ -104,16 +104,14 @@ function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_
     end
     fwrap_metadata = vec(mcos_data[1, 1])
 
-    # FIXME: Is this the best way to read?
-    # Integers are written as uint8 (with swap), interpret as uint32
-    version = reinterpret(UInt32, swap_bytes ? reverse(fwrap_metadata[1:4]) : fwrap_metadata[1:4])[1]
+    version = swapped_reinterpret(fwrap_metadata[1:4], swap_bytes)[1]
     if version <= 1 || version > FWRAP_VERSION
         error("Cannot read subsystem: Unsupported FileWrapper version: $version")
     end
 
-    subsys.num_names = reinterpret(UInt32, swap_bytes ? reverse(fwrap_metadata[5:8]) : fwrap_metadata[5:8])[1]
-    region_offsets = reinterpret(UInt32, swap_bytes ? reverse(fwrap_metadata[9:40]) : fwrap_metadata[9:40])
-
+    subsys.num_names = swapped_reinterpret(fwrap_metadata[5:8], swap_bytes)[1]
+    region_offsets = swapped_reinterpret(fwrap_metadata[9:40], swap_bytes)
+    
     # Class and Property Names stored as list of null-terminated strings
     start = 41
     pos = start
@@ -130,18 +128,18 @@ function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_
         pos += 1
     end
 
-    subsys.class_id_metadata = reinterpret(UInt32, swap_bytes ? reverse(fwrap_metadata[region_offsets[1]+1:region_offsets[2]]) : fwrap_metadata[region_offsets[1]+1:region_offsets[2]])
-    subsys.saveobj_prop_metadata = reinterpret(UInt32, swap_bytes ? reverse(fwrap_metadata[region_offsets[2]+1:region_offsets[3]]) : fwrap_metadata[region_offsets[2]+1:region_offsets[3]])
-    subsys.object_id_metadata = reinterpret(UInt32, swap_bytes ? reverse(fwrap_metadata[region_offsets[3]+1:region_offsets[4]]) : fwrap_metadata[region_offsets[3]+1:region_offsets[4]])
-    subsys.obj_prop_metadata = reinterpret(UInt32, swap_bytes ? reverse(fwrap_metadata[region_offsets[4]+1:region_offsets[5]]) : fwrap_metadata[region_offsets[4]+1:region_offsets[5]])
-    subsys.dynprop_metadata = reinterpret(UInt32, swap_bytes ? reverse(fwrap_metadata[region_offsets[5]+1:region_offsets[6]]) : fwrap_metadata[region_offsets[5]+1:region_offsets[6]])
+    subsys.class_id_metadata = swapped_reinterpret(fwrap_metadata[region_offsets[1]+1:region_offsets[2]], swap_bytes)
+    subsys.saveobj_prop_metadata = swapped_reinterpret(fwrap_metadata[region_offsets[2]+1:region_offsets[3]], swap_bytes)
+    subsys.object_id_metadata = swapped_reinterpret(fwrap_metadata[region_offsets[3]+1:region_offsets[4]], swap_bytes)
+    subsys.obj_prop_metadata = swapped_reinterpret(fwrap_metadata[region_offsets[4]+1:region_offsets[5]], swap_bytes)
+    subsys.dynprop_metadata = swapped_reinterpret(fwrap_metadata[region_offsets[5]+1:region_offsets[6]], swap_bytes)
 
     if region_offsets[7] != 0
-        subsys._u6_metadata = reinterpret(UInt32, swap_bytes ? reverse(fwrap_metadata[region_offsets[6]+1:region_offsets[7]]) : fwrap_metadata[region_offsets[6]+1:region_offsets[7]])
+        subsys._u6_metadata = swapped_reinterpret(fwrap_metadata[region_offsets[6]+1:region_offsets[7]], swap_bytes)
     end
 
     if region_offsets[8] != 0
-        subsys._u7_metadata = reinterpret(UInt32, swap_bytes ? reverse(fwrap_metadata[region_offsets[7]+1:region_offsets[8]]) : fwrap_metadata[region_offsets[7]+1:region_offsets[8]])
+        subsys._u7_metadata = swapped_reinterpret(fwrap_metadata[region_offsets[7]+1:region_offsets[8]], swap_bytes)
     end
 
     if version == 2
@@ -161,6 +159,12 @@ function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_
 
     return subsys
 end
+
+function swapped_reinterpret(T::Type, A::AbstractArray, swap_bytes::Bool)
+    reinterpret(T, swap_bytes ? reverse(A) : A)
+end
+# integers are written as uint8 (with swap), interpret as uint32
+swapped_reinterpret(A::AbstractArray, swap_bytes::Bool) = swapped_reinterpret(UInt32, A, swap_bytes)
 
 function get_classname(subsys::Subsystem, class_id::UInt32)
     namespace_idx = subsys.class_id_metadata[class_id*4+1]
