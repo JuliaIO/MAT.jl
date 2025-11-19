@@ -268,11 +268,69 @@ for format in ["v7", "v7.3"]
         @test all(x->size(x)==(3,1), t["data"])
 
         @test "testDatetime" in keys(vars)
-        dt = vars["testDatetime"] 
+        dt = vars["testDatetime"]
         @test dt isa DateTime
         @test dt - DateTime(2019, 12, 2, 16, 42, 49) < Second(1)
     end
     end
+
+    @testset "user defined classdef $format" begin
+    let objtestfile = "user_defined_classdefs.mat"
+        filepath = joinpath(dirname(@__FILE__), format, objtestfile)
+
+        vars = matread(filepath)
+        @test haskey(vars, "obj_no_vals")
+        obj_no_vals = vars["obj_no_vals"]
+        @test obj_no_vals isa MatlabOpaque
+        @test obj_no_vals.class == "TestClasses.BasicClass"
+        @test obj_no_vals["a"] isa Matrix{Float64}
+
+        @test haskey(vars, "obj_with_vals")
+        obj_with_vals = vars["obj_with_vals"]
+        @test obj_with_vals isa MatlabOpaque
+        @test obj_with_vals.class == "TestClasses.BasicClass"
+        @test obj_with_vals["a"] == 10.0
+
+        @test haskey(vars, "obj_with_default_val")
+        obj_with_default_val = vars["obj_with_default_val"]
+        @test obj_with_default_val isa MatlabOpaque
+        @test obj_with_default_val.class == "TestClasses.DefaultClass"
+        @test obj_with_default_val["a"] == "Default String"
+        @test obj_with_default_val["b"] == 10.0
+
+        @test haskey(vars, "obj_array")
+        obj_array = vars["obj_array"]
+        @test obj_array isa Array{MatlabOpaque}
+        @test size(obj_array) == (2, 2)
+        @test obj_array[1, 1] isa MatlabOpaque
+        @test obj_array[1, 1]["a"] == 1.0
+        @test obj_array[1, 2]["a"] == 2.0
+
+        @test haskey(vars, "obj_with_nested_props")
+        obj_with_nested_props = vars["obj_with_nested_props"]
+        @test obj_with_nested_props isa MatlabOpaque
+        @test obj_with_nested_props.class == "TestClasses.BasicClass"
+        @test obj_with_nested_props["a"] isa MatlabOpaque
+        @test obj_with_nested_props["a"]["a"] == 1.0
+
+        @test obj_with_nested_props["b"] isa Matrix{Any}
+        @test obj_with_nested_props["b"][1] isa MatlabOpaque
+        @test obj_with_nested_props["b"][1]["b"] == "Obj1"
+
+        @test obj_with_nested_props["c"] isa Dict{String, Any}
+        @test obj_with_nested_props["c"]["InnerProp"] isa MatlabOpaque
+        @test obj_with_nested_props["c"]["InnerProp"]["a"] == 2.0
+
+        @test haskey(vars, "obj_handle_1")
+        @test haskey(vars, "obj_handle_2")
+        obj_handle_1 = vars["obj_handle_1"]
+        obj_handle_2 = vars["obj_handle_2"]
+        @test obj_handle_1 === obj_handle_2
+        @test obj_handle_1 isa MatlabOpaque
+
+    end
+    end
+
 end
 
 # test reading of old-style Matlab object in v7.3 format

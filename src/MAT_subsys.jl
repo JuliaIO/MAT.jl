@@ -111,7 +111,7 @@ function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_
 
     subsys.num_names = swapped_reinterpret(fwrap_metadata[5:8], swap_bytes)[1]
     region_offsets = swapped_reinterpret(fwrap_metadata[9:40], swap_bytes)
-    
+
     # Class and Property Names stored as list of null-terminated strings
     start = 41
     pos = start
@@ -153,10 +153,6 @@ function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_
     end
 
     subsys.prop_vals_defaults = mcos_data[end, 1]
-    for el in subsys.prop_vals_defaults
-        update_nested_props!(el, subsys) # just in case
-    end
-
     return subsys
 end
 
@@ -185,7 +181,11 @@ function get_object_metadata(subsys::Subsystem, object_id::UInt32)
 end
 
 function get_default_properties(subsys::Subsystem, class_id::UInt32)
-    return Dict{String,Any}(subsys.prop_vals_defaults[class_id+1, 1])
+    default_props = Dict{String,Any}(subsys.prop_vals_defaults[class_id+1, 1])
+    for (key, value) in default_props
+        default_props[key] = update_nested_props!(value, subsys)
+    end
+    return default_props
 end
 
 function get_property_idxs(subsys::Subsystem, obj_type_id::UInt32, saveobj_ret_type::Bool)
@@ -310,7 +310,7 @@ function load_mcos_object(metadata::Array{UInt32}, type_name::String, subsys::Su
         obj = get_object!(subsys, oid, classname)
         return convert_opaque(obj; table=subsys.table_type)
     else
-        object_arr = Array{Any}(undef, convert(Vector{Int}, dims)...)
+        object_arr = Array{MatlabOpaque}(undef, convert(Vector{Int}, dims)...)
         for i = 1:length(object_arr)
             oid = object_ids[i]
             obj = get_object!(subsys, oid, classname)
