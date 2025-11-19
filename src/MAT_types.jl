@@ -29,6 +29,7 @@
 module MAT_types
 
     import StringEncodings
+    import StringEncodings: Encoding
     import Dates: DateTime, Second, Millisecond
     import PooledArrays: PooledArray, RefArray
     import Tables
@@ -343,7 +344,7 @@ module MAT_types
     end
 
     # for reference: https://github.com/foreverallama/matio/blob/main/matio/utils/converters/matstring.py
-    function from_string(obj::MatlabOpaque, encoding::String = "UTF-16LE")
+    function from_string(obj::MatlabOpaque, encoding::Encoding = Encoding(Symbol("UTF-16LE")))
         data = obj["any"]
         if isnothing(data) || isempty(data)
             return String[]
@@ -411,9 +412,11 @@ module MAT_types
         codes = obj["codes"]
         pool = vec(Array{promoted_eltype(category_names)}(category_names))
         code_type = eltype(codes)
-        invpool = Dict{eltype(pool), code_type}(pool .=> code_type.(1:length(pool)))
-        refs = RefArray(codes)
-        return PooledArray(refs, invpool, pool)
+        pool_type = eltype(pool)
+        invpool = Dict{pool_type, code_type}(pool .=> code_type.(1:length(pool)))
+        RA = typeof(codes)
+        N = ndims(codes)
+        return PooledArray{pool_type,code_type,N,RA}(RefArray(codes), invpool, pool)
     end
 
     function promoted_eltype(v::AbstractArray{Any})

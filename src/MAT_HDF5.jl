@@ -35,6 +35,7 @@ import Base: names, read, write, close
 import HDF5: Reference
 import Dates
 import Tables
+import PooledArrays: PooledArray
 import ..MAT_types: MatlabStructArray, StructArrayField, convert_struct_array, MatlabClassObject, MatlabOpaque, MatlabTable
 
 const HDF5Parent = Union{HDF5.File, HDF5.Group}
@@ -723,6 +724,10 @@ end
 
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::AbstractArray{MatlabOpaque})
     error("writing of MatlabOpaque types is not yet supported")
+end
+
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::PooledArray)
+    error("writing of PooledArray types as categorical is not yet supported")
 end
 
 # Check whether a variable name is valid, then write it
