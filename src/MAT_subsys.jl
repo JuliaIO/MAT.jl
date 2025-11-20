@@ -32,8 +32,8 @@ const FWRAP_VERSION = 4
 
 mutable struct Subsystem
     object_cache::Dict{UInt32, MatlabOpaque}
-    num_names::UInt32
-    mcos_names::Vector{String}
+    num_names::UInt32 # number of mcos_names
+    mcos_names::Vector{String} # Class and Property Names
     class_id_metadata::Vector{UInt32}
     object_id_metadata::Vector{UInt32}
     saveobj_prop_metadata::Vector{UInt32}
@@ -102,7 +102,7 @@ function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_
         # Backward compatibility with MAT_v5
         mcos_data = mcos_data[2]
     end
-    fwrap_metadata = vec(mcos_data[1, 1])
+    fwrap_metadata::Vector{UInt8} = vec(mcos_data[1, 1])
 
     version = swapped_reinterpret(fwrap_metadata[1:4], swap_bytes)[1]
     if version <= 1 || version > FWRAP_VERSION
@@ -110,23 +110,9 @@ function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_
     end
 
     subsys.num_names = swapped_reinterpret(fwrap_metadata[5:8], swap_bytes)[1]
-    region_offsets = swapped_reinterpret(fwrap_metadata[9:40], swap_bytes)
+    load_mcos_names!(subsys, fwrap_metadata)
 
-    # Class and Property Names stored as list of null-terminated strings
-    start = 41
-    pos = start
-    name_count = 0
-    while name_count < subsys.num_names
-        if fwrap_metadata[pos] == 0x00
-            push!(subsys.mcos_names, String(fwrap_metadata[start:pos-1]))
-            name_count += 1
-            start = pos + 1
-            if name_count == subsys.num_names
-                break
-            end
-        end
-        pos += 1
-    end
+    region_offsets = swapped_reinterpret(fwrap_metadata[9:40], swap_bytes)
 
     subsys.class_id_metadata = swapped_reinterpret(fwrap_metadata[region_offsets[1]+1:region_offsets[2]], swap_bytes)
     subsys.saveobj_prop_metadata = swapped_reinterpret(fwrap_metadata[region_offsets[2]+1:region_offsets[3]], swap_bytes)
@@ -156,11 +142,29 @@ function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_
     return subsys
 end
 
-function swapped_reinterpret(T::Type, A::AbstractArray, swap_bytes::Bool)
+# Class and Property Names are stored as list of null-terminated strings
+function load_mcos_names!(subsys::Subsystem, fwrap_metadata::AbstractArray{UInt8})
+    start = 41
+    pos = start
+    name_count = 0
+    while name_count < subsys.num_names
+        if fwrap_metadata[pos] == 0x00
+            push!(subsys.mcos_names, String(fwrap_metadata[start:pos-1]))
+            name_count += 1
+            start = pos + 1
+            if name_count == subsys.num_names
+                break
+            end
+        end
+        pos += 1
+    end
+end
+
+function swapped_reinterpret(T::Type, A::AbstractArray{UInt8}, swap_bytes::Bool)
     reinterpret(T, swap_bytes ? reverse(A) : A)
 end
 # integers are written as uint8 (with swap), interpret as uint32
-swapped_reinterpret(A::AbstractArray, swap_bytes::Bool) = swapped_reinterpret(UInt32, A, swap_bytes)
+swapped_reinterpret(A::AbstractArray{UInt8}, swap_bytes::Bool) = swapped_reinterpret(UInt32, A, swap_bytes)
 
 function get_classname(subsys::Subsystem, class_id::UInt32)
     namespace_idx = subsys.class_id_metadata[class_id*4+1]
@@ -339,11 +343,12 @@ function load_mcos_object(metadata::Array{UInt32}, type_name::String, subsys::Su
         obj = get_object!(subsys, oid, classname)
         return convert_opaque(obj; table=subsys.table_type)
     else
+        # no need to convert_opaque, matlab wraps object arrays in a single class normally
         object_arr = Array{MatlabOpaque}(undef, convert(Vector{Int}, dims)...)
         for i = 1:length(object_arr)
             oid = object_ids[i]
             obj = get_object!(subsys, oid, classname)
-            object_arr[i] = convert_opaque(obj; table=subsys.table_type)
+            object_arr[i] = obj
         end
         return object_arr
     end
