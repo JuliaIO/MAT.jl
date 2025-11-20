@@ -157,7 +157,8 @@ function Base.show(io::IO, ::MIME"text/plain", arr::MatlabStructArray)
     col_word = ncol == 1 ? "column" : "columns"
     print(io, col_word, ":")
     for (k, v) in arr
-        print(io, "\n \"$k\": $v")
+        print(io, "\n \"$k\": ")
+        summary(io, v)
     end
 end
 
