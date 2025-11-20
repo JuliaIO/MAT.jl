@@ -25,6 +25,7 @@ makedocs(;
     pages = [
         "Home" => "index.md",
         "Object Arrays" => "object_arrays.md",
+        "Types" => "types.md",
         "Methods" => "methods.md",
     ],
     warnonly = [:missing_docs,],

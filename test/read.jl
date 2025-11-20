@@ -1,4 +1,5 @@
 using MAT, Test
+using Dates
 
 function check(filename, result)
     matfile = matopen(filename)
@@ -218,21 +219,133 @@ let objtestfile = "figure.fig"
 end
 
 # test reading file containing Matlab function handle, table, and datetime objects
-# since we don't support these objects, just make sure that there are no errors
-# reading the file and that the variables are there and replaced with `missing`
 let objtestfile = "function_handles.mat"
     vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))
     @test "sin" in keys(vars)
-    @test ismissing(vars["sin"])
+    @test typeof(vars["sin"]) == Dict{String, Any}
+    @test Set(keys(vars["sin"])) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
     @test "anonymous" in keys(vars)
-    @test ismissing(vars["anonymous"])
+    @test typeof(vars["anonymous"]) == Dict{String, Any}
+    @test Set(keys(vars["anonymous"])) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
 end
-let objtestfile = "struct_table_datetime.mat"
-    vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))["s"]
-    @test "testTable" in keys(vars)
-    @test ismissing(vars["testTable"])
-    @test "testDatetime" in keys(vars)
-    @test ismissing(vars["testDatetime"])
+
+for format in ["v7", "v7.3"]
+    @testset "struct_table_datetime $format" begin
+    let objtestfile = "struct_table_datetime.mat"
+        filepath = joinpath(dirname(@__FILE__), format, objtestfile)
+
+        # make sure read(matopen(filepath), ::String) works
+        fid = matopen(filepath)
+        @test haskey(fid, "s")
+        var_s = read(fid, "s")
+        @test haskey(var_s, "testTable")
+        @test haskey(var_s, "testDatetime")
+        close(fid)
+
+        # matread interface
+        vars = matread(filepath)["s"]
+        @test haskey(vars, "testTable")
+        t = vars["testTable"]
+        @test t isa MatlabTable
+        @test t.names == [:FlightNum, :Customer, :Date, :Rating, :Comment]
+        @test t[:Date] isa Vector{DateTime}
+        @test t[:Rating] isa AbstractVector{String}
+        @test all(x->length(x)==3, t.columns)
+
+        # using Nothing will keep the MatlabOpaque
+        vars = matread(filepath; table=Nothing)["s"]
+        t = vars["testTable"]
+        @test Set(keys(t)) == Set(["props", "varnames", "nrows", "data", "rownames", "ndims", "nvars"])
+        @test t.class == "table"
+        @test t["ndims"] === 2.0
+        @test t["nvars"] === 5.0
+        @test t["nrows"] === 3.0
+        @test t["data"][1] == reshape([1261.0, 547.0, 3489.0], 3, 1)
+        @test t["data"][2] isa Matrix{String}
+        @test t["data"][3] isa Matrix{DateTime}
+        @test t["data"][4] isa AbstractMatrix{String}
+        @test t["data"][5] isa Matrix{String}
+        @test all(x->size(x)==(3,1), t["data"])
+
+        @test "testDatetime" in keys(vars)
+        dt = vars["testDatetime"]
+        @test dt isa DateTime
+        @test dt - DateTime(2019, 12, 2, 16, 42, 49) < Second(1)
+    end
+    end
+
+    @testset "user defined classdef $format" begin
+    let objtestfile = "user_defined_classdefs.mat"
+        filepath = joinpath(dirname(@__FILE__), format, objtestfile)
+
+        vars = matread(filepath)
+        @test haskey(vars, "obj_no_vals")
+        obj_no_vals = vars["obj_no_vals"]
+        @test obj_no_vals isa MatlabOpaque
+        @test obj_no_vals.class == "TestClasses.BasicClass"
+        @test obj_no_vals["a"] isa Matrix{Float64}
+
+        @test haskey(vars, "obj_with_vals")
+        obj_with_vals = vars["obj_with_vals"]
+        @test obj_with_vals isa MatlabOpaque
+        @test obj_with_vals.class == "TestClasses.BasicClass"
+        @test obj_with_vals["a"] == 10.0
+
+        @test haskey(vars, "obj_with_default_val")
+        obj_with_default_val = vars["obj_with_default_val"]
+        @test obj_with_default_val isa MatlabOpaque
+        @test obj_with_default_val.class == "TestClasses.DefaultClass"
+        @test obj_with_default_val["a"] == "Default String"
+        @test obj_with_default_val["b"] == 10.0
+
+        @test haskey(vars, "obj_array")
+        obj_array = vars["obj_array"]
+        @test obj_array isa Array{MatlabOpaque}
+        @test size(obj_array) == (2, 2)
+        @test obj_array[1, 1] isa MatlabOpaque
+        @test obj_array[1, 1]["a"] == 1.0
+        @test obj_array[1, 2]["a"] == 2.0
+
+        @test haskey(vars, "obj_with_nested_props")
+        obj_with_nested_props = vars["obj_with_nested_props"]
+        @test obj_with_nested_props isa MatlabOpaque
+        @test obj_with_nested_props.class == "TestClasses.BasicClass"
+        @test obj_with_nested_props["a"] isa MatlabOpaque
+        @test obj_with_nested_props["a"]["a"] == 1.0
+
+        @test obj_with_nested_props["b"] isa Matrix{Any}
+        @test obj_with_nested_props["b"][1] isa MatlabOpaque
+        @test obj_with_nested_props["b"][1]["b"] == "Obj1"
+
+        @test obj_with_nested_props["c"] isa Dict{String, Any}
+        @test obj_with_nested_props["c"]["InnerProp"] isa MatlabOpaque
+        @test obj_with_nested_props["c"]["InnerProp"]["a"] == 2.0
+
+        @test haskey(vars, "obj_handle_1")
+        @test haskey(vars, "obj_handle_2")
+        obj_handle_1 = vars["obj_handle_1"]
+        obj_handle_2 = vars["obj_handle_2"]
+        @test obj_handle_1 === obj_handle_2
+        @test obj_handle_1 isa MatlabOpaque
+
+    end
+    end
+
+    @testset "dynamic property" begin
+    let objtestfile = "dynamicprops.mat"
+        filepath = joinpath(dirname(@__FILE__), format, objtestfile)
+
+        vars = matread(filepath)
+        @test haskey(vars, "obj")
+        obj = vars["obj"]
+        @test obj isa MatlabOpaque
+        @test obj.class == "TestClasses.BasicDynamic"
+        @test haskey(obj, "__dynamic_property_1__")
+        @test obj["__dynamic_property_1__"]["Name"] == "DynamicData"
+        @test obj["__dynamic_property_1__"]["DynamicValue_"] == 42.0
+    end
+    end
+
 end
 
 # test reading of old-style Matlab object in v7.3 format

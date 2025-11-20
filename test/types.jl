@@ -1,4 +1,5 @@
 using MAT, Test
+using Dates
 
 @testset "MatlabStructArray" begin
     d_arr = Dict{String, Any}[
@@ -85,4 +86,164 @@ end
 
     wrong_arr = [MatlabClassObject(d, "TestClassOld"), MatlabClassObject(d, "Bah")]
     @test_throws ErrorException MatlabStructArray(wrong_arr)
+end
+
+@testset "MatlabOpaque string" begin
+    dat = UInt64[
+        0x0000000000000001
+        0x0000000000000002
+        0x0000000000000003
+        0x0000000000000001
+        0x0000000000000005
+        0x0000000000000005
+        0x0000000000000005
+        0x0065006e006f004a
+        0x006f007200420073
+        0x006d0053006e0077
+        0x0000006800740069
+    ]
+    dat = reshape(dat, 1, length(dat))
+    obj = MatlabOpaque(Dict{String, Any}("any" => dat), "string")
+    str = MAT.convert_opaque(obj)
+    @test size(str) == (3,1)
+    @test vec(str) == ["Jones", "Brown", "Smith"]
+
+    # single element string array is a single string in matlab, ofcourse
+    dat = [
+        0x0000000000000001
+        0x0000000000000002
+        0x0000000000000001
+        0x0000000000000001
+        0x0000000000000005
+        0x0065006e006f004a
+        0x0000000000000073
+    ]
+    dat = reshape(dat, 1, length(dat))
+    obj = MatlabOpaque(Dict{String, Any}("any" => dat), "string")
+    str = MAT.convert_opaque(obj)
+    @test str == "Jones"
+end
+
+@testset "MatlabOpaque datetime" begin
+    d = Dict{String, Any}(
+        "tz"         => "",
+        "data"       => ComplexF64[
+            1482192000000.0+0.0im;
+            1482278400000.0+0.0im;
+            1482364800000.0+0.0im;;
+            ],
+        "fmt"        => "",
+        "isDateOnly" => true, # Note: "isDateOnly" not in all versions
+    )
+    obj = MatlabOpaque(d, "datetime")
+    expected_dates = [
+        DateTime(2016, 12, 20) # 20-Dec-2016
+        DateTime(2016, 12, 21) # 21-Dec-2016
+        DateTime(2016, 12, 22) # 22-Dec-2016
+    ]
+    @test all(MAT.convert_opaque(obj) .== expected_dates)
+
+    d = Dict{String, Any}(
+        "tz"         => "",
+        "data"       => 1575304969634.0+0.0im,
+        "fmt"        => "",
+        "isDateOnly" => false,
+    )
+    obj = MatlabOpaque(d, "datetime")
+    # "02-Dec-2019 16:42:49"
+    expected_dt = DateTime(2019, 12, 2, 16, 42, 49)
+    # still have some millisecond rounding issue?
+    @test MAT.convert_opaque(obj) - expected_dt < Second(1)
+end
+
+@testset "MatlabOpaque duration" begin
+    d = Dict(
+        "millis" => [3.6e6 7.2e6],
+        "fmt"    => 'h',
+    )
+    obj = MatlabOpaque(d, "duration")
+    @test MAT.convert_opaque(obj) == map(Millisecond, d["millis"])
+
+    d = Dict(
+        "millis" => 12000.0,
+        "fmt"    => 'h',
+    )
+    obj = MatlabOpaque(d, "duration")
+    @test MAT.convert_opaque(obj) == Millisecond(d["millis"])
+end
+
+@testset "MatlabOpaque categorical" begin
+    d = Dict(
+        "isProtected"   => false,
+        "codes"         => reshape(UInt8[0x02, 0x03, 0x01, 0x01, 0x01, 0x02], 3, 2),
+        "categoryNames" => Any["Fair"; "Good"; "Poor";;],
+        "isOrdinal"     => false,
+    )
+    obj = MatlabOpaque(d, "categorical")
+
+    c = MAT.convert_opaque(obj)
+    @test c == [ 
+        "Good"  "Fair"
+        "Poor"  "Fair"
+        "Fair"  "Good"
+    ]
+    
+end
+
+@testset "MatlabOpaque table" begin
+    # simplified table struct; there's some other properties as well
+    d = Dict{String,Any}(
+        "varnames" => Any["FlightNum" "Customer"],
+        "nrows" => 3.0,
+        "data"  => reshape(Any[[1261.0; 547.0; 3489.0;;], ["Jones"; "Brown"; "Smith";;]], 1, 2),
+        "ndims" => 2.0,
+        "nvars" => 2.0,
+    )
+    obj = MatlabOpaque(d, "table")
+
+    # Note: this should work with DataFrames.DataFrame, but that's a big dependency to add for testing
+    t = MAT.convert_opaque(obj; table = MatlabTable)
+    @test t.names == [:FlightNum, :Customer]
+    @test t[:FlightNum] isa Vector{Float64}
+    @test t[:FlightNum] == [1261.0, 547.0, 3489.0]
+    @test t[:Customer] isa Vector{String}
+    @test t["Customer"] == ["Jones", "Brown", "Smith"]
+
+    t = MAT.convert_opaque(obj; table = MatlabStructArray{1})
+    @test t isa MatlabStructArray{1}
+    @test t["FlightNum"] == [1261.0, 547.0, 3489.0]
+    @test t["Customer"] == ["Jones", "Brown", "Smith"]
+
+    t = MAT.convert_opaque(obj; table = Nothing)
+    @test t === obj
+
+    nd_array = reshape(1:12, 2, 3, 2)    
+
+    # ND-arrays as columns
+    # Note: does not convert to DataFrame
+    d = Dict{String,Any}(
+        "varnames" => Any["Floats" "NDArray"],
+        "nrows" => 2.0,
+        "data"  => reshape(Any[[1261.0; 547.0;;], nd_array], 1, 2),
+        "ndims" => 2.0,
+        "nvars" => 2.0,
+    )
+    obj = MatlabOpaque(d, "table")
+    t = MAT.convert_opaque(obj; table = MatlabTable)
+    @test size(t[:Floats]) == (2,)
+    @test size(t[:NDArray]) == (2,3,2)
+
+    # single row table
+    d = Dict{String,Any}(
+        "varnames" => Any["Age" "Name" "Matrix"],
+        "nrows" => 1.0,
+        "data"  => reshape([25.0, "Smith", [1.0 2.0]], 1, 3),
+        "ndims" => 2.0,
+        "nvars" => 2.0,
+    )
+    obj = MatlabOpaque(d, "table")
+    t = MAT.convert_opaque(obj; table = MatlabTable)
+    @test t[:Age] == [25.0]
+    @test t[:Name] == ["Smith"]
+    @test t[:Matrix] == [1.0 2.0]
 end

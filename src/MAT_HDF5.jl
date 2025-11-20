@@ -29,10 +29,14 @@
 module MAT_HDF5
 
 using HDF5, SparseArrays
+using ..MAT_subsys
 
 import Base: names, read, write, close
 import HDF5: Reference
-import ..MAT_types: MatlabStructArray, StructArrayField, convert_struct_array, MatlabClassObject
+import Dates
+import Tables
+import PooledArrays: PooledArray
+import ..MAT_types: MatlabStructArray, StructArrayField, convert_struct_array, MatlabClassObject, MatlabOpaque, MatlabTable
 
 const HDF5Parent = Union{HDF5.File, HDF5.Group}
 const HDF5BitsOrBool = Union{HDF5.BitsType,Bool}
@@ -43,14 +47,24 @@ mutable struct MatlabHDF5File <: HDF5.H5DataStore
     writeheader::Bool
     refcounter::Int
     compress::Bool
+    subsystem::Subsystem
 
     function MatlabHDF5File(plain, toclose::Bool=true, writeheader::Bool=false, refcounter::Int=0, compress::Bool=false)
-        f = new(plain, toclose, writeheader, refcounter, compress)
+        f = new(plain, toclose, writeheader, refcounter, compress, Subsystem())
         if toclose
             finalizer(close, f)
         end
         f
     end
+end
+
+function Base.show(io::IO, f::MatlabHDF5File)
+    print(io, "MatlabHDF5File(")
+    print(io, f.plain, ", ")
+    print(io, f.toclose, ", ")
+    print(io, f.writeheader, ", ")
+    print(io, f.refcounter, ", ")
+    print(io, f.compress, ")")
 end
 
 """
@@ -70,8 +84,13 @@ function close(f::MatlabHDF5File)
                 unsafe_copyto!(magicptr, idptr, length(identifier))
             end
             magic[126] = 0x02
-            magic[127] = 0x49
-            magic[128] = 0x4d
+            if Base.ENDIAN_BOM == 0x04030201
+                magic[127] = 0x49
+                magic[128] = 0x4d
+            else
+                magic[127] = 0x4d
+                magic[128] = 0x49
+            end
             rawfid = open(f.plain.filename, "r+")
             write(rawfid, magic)
             close(rawfid)
@@ -81,7 +100,7 @@ function close(f::MatlabHDF5File)
     nothing
 end
 
-function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool)
+function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool, endian_indicator::Bool; table::Type=MatlabTable)
     local f
     if ff && !wr
         error("Cannot append to a read-only file")
@@ -110,6 +129,12 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         fid.refcounter = length(g)-1
         close(g)
     end
+    subsys_refs = "#subsystem#"
+    if haskey(fid.plain, subsys_refs)
+        fid.subsystem.table_type = table
+        subsys_data = m_read(fid.plain[subsys_refs], fid.subsystem)
+        MAT_subsys.load_subsys!(fid.subsystem, subsys_data, endian_indicator)
+    end
     fid
 end
 
@@ -119,6 +144,7 @@ const name_type_attr_matlab = "MATLAB_class"
 const empty_attr_matlab = "MATLAB_empty"
 const sparse_attr_matlab = "MATLAB_sparse"
 const int_decode_attr_matlab = "MATLAB_int_decode"
+const object_type_attr_matlab = "MATLAB_object_decode"
 const object_decode_attr_matlab = "MATLAB_object_decode"
 
 ### Reading
@@ -130,14 +156,14 @@ function read_complex(dtype::HDF5.Datatype, dset::HDF5.Dataset, ::Type{T}) where
     return read(dset, Complex{T})
 end
 
-function read_references(dset::HDF5.Dataset)
+function read_cell(dset::HDF5.Dataset, subsys::Subsystem)
     refs = read(dset, Reference)
     out = Array{Any}(undef, size(refs))
     f = HDF5.file(dset)
     for i = 1:length(refs)
         dset = f[refs[i]]
         try
-            out[i] = m_read(dset)
+            out[i] = m_read(dset, subsys)
         finally
             close(dset)
         end
@@ -145,7 +171,7 @@ function read_references(dset::HDF5.Dataset)
     return out
 end
 
-function m_read(dset::HDF5.Dataset)
+function m_read(dset::HDF5.Dataset, subsys::Subsystem)
     if haskey(dset, empty_attr_matlab)
         # Empty arrays encode the dimensions as the dataset
         dims = convert(Vector{Int}, read(dset))
@@ -167,29 +193,50 @@ function m_read(dset::HDF5.Dataset)
         end
     end
 
+    objecttype = haskey(dset, object_type_attr_matlab) ? read_attribute(dset, object_type_attr_matlab) : nothing
     mattype = haskey(dset, name_type_attr_matlab) ? read_attribute(dset, name_type_attr_matlab) : "struct_array_field"
 
-    if mattype == "cell"
+    if mattype == "cell" && objecttype === nothing
         # Cell arrays, represented as an array of refs
-        return read_references(dset)
+        return read_cell(dset, subsys)
+    elseif objecttype !== nothing
+        if objecttype != 3
+            @warn "MATLAB Object Type $mattype is currently not supported."
+            return missing
+        end
+        if mattype == "FileWrapper__"
+            return read_cell(dset, subsys)
+        end
+        if haskey(dset, "MATLAB_fields")
+            @warn "Enumeration Instances are not supported currently."
+            return missing
+        end
     elseif mattype == "struct_array_field"
         # This will be converted into MatlabStructArray in `m_read(g::HDF5.Group)`
-        return StructArrayField(read_references(dset))
+        return StructArrayField(read_cell(dset, subsys))
     elseif !haskey(str2type_matlab,mattype)
-        @warn "MATLAB $mattype values are currently not supported"
+        @warn "MATLAB $mattype values are currently not supported."
         return missing
     end
 
     # Regular arrays of values
     # Convert to Julia type
-    T = str2type_matlab[mattype]
+    if objecttype === nothing
+        T = str2type_matlab[mattype]
+    else
+        T = UInt32 # FIXME: Default for MATLAB objects?
+    end
 
     # Check for a COMPOUND data set, and if so handle complex numbers specially
     dtype = datatype(dset)
     try
         class_id = HDF5.API.h5t_get_class(dtype.id)
         d = class_id == HDF5.API.H5T_COMPOUND ? read_complex(dtype, dset, T) : read(dset, T)
-        length(d) == 1 ? d[1] : d
+        if objecttype !== nothing
+            return MAT_subsys.load_mcos_object(d, "MCOS", subsys)
+        else
+            return length(d) == 1 ? d[1] : d
+        end
     finally
         close(dtype)
     end
@@ -232,7 +279,7 @@ function read_sparse_matrix(g::HDF5.Group, mattype::String)
     return SparseMatrixCSC(convert(Int, read_attribute(g, sparse_attr_matlab)), length(jc)-1, jc, ir, data)
 end
 
-function read_struct_as_dict(g::HDF5.Group)
+function read_struct_as_dict(g::HDF5.Group, subsys::Subsystem)
     if haskey(g, "MATLAB_fields")
         fn = [join(f) for f in read_attribute(g, "MATLAB_fields")]
     else
@@ -242,7 +289,7 @@ function read_struct_as_dict(g::HDF5.Group)
     for i = 1:length(fn)
         dset = g[fn[i]]
         try
-            s[fn[i]] = m_read(dset)
+            s[fn[i]] = m_read(dset, subsys)
         finally
             close(dset)
         end
@@ -251,8 +298,12 @@ function read_struct_as_dict(g::HDF5.Group)
 end
 
 # reading a struct, struct array, or sparse matrix
-function m_read(g::HDF5.Group)
-    mattype = read_attribute(g, name_type_attr_matlab)
+function m_read(g::HDF5.Group, subsys::Subsystem)
+    if HDF5.name(g) == "/#subsystem#"
+        mattype = "#subsystem#"
+    else
+        mattype = read_attribute(g, name_type_attr_matlab)
+    end
     is_object = false
     if mattype != "struct"
         attr = attributes(g)
@@ -260,13 +311,12 @@ function m_read(g::HDF5.Group)
         if haskey(attr, sparse_attr_matlab)
             return read_sparse_matrix(g, mattype)
         elseif mattype == "function_handle"
-            @warn "MATLAB $mattype values are currently not supported"
-            return missing
+            # TODO: fall through for now, will become a Dict
         else
             if haskey(attr, object_decode_attr_matlab) && read_attribute(g, object_decode_attr_matlab)==2
                 # I think this means it's an old object class similar to mXOBJECT_CLASS in MAT_v5
                 is_object = true
-            else
+            elseif mattype != "#subsystem#"
                 @warn "Unknown non-struct group of type $mattype detected; attempting to read as struct"
             end
         end
@@ -276,7 +326,7 @@ function m_read(g::HDF5.Group)
     else
         class = ""
     end
-    s = read_struct_as_dict(g)
+    s = read_struct_as_dict(g, subsys)
     out = convert_struct_array(s, class)
     return out
 end
@@ -292,7 +342,7 @@ function read(f::MatlabHDF5File, name::String)
     local val
     obj = f.plain[name]
     try
-        val = m_read(obj)
+        val = m_read(obj, f.subsystem)
     finally
         close(obj)
     end
@@ -555,8 +605,7 @@ end
 
 
 # Struct array: Array of Dict => MATLAB struct array
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String,
-                 arr::AbstractArray{<:AbstractDict})
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::AbstractArray{<:AbstractDict})
     m_write(mfile, parent, name, MatlabStructArray(arr))
 end
 
@@ -649,13 +698,36 @@ end
 m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::AbstractDict) =
     m_write(mfile, parent, name, check_struct_keys(collect(keys(s))), collect(values(s)))
 
+# Write named tuple as a struct
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, nt::NamedTuple)
+    m_write(mfile, parent, name, [string(x) for x in keys(nt)], collect(nt))
+end
+
 # Write generic CompositeKind as a struct
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s)
     if isbits(s)
         error("This is the write function for CompositeKind, but the input doesn't fit")
+    elseif Tables.istable(s)
+        error("writing tables is not yet supported")
     end
     T = typeof(s)
     m_write(mfile, parent, name, check_struct_keys([string(x) for x in fieldnames(T)]), [getfield(s, x) for x in fieldnames(T)])
+end
+
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat::Dates.AbstractTime)
+    error("writing of Dates types is not yet supported")
+end
+
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::MatlabOpaque)
+    error("writing of MatlabOpaque types is not yet supported")
+end
+
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::AbstractArray{MatlabOpaque})
+    error("writing of MatlabOpaque types is not yet supported")
+end
+
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::PooledArray)
+    error("writing of PooledArray types as categorical is not yet supported")
 end
 
 # Check whether a variable name is valid, then write it

@@ -29,22 +29,23 @@ using HDF5, SparseArrays
 include("MAT_types.jl")
 using .MAT_types
 
+include("MAT_subsys.jl")
 include("MAT_HDF5.jl")
 include("MAT_v5.jl")
 include("MAT_v4.jl")
 
-using .MAT_HDF5, .MAT_v5, .MAT_v4
+using .MAT_HDF5, .MAT_v5, .MAT_v4, .MAT_subsys
 
 export matopen, matread, matwrite, @read, @write
-export MatlabStructArray, MatlabClassObject
+export MatlabStructArray, MatlabClassObject, MatlabOpaque, MatlabTable
 
 # Open a MATLAB file
 const HDF5_HEADER = UInt8[0x89, 0x48, 0x44, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]
-function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool)
+function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool; table::Type=MatlabTable)
     # When creating new files, create as HDF5 by default
     fs = filesize(filename)
     if cr && (tr || fs == 0)
-        return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff, compress)
+        return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff, compress, Base.ENDIAN_BOM == 0x04030201; table=table)
     elseif fs == 0
         error("File \"$filename\" does not exist and create was not specified")
     end
@@ -72,7 +73,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         if wr || cr || tr || ff
             error("creating or appending to MATLAB v5 files is not supported")
         end
-        return MAT_v5.matopen(rawfid, endian_indicator)
+        return MAT_v5.matopen(rawfid, endian_indicator; table=table)
     end
 
     # Check for HDF5 file
@@ -80,7 +81,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         seek(rawfid, offset)
         if read!(rawfid, Vector{UInt8}(undef, 8)) == HDF5_HEADER
             close(rawfid)
-            return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff, compress)
+            return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff, compress, endian_indicator == 0x494D; table=table)
         end
     end
 
@@ -88,10 +89,10 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     error("\"$filename\" is not a MAT file")
 end
 
-function matopen(fname::AbstractString, mode::AbstractString; compress::Bool = false)
-    mode == "r"  ? matopen(fname, true , false, false, false, false, false)    :
-    mode == "r+" ? matopen(fname, true , true , false, false, false, compress) :
-    mode == "w"  ? matopen(fname, false, true , true , true , false, compress) :
+function matopen(fname::AbstractString, mode::AbstractString; compress::Bool = false, table::Type = MatlabTable)
+    mode == "r"  ? matopen(fname, true , false, false, false, false, false; table=table)    :
+    mode == "r+" ? matopen(fname, true , true , false, false, false, compress; table=table) :
+    mode == "w"  ? matopen(fname, false, true , true , true , false, compress; table=table) :
     # mode == "w+" ? matopen(fname, true , true , true , true , false, compress) :
     # mode == "a"  ? matopen(fname, false, true , true , false, true, compress)  :
     # mode == "a+" ? matopen(fname, true , true , true , false, true, compress)  :
@@ -110,8 +111,8 @@ function matopen(f::Function, args...; kwargs...)
 end
 
 """
-    matopen(filename [, mode]; compress = false) -> handle
-    matopen(f::Function, filename [, mode]; compress = false) -> f(handle)
+    matopen(filename [, mode]; compress = false, table = MatlabTable) -> handle
+    matopen(f::Function, filename [, mode]; compress = false, table = MatlabTable) -> f(handle)
 
 Mode defaults to `"r"` for read.
 It can also be `"w"` for write,
@@ -121,18 +122,71 @@ Compression on reading is detected/handled automatically; the `compress`
 keyword argument only affects write operations.
 
 Use with `read`, `write`, `close`, `keys`, and `haskey`.
+
+Optional keyword argument is the `table` type, for automatic conversion of Matlab tables.
+Note that Matlab tables may contain non-vector colums which cannot always be converted to a Julia table, like `DataFrame`.
+
+# Example
+
+```julia
+using MAT, DataFrames
+filepath = abspath(pkgdir(MAT), "./test/v7.3/struct_table_datetime.mat")
+fid = matopen(filepath; table = DataFrame)
+keys(fid)
+
+# outputs
+
+1-element Vector{String}:
+ "s"
+
+```
+
+Now you can read any of the keys
+```
+s = read(fid, "s")
+close(fid)
+s
+
+# outputs
+
+Dict{String, Any} with 2 entries:
+  "testDatetime" => DateTime("2019-12-02T16:42:49.634")
+  "testTable"    => 3×5 DataFrame…
+
+```
 """
 matopen
 
 # Read all variables from a MATLAB file
 """
-    matread(filename) -> Dict
+    matread(filename; table = MatlabTable) -> Dict
 
 Return a dictionary of all the variables and values in a Matlab file,
 opening and closing it automatically.
+
+Optionally provide the `table` type to convert Matlab tables into. Default uses a simple `MatlabTable` type.
+
+# Example
+
+```julia
+using MAT, DataFrames
+filepath = abspath(pkgdir(MAT), "./test/v7.3/struct_table_datetime.mat")
+vars = matread(filepath; table = DataFrame)
+vars["s"]["testTable"]
+
+# outputs
+
+3×5 DataFrame
+ Row │ FlightNum  Customer  Date                 Rating  Comment
+     │ Float64    String    DateTime             String  String
+─────┼─────────────────────────────────────────────────────────────────────────────────────
+   1 │    1261.0  Jones     2016-12-20T00:00:00  Good    Flight left on time, not crowded
+   2 │     547.0  Brown     2016-12-21T00:00:00  Poor    Late departure, ran out of dinne…
+   3 │    3489.0  Smith     2016-12-22T00:00:00  Fair    Late, but only by half an hour. …
+```
 """
-function matread(filename::AbstractString)
-    file = matopen(filename)
+function matread(filename::AbstractString; table::Type=MatlabTable)
+    file = matopen(filename; table=table)
     local vars
     try
         vars = read(file)
@@ -176,20 +230,6 @@ function _write_dict(fileio, dict::AbstractDict)
     finally
         close(fileio)
     end
-end
-
-###
-### v0.10.0 deprecations
-###
-
-export exists
-@noinline function exists(matfile::Union{MAT_v4.Matlabv4File,MAT_v5.Matlabv5File,MAT_HDF5.MatlabHDF5File}, varname::String)
-    Base.depwarn("`exists(matfile, varname)` is deprecated, use `haskey(matfile, varname)` instead.", :exists)
-    return haskey(matfile, varname)
-end
-@noinline function Base.names(matfile::Union{MAT_v4.Matlabv4File,MAT_v5.Matlabv5File,MAT_HDF5.MatlabHDF5File})
-    Base.depwarn("`names(matfile)` is deprecated, use `keys(matfile)` instead.", :names)
-    return keys(matfile)
 end
 
 end
