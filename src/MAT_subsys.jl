@@ -22,6 +22,9 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+# For reference
+# https://github.com/foreverallama/matio/blob/main/docs/subsystem_data_format.md
+
 module MAT_subsys
 
 import ..MAT_types: MatlabStructArray, MatlabOpaque, convert_opaque
@@ -29,6 +32,7 @@ import ..MAT_types: MatlabStructArray, MatlabOpaque, convert_opaque
 export Subsystem
 
 const FWRAP_VERSION = 4
+const MCOS_IDENTIFIER = 0xdd000000
 
 mutable struct Subsystem
     object_cache::Dict{UInt32,MatlabOpaque}
@@ -264,7 +268,7 @@ function update_nested_props!(prop_value::Array{UInt32}, subsys::Subsystem)
     # MATLAB probably uses some kind of placeholders to decode
     # But this should work here
 
-    if first(prop_value) == 0xdd000000
+    if first(prop_value) == MCOS_IDENTIFIER
         # MATLAB identifies any uint32 array with first value 0xdd000000 as an MCOS object
         return load_mcos_object(prop_value, "MCOS", subsys)
     else
@@ -288,7 +292,8 @@ function get_saved_properties(
         elseif prop_type == 2
             prop_value = prop_field_idxs[i * 3 + 3]
         else
-            error("Unknown property type ID: $prop_type encountered during deserialization")
+            @warn "Unknown property type ID: $prop_type for property $prop_name encountered during deserialization"
+            prop_value = prop_field_idxs[i * 3 + 3]
         end
         save_prop_map[prop_name] = update_nested_props!(prop_value, subsys)
     end
@@ -360,7 +365,7 @@ function load_mcos_object(metadata::Array{UInt32}, type_name::String, subsys::Su
         return metadata
     end
 
-    if metadata[1, 1] != 0xDD000000
+    if metadata[1, 1] != MCOS_IDENTIFIER
         @warn "MCOS object metadata is corrupted. Returning raw data."
         return metadata
     end
