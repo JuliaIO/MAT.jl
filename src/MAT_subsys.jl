@@ -76,62 +76,17 @@ mutable struct Subsystem
     end
 end
 
-function get_object!(subsys::Subsystem, oid::UInt32, classname::String)
-    if haskey(subsys.object_cache, oid)
-        # object is already cached, just retrieve it
-        obj = subsys.object_cache[oid]
-    else # it's a new object
-        prop_dict = Dict{String,Any}()
-        obj = MatlabOpaque(prop_dict, classname)
-        # cache the new object
-        subsys.object_cache[oid] = obj
-        # caching must be done before a next call to `get_properties` to avoid any infinite recursion
-        merge!(prop_dict, get_properties(subsys, oid))
-    end
-    return obj
+function swapped_reinterpret(T::Type, A::AbstractArray{UInt8}, swap_bytes::Bool)
+    return reinterpret(T, swap_bytes ? reverse(A) : A)
+end
+# integers are written as uint8 (with swap), interpret as uint32
+function swapped_reinterpret(A::AbstractArray{UInt8}, swap_bytes::Bool)
+    return swapped_reinterpret(UInt32, A, swap_bytes)
 end
 
 function load_subsys!(subsystem_data::Dict{String,Any}, swap_bytes::Bool)
     subsys = Subsystem()
     return load_subsys!(subsys, subsystem_data, swap_bytes)
-end
-
-function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_bytes::Bool)
-    subsys.handle_data = get(subsystem_data, "handle", nothing)
-    subsys.java_data = get(subsystem_data, "java", nothing)
-    mcos_data = get(subsystem_data, "MCOS", nothing)
-    if mcos_data === nothing
-        return nothing
-    end
-
-    if mcos_data isa Tuple
-        # Backward compatibility with MAT_v5
-        mcos_data = mcos_data[2]
-    end
-    fwrap_metadata::Vector{UInt8} = vec(mcos_data[1, 1])
-
-    version = swapped_reinterpret(fwrap_metadata[1:4], swap_bytes)[1]
-    if version <= 1 || version > FWRAP_VERSION
-        error("Cannot read subsystem: Unsupported FileWrapper version: $version")
-    end
-
-    subsys.num_names = swapped_reinterpret(fwrap_metadata[5:8], swap_bytes)[1]
-    load_mcos_names!(subsys, fwrap_metadata)
-
-    load_mcos_regions!(subsys, fwrap_metadata, swap_bytes)
-
-    if version == 2
-        subsys.prop_vals_saved = mcos_data[3:(end - 1), 1]
-    elseif version == 3
-        subsys.prop_vals_saved = mcos_data[3:(end - 2), 1]
-        subsys._c2 = mcos_data[end - 1, 1]
-    else
-        subsys.prop_vals_saved = mcos_data[3:(end - 3), 1]
-        subsys._c3 = mcos_data[end - 2, 1]
-    end
-
-    subsys.prop_vals_defaults = mcos_data[end, 1]
-    return subsys
 end
 
 # Class and Property Names are stored as list of null-terminated strings
@@ -192,12 +147,42 @@ function get_region(
     return fwrap_metadata[(region_offsets[region] + 1):region_offsets[region + 1]]
 end
 
-function swapped_reinterpret(T::Type, A::AbstractArray{UInt8}, swap_bytes::Bool)
-    return reinterpret(T, swap_bytes ? reverse(A) : A)
-end
-# integers are written as uint8 (with swap), interpret as uint32
-function swapped_reinterpret(A::AbstractArray{UInt8}, swap_bytes::Bool)
-    return swapped_reinterpret(UInt32, A, swap_bytes)
+function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_bytes::Bool)
+    subsys.handle_data = get(subsystem_data, "handle", nothing)
+    subsys.java_data = get(subsystem_data, "java", nothing)
+    mcos_data = get(subsystem_data, "MCOS", nothing)
+    if mcos_data === nothing
+        return nothing
+    end
+
+    if mcos_data isa Tuple
+        # Backward compatibility with MAT_v5
+        mcos_data = mcos_data[2]
+    end
+    fwrap_metadata::Vector{UInt8} = vec(mcos_data[1, 1])
+
+    version = swapped_reinterpret(fwrap_metadata[1:4], swap_bytes)[1]
+    if version <= 1 || version > FWRAP_VERSION
+        error("Cannot read subsystem: Unsupported FileWrapper version: $version")
+    end
+
+    subsys.num_names = swapped_reinterpret(fwrap_metadata[5:8], swap_bytes)[1]
+    load_mcos_names!(subsys, fwrap_metadata)
+
+    load_mcos_regions!(subsys, fwrap_metadata, swap_bytes)
+
+    if version == 2
+        subsys.prop_vals_saved = mcos_data[3:(end - 1), 1]
+    elseif version == 3
+        subsys.prop_vals_saved = mcos_data[3:(end - 2), 1]
+        subsys._c2 = mcos_data[end - 1, 1]
+    else
+        subsys.prop_vals_saved = mcos_data[3:(end - 3), 1]
+        subsys._c3 = mcos_data[end - 2, 1]
+    end
+
+    subsys.prop_vals_defaults = mcos_data[end, 1]
+    return subsys
 end
 
 function get_classname(subsys::Subsystem, class_id::UInt32)
@@ -216,30 +201,6 @@ end
 
 function get_object_metadata(subsys::Subsystem, object_id::UInt32)
     return subsys.object_id_metadata[(object_id * 6 + 1):(object_id * 6 + 6)]
-end
-
-function get_default_properties(subsys::Subsystem, class_id::UInt32)
-    default_props = Dict{String,Any}(subsys.prop_vals_defaults[class_id + 1, 1])
-    for (key, value) in default_props
-        default_props[key] = update_nested_props!(value, subsys)
-    end
-    return default_props
-end
-
-function get_property_idxs(subsys::Subsystem, obj_type_id::UInt32, saveobj_ret_type::Bool)
-    prop_field_idxs =
-        saveobj_ret_type ? subsys.saveobj_prop_metadata : subsys.obj_prop_metadata
-    nfields = 3
-    offset = 1
-    while obj_type_id > 0
-        nprops = prop_field_idxs[offset]
-        offset += 1 + (nfields * nprops)
-        offset += (offset + 1) % 2  # Padding
-        obj_type_id -= 1
-    end
-    nprops = prop_field_idxs[offset]
-    offset += 1
-    return prop_field_idxs[offset:(offset + nprops * nfields - 1)]
 end
 
 update_nested_props!(prop_value, subsys::Subsystem) = prop_value
@@ -274,6 +235,30 @@ function update_nested_props!(prop_value::Array{UInt32}, subsys::Subsystem)
     else
         return prop_value
     end
+end
+
+function get_default_properties(subsys::Subsystem, class_id::UInt32)
+    default_props = Dict{String,Any}(subsys.prop_vals_defaults[class_id + 1, 1])
+    for (key, value) in default_props
+        default_props[key] = update_nested_props!(value, subsys)
+    end
+    return default_props
+end
+
+function get_property_idxs(subsys::Subsystem, obj_type_id::UInt32, saveobj_ret_type::Bool)
+    prop_field_idxs =
+        saveobj_ret_type ? subsys.saveobj_prop_metadata : subsys.obj_prop_metadata
+    nfields = 3
+    offset = 1
+    while obj_type_id > 0
+        nprops = prop_field_idxs[offset]
+        offset += 1 + (nfields * nprops)
+        offset += (offset + 1) % 2  # Padding
+        obj_type_id -= 1
+    end
+    nprops = prop_field_idxs[offset]
+    offset += 1
+    return prop_field_idxs[offset:(offset + nprops * nfields - 1)]
 end
 
 function get_saved_properties(
@@ -347,6 +332,21 @@ function get_properties(subsys::Subsystem, object_id::UInt32)
     dyn_props = get_dynamic_properties(subsys, object_id)
     merge!(prop_map, dyn_props)
     return prop_map
+end
+
+function get_object!(subsys::Subsystem, oid::UInt32, classname::String)
+    if haskey(subsys.object_cache, oid)
+        # object is already cached, just retrieve it
+        obj = subsys.object_cache[oid]
+    else # it's a new object
+        prop_dict = Dict{String,Any}()
+        obj = MatlabOpaque(prop_dict, classname)
+        # cache the new object
+        subsys.object_cache[oid] = obj
+        # caching must be done before a next call to `get_properties` to avoid any infinite recursion
+        merge!(prop_dict, get_properties(subsys, oid))
+    end
+    return obj
 end
 
 function load_mcos_object(metadata::Any, type_name::String, subsys::Subsystem)
