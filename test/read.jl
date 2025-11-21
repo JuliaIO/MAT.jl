@@ -80,7 +80,7 @@ for _format in ["v6", "v7", "v7.3"]
     result = Dict(
         "simple_string" => "the quick brown fox",
         "accented_string" => "thé qüîck browñ fòx",
-        "concatenated_strings" => String["this is a string", "this is another string"],
+        "concatenated_strings" => String["this is a string      ", "this is another string"],
         "cell_strings" => Any["this is a string" "this is another string"],
         "empty_string" => ""
     )
@@ -156,6 +156,16 @@ for _format in ["v6", "v7", "v7.3"]
     @assert var2[27, 90] == 10
     close(matfile)
 
+end
+
+for _format in ["v7", "v7.3"]
+    result = Dict{String,Any}(
+        "s" => " aαβ ", # test α and β characters, not possible in v6
+        "s2" => ["fòx", "aαβ", " ef", "ac "],
+        "s3" => reshape(["faò", "aeα", " xc", "fβ "], 2, 2),
+        "s4" => Any["fòx"; "aαβ"; " ef"; "ac ";;]
+    )
+    check(joinpath(dirname(@__FILE__), _format, "char_arrays.mat"), result)
 end
 
 result = Dict(
