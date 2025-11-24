@@ -34,44 +34,61 @@ export Subsystem
 const FWRAP_VERSION = 4
 const MCOS_IDENTIFIER = 0xdd000000
 
+const matlab_saveobj_ret_types = String[
+    "string",
+    "timetable"
+]
+
 mutable struct Subsystem
-    object_cache::Dict{UInt32,MatlabOpaque}
+    load_object_cache::Dict{UInt32,MatlabOpaque}
+    save_object_cache::IdDict{MatlabOpaque,UInt32}
     num_names::UInt32 # number of mcos_names
     mcos_names::Vector{String} # Class and Property Names
     class_id_metadata::Vector{UInt32}
-    object_id_metadata::Vector{UInt32}
-    saveobj_prop_metadata::Vector{UInt32}
-    obj_prop_metadata::Vector{UInt32}
+    object_id_metadata::Vector{Vector{UInt32}}
+    saveobj_prop_metadata::Vector{Vector{UInt32}}
+    obj_prop_metadata::Vector{Vector{UInt32}}
     dynprop_metadata::Vector{UInt32}
     _u6_metadata::Vector{UInt32}
     _u7_metadata::Vector{UInt32}
     prop_vals_saved::Vector{Any}
     _c3::Any
-    _c2::Any
+    mcos_class_alias_metadata::Any
     prop_vals_defaults::Any
     handle_data::Any
     java_data::Any
     table_type::Type # Julia type to convert Matlab tables into
 
+    # Counters for saving
+    saveobj_counter::UInt32
+    normalobj_counter::UInt32
+    obj_id_counter::UInt32
+    class_id_counter::UInt32
+
     function Subsystem()
         return new(
             Dict{UInt32,MatlabOpaque}(),
+            IdDict{MatlabOpaque,UInt32}(),
             UInt32(0),
             String[],
             UInt32[],
-            UInt32[],
-            UInt32[],
-            UInt32[],
+            Vector{Vector{UInt32}}(),
+            Vector{Vector{UInt32}}(),
+            Vector{Vector{UInt32}}(),
             UInt32[],
             UInt32[],
             UInt32[],
             Any[],
             nothing,
-            nothing,
+            Int32[],
             nothing,
             nothing,
             nothing,
             Nothing,
+            UInt32(0),
+            UInt32(0),
+            UInt32(0),
+            UInt32(0),
         )
     end
 end
@@ -82,6 +99,19 @@ end
 # integers are written as uint8 (with swap), interpret as uint32
 function swapped_reinterpret(A::AbstractArray{UInt8}, swap_bytes::Bool)
     return swapped_reinterpret(UInt32, A, swap_bytes)
+end
+
+function init_save!(subsys::Subsystem)
+    append!(subsys.class_id_metadata, UInt32[0])
+    append!(subsys.dynprop_metadata, UInt32[0, 0])
+    append!(subsys.mcos_class_alias_metadata, Int32[0])
+
+    # These are Vector{Vector{uint32}}
+    # need mutable inner vectors to handle nested properties
+    push!(subsys.object_id_metadata, UInt32[0, 0, 0, 0, 0, 0])
+    push!(subsys.saveobj_prop_metadata, UInt32[0, 0])
+    push!(subsys.obj_prop_metadata, UInt32[0, 0])
+    return subsys
 end
 
 function load_subsys!(subsystem_data::Dict{String,Any}, swap_bytes::Bool)
@@ -115,15 +145,15 @@ function load_mcos_regions!(
     subsys.class_id_metadata = swapped_reinterpret(
         get_region(fwrap_metadata, region_offsets, 1), swap_bytes
     )
-    subsys.saveobj_prop_metadata = swapped_reinterpret(
+    subsys.saveobj_prop_metadata = [swapped_reinterpret(
         get_region(fwrap_metadata, region_offsets, 2), swap_bytes
-    )
-    subsys.object_id_metadata = swapped_reinterpret(
+    )]
+    subsys.object_id_metadata = [swapped_reinterpret(
         get_region(fwrap_metadata, region_offsets, 3), swap_bytes
-    )
-    subsys.obj_prop_metadata = swapped_reinterpret(
+    )]
+    subsys.obj_prop_metadata = [swapped_reinterpret(
         get_region(fwrap_metadata, region_offsets, 4), swap_bytes
-    )
+    )]
     subsys.dynprop_metadata = swapped_reinterpret(
         get_region(fwrap_metadata, region_offsets, 5), swap_bytes
     )
@@ -175,7 +205,7 @@ function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_
         subsys.prop_vals_saved = mcos_data[3:(end - 1), 1]
     elseif version == 3
         subsys.prop_vals_saved = mcos_data[3:(end - 2), 1]
-        subsys._c2 = mcos_data[end - 1, 1]
+        subsys.mcos_class_alias_metadata = mcos_data[end - 1, 1]
     else
         subsys.prop_vals_saved = mcos_data[3:(end - 3), 1]
         subsys._c3 = mcos_data[end - 2, 1]
@@ -200,7 +230,7 @@ function get_classname(subsys::Subsystem, class_id::UInt32)
 end
 
 function get_object_metadata(subsys::Subsystem, object_id::UInt32)
-    return subsys.object_id_metadata[(object_id * 6 + 1):(object_id * 6 + 6)]
+    return subsys.object_id_metadata[1][(object_id * 6 + 1):(object_id * 6 + 6)]
 end
 
 update_nested_props!(prop_value, subsys::Subsystem) = prop_value
@@ -247,7 +277,7 @@ end
 
 function get_property_idxs(subsys::Subsystem, obj_type_id::UInt32, saveobj_ret_type::Bool)
     prop_field_idxs =
-        saveobj_ret_type ? subsys.saveobj_prop_metadata : subsys.obj_prop_metadata
+        saveobj_ret_type ? subsys.saveobj_prop_metadata[1] : subsys.obj_prop_metadata[1]
     nfields = 3
     offset = 1
     while obj_type_id > 0
@@ -335,14 +365,14 @@ function get_properties(subsys::Subsystem, object_id::UInt32)
 end
 
 function get_object!(subsys::Subsystem, oid::UInt32, classname::String)
-    if haskey(subsys.object_cache, oid)
+    if haskey(subsys.load_object_cache, oid)
         # object is already cached, just retrieve it
-        obj = subsys.object_cache[oid]
+        obj = subsys.load_object_cache[oid]
     else # it's a new object
         prop_dict = Dict{String,Any}()
         obj = MatlabOpaque(prop_dict, classname)
         # cache the new object
-        subsys.object_cache[oid] = obj
+        subsys.load_object_cache[oid] = obj
         # caching must be done before a next call to `get_properties` to avoid any infinite recursion
         merge!(prop_dict, get_properties(subsys, oid))
     end
@@ -394,4 +424,189 @@ function load_mcos_object(metadata::Array{UInt32}, type_name::String, subsys::Su
     end
 end
 
+function set_mcos_name!(subsys::Subsystem, name::String)
+    idx = findfirst(isequal(name), subsys.mcos_names)
+    if idx !== nothing
+        return UInt32(idx)
+    else
+        push!(subsys.mcos_names, name)
+        subsys.num_names += UInt32(1)
+        return subsys.num_names
+    end
 end
+
+function set_class_id!(subsys::Subsystem, classname::String)
+    # number of existing class entries (each class has 4 UInt32 metadata entries)
+    class_count = length(subsys.class_id_metadata) ÷ 4 - 1 # skip class_id = 0 case
+
+    # Check if class name already exists
+    for cid in 1:class_count
+        existing_name = get_classname(subsys, cid)
+        if existing_name == classname
+            return cid
+        end
+    end
+
+    # Add new class metadata
+    subsys.class_id_counter += UInt32(1)
+    # split namespace and class name at last dot
+    pos = findlast(==('.'), classname)
+    if pos === nothing
+        namespace = ""
+        cname = classname
+    else
+        namespace = classname[1:pos-1]
+        cname = classname[pos+1:end]
+    end
+
+    cname_idx = set_mcos_name!(subsys, cname)
+    namespace_idx = pos === nothing ? UInt32(0) : set_mcos_name!(subsys, namespace)
+
+    append!(subsys.class_id_metadata, UInt32[namespace_idx, cname_idx, 0, 0])
+
+    return subsys.class_id_counter
+end
+
+function serialize_object_props!(subsys::Subsystem, obj::MatlabOpaque, obj_prop_metadata::Vector{UInt32})
+
+    object_id = subsys.obj_id_counter
+    nprops = length(obj)
+
+    # property metadata format: [num_props, (prop_name_idx, prop_type, prop_value_idx)*]
+    push!(obj_prop_metadata, UInt32(nprops))
+
+    for (prop_name, prop_value) in obj
+        if startswith(prop_name, "__dynamic_property_")
+            @warn "Dynamic properties are not supported when writing: skipping $prop_name"
+            continue
+        end
+
+        # TODO: Check valid property name
+
+        field_name_idx = set_mcos_name!(subsys, prop_name)
+        prop_vals = UInt32[field_name_idx, 1, 0]
+
+        # TODO: Support nested objects
+        cell_idx = length(subsys.prop_vals_saved) + 1
+        push!(subsys.prop_vals_saved, prop_value)
+        prop_vals[3] = cell_idx
+        append!(obj_prop_metadata, prop_vals)
+    end
+
+    if length(obj_prop_metadata) % 2 == 1
+        push!(obj_prop_metadata, UInt32(0)) # padding
+    end
+
+    # placeholder for dynamic props
+    append!(subsys.dynprop_metadata, UInt32[0, 0])
+
+    ndeps = subsys.obj_id_counter - object_id
+    return ndeps
+end
+
+function set_object_id(subsys::Subsystem, obj::MatlabOpaque, saveobj_ret_type=false)
+
+    if length(obj) == 0
+        # This is a deleted object
+        # MATLAB keeps weak references to deleted objects for some reason
+        class_id = set_class_id!(subsys, obj.class)
+        obj_id = 0
+        return obj_id, class_id
+    end
+
+    if obj in subsys.save_object_cache
+        class_id = set_class_id!(subsys, obj.class)
+        obj_id = subsys.save_object_cache[obj]
+        return obj_id, class_id
+    end
+
+    subsys.obj_id_counter += UInt32(1)
+    mat_obj_id = subsys.obj_id_counter
+    subsys.save_object_cache[obj] = mat_obj_id
+
+    prop_metadata = UInt32[]
+    saveobj_id = 0
+    normobj_id = 0
+
+    if saveobj_ret_type
+        subsys.saveobj_counter += UInt32(1)
+        saveobj_id = subsys.saveobj_counter
+        push!(subsys.saveobj_prop_metadata, prop_metadata)
+    else
+        subsys.normalobj_counter += UInt32(1)
+        normobj_id = subsys.normalobj_counter
+        push!(subsys.obj_prop_metadata, prop_metadata)
+    end
+
+    obj_id_metadata = UInt32[0,0,0,0,0,0]
+    push!(subsys.object_id_metadata, obj_id_metadata)
+
+    if saveobj_ret_type && !(length(obj) == 1 && haskey(obj, "any"))
+        error("Object of class $(obj.classname) marked with a saveobj return type must have a single property 'any' containing the return value of its saveobj method")
+    end
+
+    ndeps = serialize_object_props!(subsys, obj, prop_metadata)
+
+    class_id = set_class_id!(subsys, obj.class)
+    obj_id_metadata[1] = class_id
+    if saveobj_ret_type
+        obj_id_metadata[4] = saveobj_id
+    else
+        obj_id_metadata[5] = normobj_id
+    end
+
+    # it works idk how
+    obj_id_metadata[6] = ndeps
+    for i in 1:ndeps
+        obj_id = subsys.obj_id_counter - ndeps + i
+        subsys.object_id_metadata[obj_id + 1][6] -= 1
+    end
+
+    return mat_obj_id, class_id
+end
+
+function create_mcos_metadata_array(dims::Tuple{Vararg{Int}}, arr_ids::Vector{UInt32}, class_id::UInt32)
+    ndims = length(dims)
+    nobjects = length(arr_ids)
+
+    metadata = UInt32[]
+    push!(metadata, MCOS_IDENTIFIER)
+    push!(metadata, UInt32(ndims))
+    for d in dims
+        push!(metadata, UInt32(d))
+    end
+    for oid in arr_ids
+        push!(metadata, oid)
+    end
+    push!(metadata, class_id)
+
+    return reshape(metadata, :, 1)
+end
+
+function set_mcos_object_metadata(subsys::Subsystem, obj::Array{MatlabOpaque})
+
+    arr_ids = UInt32[]
+    classname = obj[1].class
+
+    # TODO: Handle 1x0, 0x0, 0x1 objects
+
+    for obj_elem in obj
+        obj_id, class_id = set_object_id(subsys, obj_elem)
+        append!(arr_ids, obj_id)
+    end
+
+    dims = size(obj)
+    return create_mcos_metadata_array(dims, arr_ids, class_id)
+end
+
+function set_mcos_object_metadata(subsys::Subsystem, obj::MatlabOpaque)
+
+    classname = obj.class
+    saveobj_ret_type = classname in matlab_saveobj_ret_types
+
+    object_id, class_id = set_object_id(subsys, obj, saveobj_ret_type)
+    dims = (1, 1)
+    return create_mcos_metadata_array(dims, [object_id], class_id)
+end
+
+end # module MAT_subsys

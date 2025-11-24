@@ -130,10 +130,12 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         close(g)
     end
     subsys_refs = "#subsystem#"
-    if haskey(fid.plain, subsys_refs)
+    if rd && haskey(fid.plain, subsys_refs)
         fid.subsystem.table_type = table
         subsys_data = m_read(fid.plain[subsys_refs], fid.subsystem)
         MAT_subsys.load_subsys!(fid.subsystem, subsys_data, endian_indicator)
+    elseif wr
+        MAT_subsys.init_save!(fid.subsystem)
     end
     fid
 end
