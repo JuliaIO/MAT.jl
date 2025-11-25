@@ -111,6 +111,10 @@ function init_save!(subsys::Subsystem)
     push!(subsys.object_id_metadata, UInt32[0, 0, 0, 0, 0, 0])
     push!(subsys.saveobj_prop_metadata, UInt32[0, 0])
     push!(subsys.obj_prop_metadata, UInt32[0, 0])
+
+    subsys._c3 = Any[]
+    subsys.prop_vals_defaults = Any[]
+
     return subsys
 end
 
@@ -514,7 +518,7 @@ function set_object_id(subsys::Subsystem, obj::MatlabOpaque, saveobj_ret_type=fa
         return obj_id, class_id
     end
 
-    if obj in subsys.save_object_cache
+    if haskey(subsys.save_object_cache, obj)
         class_id = set_class_id!(subsys, obj.class)
         obj_id = subsys.save_object_cache[obj]
         return obj_id, class_id
@@ -538,7 +542,7 @@ function set_object_id(subsys::Subsystem, obj::MatlabOpaque, saveobj_ret_type=fa
         push!(subsys.obj_prop_metadata, prop_metadata)
     end
 
-    obj_id_metadata = UInt32[0,0,0,0,0,0]
+    obj_id_metadata = zeros(UInt32, 6)
     push!(subsys.object_id_metadata, obj_id_metadata)
 
     if saveobj_ret_type && !(length(obj) == 1 && haskey(obj, "any"))
@@ -587,6 +591,7 @@ function set_mcos_object_metadata(subsys::Subsystem, obj::Array{MatlabOpaque})
 
     arr_ids = UInt32[]
     classname = obj[1].class
+    saveobj_ret_type = classname in matlab_saveobj_ret_types
 
     # TODO: Handle 1x0, 0x0, 0x1 objects
 
@@ -607,6 +612,109 @@ function set_mcos_object_metadata(subsys::Subsystem, obj::MatlabOpaque)
     object_id, class_id = set_object_id(subsys, obj, saveobj_ret_type)
     dims = (1, 1)
     return create_mcos_metadata_array(dims, [object_id], class_id)
+end
+
+function set_fwrap_metadata!(subsys::Subsystem)
+
+    # Build FileWrapper metadata regions (as bytes)
+
+    version_bytes = vec(reinterpret(UInt8, UInt32[FWRAP_VERSION]))
+    num_names_bytes = copy(vec(reinterpret(UInt8, UInt32[subsys.num_names])))
+
+    # Region offsets placeholder (8 uint32s)
+    region_offsets = zeros(UInt32, 8)
+
+    # Names string (null-terminated, ASCII) and pad to 8 bytes
+    names_str = isempty(subsys.mcos_names) ? "" : join(subsys.mcos_names, '\0') * '\0'
+    names_bytes = collect(codeunits(names_str))
+    pad_len = (8 - (length(names_bytes) % 8)) % 8
+    if pad_len > 0
+        append!(names_bytes, zeros(UInt8, pad_len))
+    end
+
+    region1_bytes = vec(reinterpret(UInt8, subsys.class_id_metadata))
+    region_offsets[1] = UInt32(40 + length(names_bytes))
+    region_offsets[2] = region_offsets[1] + UInt32(length(region1_bytes))
+
+    region2_bytes = UInt8[]
+    if length(subsys.saveobj_prop_metadata) > 1
+        for sub in subsys.saveobj_prop_metadata
+            append!(region2_bytes, vec(reinterpret(UInt8, sub)))
+        end
+    end
+    region_offsets[3] = region_offsets[2] + UInt32(length(region2_bytes))
+
+    region3_bytes = UInt8[]
+    for sub in subsys.object_id_metadata
+        append!(region3_bytes, vec(reinterpret(UInt8, sub)))
+    end
+    region_offsets[4] = region_offsets[3] + UInt32(length(region3_bytes))
+
+    region4_bytes = UInt8[]
+    if length(subsys.obj_prop_metadata) > 1
+        for sub in subsys.obj_prop_metadata
+            append!(region4_bytes, vec(reinterpret(UInt8, sub)))
+        end
+    end
+    region_offsets[5] = region_offsets[4] + UInt32(length(region4_bytes))
+
+    region5_bytes = vec(reinterpret(UInt8, subsys.dynprop_metadata))
+    region_offsets[6] = region_offsets[5] + UInt32(length(region5_bytes))
+
+    region6_bytes = UInt8[]
+    region_offsets[7] = region_offsets[6] + UInt32(length(region6_bytes))
+
+    region7_bytes = zeros(UInt8, 8)
+    region_offsets[8] = region_offsets[7] + UInt32(length(region7_bytes))
+
+    fwrap = Vector{UInt8}()
+    append!(fwrap, version_bytes)
+    append!(fwrap, num_names_bytes)
+    append!(fwrap, vec(reinterpret(UInt8, region_offsets)))
+    append!(fwrap, names_bytes)
+    append!(fwrap, region1_bytes)
+    append!(fwrap, region2_bytes)
+    append!(fwrap, region3_bytes)
+    append!(fwrap, region4_bytes)
+    append!(fwrap, region5_bytes)
+    append!(fwrap, region6_bytes)
+    append!(fwrap, region7_bytes)
+
+    return fwrap
+end
+
+function set_fwrap_data!(subsys::Subsystem)
+
+    fwrap_data = Any[]
+    fwrap_metadata = set_fwrap_metadata!(subsys)
+    push!(fwrap_data, reshape(fwrap_metadata, :, 1))
+    push!(fwrap_data, Any[])
+    append!(fwrap_data, subsys.prop_vals_saved)
+
+    empty_struct = Dict{String,Any}()
+    for i in 0:subsys.class_id_counter
+        push!(subsys._c3, empty_struct)
+        push!(subsys.prop_vals_defaults, empty_struct)
+    end
+
+    push!(fwrap_data, subsys._c3)
+    push!(fwrap_data, subsys.mcos_class_alias_metadata)
+    push!(fwrap_data, subsys.prop_vals_defaults)
+
+    fw_obj = MatlabOpaque(Dict("__filewrapper__" => reshape(fwrap_data, :, 1)), "FileWrapper__")
+    return fw_obj
+end
+
+function set_subsystem_data!(subsys::Subsystem)
+    if subsys.class_id_counter == 0
+        # No MCOS objects to serialize
+        return nothing
+    end
+
+    fwrap = set_fwrap_data!(subsys)
+    subsys_struct = Dict{String,Any}()
+    subsys_struct["MCOS"] = fwrap
+    return subsys_struct
 end
 
 end # module MAT_subsys

@@ -204,32 +204,45 @@ Write a dictionary containing variable names as keys and values as values
 to a Matlab file, opening and closing it automatically.
 """
 function matwrite(filename::AbstractString, dict::AbstractDict{S, T}; compress::Bool = false, version::String ="v7.3") where {S, T}
-    if version == "v4"
-        file = open(filename, "w")
-        m = MAT_v4.Matlabv4File(file, false)
-        _write_dict(m, dict)
-    elseif version == "v7.3"
-        file = matopen(filename, "w"; compress = compress)
-        _write_dict(file, dict)
-    else
-        error("writing for \"$(version)\" is not supported")
+    file = nothing
+    try
+        if version == "v4"
+            file = open(filename, "w")
+            file = MAT_v4.Matlabv4File(file, false)
+            _write_dict(file, dict)
+        elseif version == "v7.3"
+            file = matopen(filename, "w"; compress = compress)
+            _write_dict(file, dict)
+        else
+            error("writing for \"$(version)\" is not supported")
+        end
+    finally
+        if file !== nothing
+            close(file)
+        end
     end
 end
 
 function _write_dict(fileio, dict::AbstractDict)
-    try
-        for (k, v) in dict
-            local kstring
-            try
-                kstring = ascii(convert(String, k))
-            catch x
-                error("matwrite requires a Dict with ASCII keys")
-            end
-            write(fileio, kstring, v)
+
+    for (k, v) in dict
+        local kstring
+        try
+            kstring = ascii(convert(String, k))
+        catch x
+            error("matwrite requires a Dict with ASCII keys")
         end
-    finally
-        close(fileio)
+        write(fileio, kstring, v)
     end
+
+    if fileio.subsystem !== nothing
+        # will always be nothing for MATv4 so we can ignore that case
+        subsys_data = MAT_subsys.set_subsystem_data!(fileio.subsystem)
+        if subsys_data !== nothing
+            MAT_HDF5.write_subsys(fileio, subsys_data)
+        end
+    end
+    subsys_data
 end
 
 end
