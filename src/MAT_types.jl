@@ -185,6 +185,19 @@ function Base.getindex(m::MatlabStructArray, s::AbstractString)
     return getindex(m.values, idx)
 end
 
+function Base.setindex!(m::MatlabStructArray{N1}, input::AbstractArray{T,N2}, s::AbstractString) where {N1,N2,T}
+    error("size of input is not equal to MatlabStructArray column size")
+end
+
+function Base.setindex!(m::MatlabStructArray{N}, input::AbstractArray{T,N}, s::AbstractString) where {N,T}
+    idx = find_index(m, s)
+    v = Array{Any,N}(input)
+    if size(v) != size(m.values[idx])
+        error("size of input is not equal to MatlabStructArray column size")
+    end
+    return setindex!(m.values, v, idx)
+end
+
 function Base.get(m::MatlabStructArray, s::AbstractString, default)
     idx = findfirst(isequal(s), m.names)
     if isnothing(idx)
