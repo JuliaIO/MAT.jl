@@ -235,14 +235,13 @@ function _write_dict(fileio, dict::AbstractDict)
         write(fileio, kstring, v)
     end
 
-    if fileio.subsystem !== nothing
+    if hasproperty(fileio, :subsystem) && fileio.subsystem !== nothing
         # will always be nothing for MATv4 so we can ignore that case
         subsys_data = MAT_subsys.set_subsystem_data!(fileio.subsystem)
         if subsys_data !== nothing
             MAT_HDF5.write_subsys(fileio, subsys_data)
         end
     end
-    subsys_data
 end
 
 end

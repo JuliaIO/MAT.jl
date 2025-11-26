@@ -102,7 +102,7 @@ function swapped_reinterpret(A::AbstractArray{UInt8}, swap_bytes::Bool)
 end
 
 function init_save!(subsys::Subsystem)
-    append!(subsys.class_id_metadata, UInt32[0])
+    append!(subsys.class_id_metadata, UInt32[0, 0, 0, 0])
     append!(subsys.dynprop_metadata, UInt32[0, 0])
     append!(subsys.mcos_class_alias_metadata, Int32[0])
 
@@ -439,6 +439,12 @@ function set_mcos_name!(subsys::Subsystem, name::String)
     end
 end
 
+function check_valid_property_name(s::AbstractString)
+    if match(r"^[a-zA-Z][a-zA-Z0-9_]*$", s) === nothing
+        error("Invalid property name \"$s\": property names must start with a letter and contain only alphanumeric characters and underscore")
+    end
+end
+
 function set_class_id!(subsys::Subsystem, classname::String)
     # number of existing class entries (each class has 4 UInt32 metadata entries)
     class_count = length(subsys.class_id_metadata) ÷ 4 - 1 # skip class_id = 0 case
@@ -467,6 +473,7 @@ function set_class_id!(subsys::Subsystem, classname::String)
     namespace_idx = pos === nothing ? UInt32(0) : set_mcos_name!(subsys, namespace)
 
     append!(subsys.class_id_metadata, UInt32[namespace_idx, cname_idx, 0, 0])
+    append!(subsys.mcos_class_alias_metadata, Int32[0]) # Placeholder for no aliases
 
     return subsys.class_id_counter
 end
@@ -485,13 +492,13 @@ function serialize_object_props!(subsys::Subsystem, obj::MatlabOpaque, obj_prop_
             continue
         end
 
-        # TODO: Check valid property name
+        check_valid_property_name(prop_name)
 
         field_name_idx = set_mcos_name!(subsys, prop_name)
         prop_vals = UInt32[field_name_idx, 1, 0]
 
         # TODO: Support nested objects
-        cell_idx = length(subsys.prop_vals_saved) + 1
+        cell_idx = length(subsys.prop_vals_saved) # these are zero-indexed in matlab
         push!(subsys.prop_vals_saved, prop_value)
         prop_vals[3] = cell_idx
         append!(obj_prop_metadata, prop_vals)
@@ -560,7 +567,7 @@ function set_object_id(subsys::Subsystem, obj::MatlabOpaque, saveobj_ret_type=fa
     end
 
     # it works idk how
-    obj_id_metadata[6] = ndeps
+    obj_id_metadata[6] = mat_obj_id + ndeps
     for i in 1:ndeps
         obj_id = subsys.obj_id_counter - ndeps + i
         subsys.object_id_metadata[obj_id + 1][6] -= 1
@@ -691,7 +698,7 @@ function set_fwrap_data!(subsys::Subsystem)
     push!(fwrap_data, Any[])
     append!(fwrap_data, subsys.prop_vals_saved)
 
-    empty_struct = Dict{String,Any}()
+    empty_struct = MatlabStructArray([]) #! FIXME
     for i in 0:subsys.class_id_counter
         push!(subsys._c3, empty_struct)
         push!(subsys.prop_vals_defaults, empty_struct)
