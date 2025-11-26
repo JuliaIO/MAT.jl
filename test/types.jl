@@ -42,6 +42,15 @@ using Dates
     @test !haskey(s_arr, "wrong")
     @test get(s_arr, "wrong", nothing) === nothing
 
+    # setindexing
+    msg = "field \"z\" not found in MatlabStructArray"
+    @test_throws ErrorException(msg) s_arr["z"] = [1.0, 2.0]
+    s_arr["x"] = [1.0, 2.0]
+    @test s_arr["x"] == Any[1.0, 2.0]
+    msg = "size of input is not equal to MatlabStructArray column size"
+    @test_throws ErrorException(msg) s_arr["x"] = Any[1.0]
+    @test_throws ErrorException(msg) s_arr["x"] = reshape(Any[1.0,2.0], 1, 2)
+
     # possibility to convert back to dict array via `Array`
     s_arr = MatlabStructArray(d_arr)
     @test Array(s_arr) == d_arr
