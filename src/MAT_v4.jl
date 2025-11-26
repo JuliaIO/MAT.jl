@@ -187,7 +187,7 @@ function getvarnames(matfile::Matlabv4File)
             M, O, P, T, mrows, ncols, imagf, namlen = read_header(matfile.ios, matfile.swap_bytes)
             f = matfile.ios
             
-            name = String(read_bswap(f, M==mBIG_ENDIAN, Vector{UInt8}(undef, namlen))[1:end-1])
+            name = strip(String(read_bswap(f, M==mBIG_ENDIAN, Vector{UInt8}(undef, namlen))), '\0')
             varnames[name] = offset
             imag_offset = 0
             skip(f, mrows*ncols*sizeof(pTYPE[P]))
