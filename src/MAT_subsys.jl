@@ -478,6 +478,37 @@ function set_class_id!(subsys::Subsystem, classname::String)
     return subsys.class_id_counter
 end
 
+save_nested_props(prop_value, subsys::Subsystem) = prop_value
+
+function save_nested_props(
+    prop_value::Union{AbstractDict,MatlabStructArray}, subsys::Subsystem
+)
+    # Save nested objects in structs
+    for (key, value) in prop_value
+        prop_value[key] = save_nested_props(value, subsys)
+    end
+    return prop_value
+end
+
+function save_nested_props(prop_value::Array{Any}, subsys::Subsystem)
+    # Save nested objects in a Cell
+    for i in eachindex(prop_value)
+        prop_value[i] = save_nested_props(prop_value[i], subsys)
+    end
+    return prop_value
+end
+
+function save_nested_props(prop_value::Union{MatlabOpaque, Array{MatlabOpaque}}, subsys::Subsystem)
+    # Nested objects are saved by the uint32 Matrix signature
+    # however they don't have any mxOPAQUE_CLASS headers
+    # so we search within containers here
+
+    # FIXME: Does this overwrite prop_value from the user dict?
+    # Might have to create a copy instead - Test needed
+    prop_value = set_mcos_object_metadata(subsys, prop_value)
+    return prop_value
+end
+
 function serialize_object_props!(subsys::Subsystem, obj::MatlabOpaque, obj_prop_metadata::Vector{UInt32})
 
     object_id = subsys.obj_id_counter
@@ -495,6 +526,8 @@ function serialize_object_props!(subsys::Subsystem, obj::MatlabOpaque, obj_prop_
         check_valid_property_name(prop_name)
 
         field_name_idx = set_mcos_name!(subsys, prop_name)
+        prop_value = save_nested_props(prop_value, subsys)
+
         prop_vals = UInt32[field_name_idx, 1, 0]
 
         # TODO: Support nested objects
