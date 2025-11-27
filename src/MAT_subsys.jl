@@ -695,18 +695,18 @@ function set_fwrap_data!(subsys::Subsystem)
     fwrap_data = Any[]
     fwrap_metadata = set_fwrap_metadata!(subsys)
     push!(fwrap_data, reshape(fwrap_metadata, :, 1))
-    push!(fwrap_data, Any[])
+    push!(fwrap_data, reshape(Any[], 0, 0))
     append!(fwrap_data, subsys.prop_vals_saved)
 
-    empty_struct = MatlabStructArray([]) #! FIXME
+    empty_struct = MatlabStructArray(String["a"], (1,0)) # FIXME: empty struct placeholder
     for i in 0:subsys.class_id_counter
         push!(subsys._c3, empty_struct)
         push!(subsys.prop_vals_defaults, empty_struct)
     end
 
-    push!(fwrap_data, subsys._c3)
-    push!(fwrap_data, subsys.mcos_class_alias_metadata)
-    push!(fwrap_data, subsys.prop_vals_defaults)
+    push!(fwrap_data, reshape(subsys._c3, :, 1))
+    push!(fwrap_data, reshape(subsys.mcos_class_alias_metadata, :, 1))
+    push!(fwrap_data, reshape(subsys.prop_vals_defaults, :, 1))
 
     fw_obj = MatlabOpaque(Dict("__filewrapper__" => reshape(fwrap_data, :, 1)), "FileWrapper__")
     return fw_obj
