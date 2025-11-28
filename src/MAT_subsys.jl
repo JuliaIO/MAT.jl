@@ -611,8 +611,6 @@ end
 
 function create_mcos_metadata_array(dims::Tuple{Vararg{Int}}, arr_ids::Vector{UInt32}, class_id::UInt32)
     ndims = length(dims)
-    nobjects = length(arr_ids)
-
     metadata = UInt32[]
     push!(metadata, MCOS_IDENTIFIER)
     push!(metadata, UInt32(ndims))
@@ -631,12 +629,15 @@ function set_mcos_object_metadata(subsys::Subsystem, obj::Array{MatlabOpaque})
 
     arr_ids = UInt32[]
     classname = obj[1].class
+
+    # this is not needed but added for consistency
+    # future update can support mentioning classes with saveobj methods
     saveobj_ret_type = classname in matlab_saveobj_ret_types
 
     # TODO: Handle 1x0, 0x0, 0x1 objects
 
     for obj_elem in obj
-        obj_id, class_id = set_object_id(subsys, obj_elem)
+        obj_id, class_id = set_object_id(subsys, obj_elem, saveobj_ret_type)
         append!(arr_ids, obj_id)
     end
 
@@ -656,15 +657,11 @@ end
 
 function set_fwrap_metadata!(subsys::Subsystem)
 
-    # Build FileWrapper metadata regions (as bytes)
-
     version_bytes = vec(reinterpret(UInt8, UInt32[FWRAP_VERSION]))
     num_names_bytes = copy(vec(reinterpret(UInt8, UInt32[subsys.num_names])))
 
-    # Region offsets placeholder (8 uint32s)
     region_offsets = zeros(UInt32, 8)
 
-    # Names string (null-terminated, ASCII) and pad to 8 bytes
     names_str = isempty(subsys.mcos_names) ? "" : join(subsys.mcos_names, '\0') * '\0'
     names_bytes = collect(codeunits(names_str))
     pad_len = (8 - (length(names_bytes) % 8)) % 8
@@ -676,6 +673,7 @@ function set_fwrap_metadata!(subsys::Subsystem)
     region_offsets[1] = UInt32(40 + length(names_bytes))
     region_offsets[2] = region_offsets[1] + UInt32(length(region1_bytes))
 
+    # This region (including id=0) does not exist if there are no saveobj type objects
     region2_bytes = UInt8[]
     if length(subsys.saveobj_prop_metadata) > 1
         for sub in subsys.saveobj_prop_metadata
@@ -691,10 +689,8 @@ function set_fwrap_metadata!(subsys::Subsystem)
     region_offsets[4] = region_offsets[3] + UInt32(length(region3_bytes))
 
     region4_bytes = UInt8[]
-    if length(subsys.obj_prop_metadata) > 1
-        for sub in subsys.obj_prop_metadata
-            append!(region4_bytes, vec(reinterpret(UInt8, sub)))
-        end
+    for sub in subsys.obj_prop_metadata
+        append!(region4_bytes, vec(reinterpret(UInt8, sub)))
     end
     region_offsets[5] = region_offsets[4] + UInt32(length(region4_bytes))
 
@@ -757,4 +753,4 @@ function set_subsystem_data!(subsys::Subsystem)
     return subsys_struct
 end
 
-end # module MAT_subsys
+end
