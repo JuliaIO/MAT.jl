@@ -689,6 +689,20 @@ end
 
 # Write a struct from arrays of keys and values
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, k::Vector{String}, v::Vector)
+    if length(k) == 0
+        # empty struct
+        adata = UInt64[0, 0]
+        dset, dtype = create_dataset(parent, name, adata)
+        try
+            write_attribute(dset, empty_attr_matlab, 0x01)
+            write_attribute(dset, name_type_attr_matlab, "struct")
+            write_dataset(dset, dtype, adata)
+        finally
+            close(dtype); close(dset)
+        end
+        return
+    end
+
     g = create_group(parent, name)
     try
         write_attribute(g, name_type_attr_matlab, "struct")

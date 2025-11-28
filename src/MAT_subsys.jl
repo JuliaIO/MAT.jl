@@ -727,7 +727,7 @@ function set_fwrap_data!(subsys::Subsystem)
     push!(fwrap_data, reshape(Any[], 0, 0))
     append!(fwrap_data, subsys.prop_vals_saved)
 
-    empty_struct = MatlabStructArray(String["a"], (1,0)) # FIXME: empty struct placeholder
+    empty_struct = Dict{String,Any}()
     for i in 0:subsys.class_id_counter
         push!(subsys._c3, empty_struct)
         push!(subsys.prop_vals_defaults, empty_struct)
