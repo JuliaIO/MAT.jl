@@ -301,6 +301,11 @@ function get_saved_properties(
 end
 
 function get_dynamic_properties(subsys::Subsystem, dep_id::UInt32)
+
+    if length(subsys.dynprop_metadata) == 0
+        return Dict{String,Any}()
+    end
+
     offset = 1
     while dep_id > 0
         nprops = subsys.dynprop_metadata[offset]
