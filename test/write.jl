@@ -1,4 +1,4 @@
-using MAT
+using MAT, Test
 
 tmpfile = string(tempname(), ".mat")
 
@@ -145,7 +145,7 @@ test_write(sd)
 # which are not compressible by themselves!
 test_compression_effective(Dict("data" => fill(1.0, 1000)))
 
-# test adjoint/reshape array 
+# test adjoint/reshape array
 test_write(Dict("adjoint_arr"=>[1 2 3;4 5 6;7 8 9]'))
 test_write(Dict("reshape_arr"=>reshape([1 2 3;4 5 6;7 8 9]',1,9)))
 
@@ -193,4 +193,98 @@ nt_read = matread(tmpfile)["nt"]
     matwrite(tmpfile, Dict("class_array" => carr))
     carr_read = matread(tmpfile)["class_array"]
     @test carr_read == MatlabStructArray(carr)
+end
+
+@testset "MatlabOpaque simple" begin
+    d = Dict{String,Any}("a" => 1, "b" => Any[1.0, 2.0])
+    obj = MatlabOpaque(d, "TestClass")
+    var_dict = Dict("var" => obj)
+
+    mktempdir() do tmpdir
+        tmpfile = joinpath(tmpdir, "test.mat")
+        matwrite(tmpfile, var_dict)
+        read_var = matread(tmpfile)
+
+        @test haskey(read_var, "var")
+        @test isa(read_var["var"], MatlabOpaque)
+        @test read_var["var"].class == obj.class
+
+        @test haskey(read_var["var"], "a")
+        @test haskey(read_var["var"], "b")
+        @test read_var["var"]["a"] == obj["a"]
+        @test isequal(read_var["var"]["b"], obj["b"])
+    end
+end
+
+@testset "MatlabOpaque handle" begin
+    d = Dict{String,Any}("a" => 1, "b" => Any[1.0, 2.0])
+    obj = MatlabOpaque(d, "TestClassHandle")
+    var_dict = Dict("var1" => obj, "var2" => obj)
+
+    mktempdir() do tmpdir
+        tmpfile = joinpath(tmpdir, "test.mat")
+        matwrite(tmpfile, var_dict)
+        read_var = matread(tmpfile)
+
+        @test haskey(read_var, "var1")
+        @test haskey(read_var, "var2")
+        @test isa(read_var["var1"], MatlabOpaque)
+        @test isa(read_var["var2"], MatlabOpaque)
+        @test read_var["var1"] === read_var["var2"]  # same object
+    end
+end
+
+@testset "MatlabOpaque Array" begin
+    d1 = Dict{String, Any}("a" => 1)
+    d2 = Dict{String, Any}("a" => 2)
+    obj1 = MatlabOpaque(d1, "TestClassArray")
+    obj2 = MatlabOpaque(d2, "TestClassArray")
+    obj_arr = Array{MatlabOpaque}(undef, 2, 1)
+    obj_arr[1, 1] = obj1
+    obj_arr[2, 1] = obj2
+    var_dict = Dict("obj_array" => obj_arr)
+
+    mktempdir() do tmpdir
+        tmpfile = joinpath(tmpdir, "test.mat")
+        matwrite(tmpfile, var_dict)
+        read_var = matread(tmpfile)
+
+        @test haskey(read_var, "obj_array")
+        @test isa(read_var["obj_array"], Array{MatlabOpaque})
+        @test size(read_var["obj_array"]) == (2, 1)
+        @test read_var["obj_array"][1, 1]["a"] == 1
+        @test read_var["obj_array"][2, 1]["a"] == 2
+    end
+end
+
+@testset "MatlabOpaque Nested object" begin
+    inner_dict = Dict{String,Any}("a" => 1, "b" => 2)
+    inner_obj = MatlabOpaque(inner_dict, "InnerClass")
+    outer_dict = Dict{String,Any}("inner" => inner_obj, "c" => 3)
+    outer_obj = MatlabOpaque(outer_dict, "OuterClass")
+    var_dict = Dict("outer_obj" => outer_obj)
+
+    mktempdir() do tmpdir
+        tmpfile = joinpath(tmpdir, "test.mat")
+        matwrite(tmpfile, var_dict)
+        read_var = matread(tmpfile)
+
+        @test haskey(read_var, "outer_obj")
+        @test isa(read_var["outer_obj"], MatlabOpaque)
+        @test read_var["outer_obj"].class == outer_obj.class
+
+        @test haskey(read_var["outer_obj"], "inner")
+        @test haskey(read_var["outer_obj"], "c")
+        @test read_var["outer_obj"]["c"] == outer_obj["c"]
+
+        inner_read = read_var["outer_obj"]["inner"]
+        @test isa(inner_read, MatlabOpaque)
+        @test inner_read.class == inner_obj.class
+
+        @test haskey(inner_read, "a")
+        @test haskey(inner_read, "b")
+        @test inner_read["a"] == inner_obj["a"]
+        @test inner_read["b"] == inner_obj["b"]
+    end
+
 end

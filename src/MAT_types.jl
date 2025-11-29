@@ -50,8 +50,8 @@ export MatlabTable
 Data structure to store matlab struct arrays, which stores the field names separate from the field values.
 The field values are stored as columns of `Array{Any,N}` per Matlab field, which is how MAT files store these structures.
 
-These are distinct from cell arrays of structs, 
-which are handled as in MAT.jl as `Array{Any,N}` with `Dict{String,Any}` inside, 
+These are distinct from cell arrays of structs,
+which are handled as in MAT.jl as `Array{Any,N}` with `Dict{String,Any}` inside,
 for example `Any[Dict("x"=>1), Dict("x"=>2)]`.
 
 Old class object arrays can be handled by providing a non-empty class name.
@@ -260,6 +260,14 @@ struct StructArrayField{N}
     values::Array{Any,N}
 end
 dimension(::StructArrayField{N}) where {N} = N
+
+"""
+Internal Marker for Empty Structs with dimensions like 1x0 or 0x0
+"""
+struct EmptyStruct
+   dims::Vector{UInt64}
+end
+
 
 """
     MatlabClassObject(

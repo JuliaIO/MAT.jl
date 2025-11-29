@@ -27,7 +27,7 @@
 
 module MAT_subsys
 
-import ..MAT_types: MatlabStructArray, MatlabOpaque, convert_opaque
+import ..MAT_types: MatlabStructArray, MatlabOpaque, convert_opaque, EmptyStruct
 
 export Subsystem
 
@@ -447,10 +447,10 @@ end
 
 function set_class_id!(subsys::Subsystem, classname::String)
     # number of existing class entries (each class has 4 UInt32 metadata entries)
-    class_count = length(subsys.class_id_metadata) ÷ 4 - 1 # skip class_id = 0 case
+    class_count = UInt32(length(subsys.class_id_metadata) ÷ 4 - 1) # skip class_id = 0 case
 
     # Check if class name already exists
-    for cid in 1:class_count
+    for cid in UInt32(1):UInt32(class_count)
         existing_name = get_classname(subsys, cid)
         if existing_name == classname
             return cid
@@ -530,7 +530,6 @@ function serialize_object_props!(subsys::Subsystem, obj::MatlabOpaque, obj_prop_
 
         prop_vals = UInt32[field_name_idx, 1, 0]
 
-        # TODO: Support nested objects
         cell_idx = length(subsys.prop_vals_saved) # these are zero-indexed in matlab
         push!(subsys.prop_vals_saved, prop_value)
         prop_vals[3] = cell_idx
@@ -628,14 +627,19 @@ end
 function set_mcos_object_metadata(subsys::Subsystem, obj::Array{MatlabOpaque})
 
     arr_ids = UInt32[]
-    classname = obj[1].class
+    if length(obj) == 0
+        # TODO: Handle 1x0, 0x0, 0x1 objects
+        # placeholder for empty array case
+        dims = size(obj)
+        return create_mcos_metadata_array(dims, UInt32(0), UInt32(0))
+    end
+    classname = first(obj).class
 
     # this is not needed but added for consistency
     # future update can support mentioning classes with saveobj methods
     saveobj_ret_type = classname in matlab_saveobj_ret_types
 
-    # TODO: Handle 1x0, 0x0, 0x1 objects
-
+    class_id = UInt32(0)
     for obj_elem in obj
         obj_id, class_id = set_object_id(subsys, obj_elem, saveobj_ret_type)
         append!(arr_ids, obj_id)
@@ -727,7 +731,7 @@ function set_fwrap_data!(subsys::Subsystem)
     push!(fwrap_data, reshape(Any[], 0, 0))
     append!(fwrap_data, subsys.prop_vals_saved)
 
-    empty_struct = Dict{String,Any}()
+    empty_struct = EmptyStruct([1, 0])
     for i in 0:subsys.class_id_counter
         push!(subsys._c3, empty_struct)
         push!(subsys.prop_vals_defaults, empty_struct)

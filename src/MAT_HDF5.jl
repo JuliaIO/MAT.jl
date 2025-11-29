@@ -36,7 +36,7 @@ import HDF5: Reference
 import Dates
 import Tables
 import PooledArrays: PooledArray
-import ..MAT_types: MatlabStructArray, StructArrayField, convert_struct_array, MatlabClassObject, MatlabOpaque, MatlabTable
+import ..MAT_types: MatlabStructArray, StructArrayField, convert_struct_array, MatlabClassObject, MatlabOpaque, MatlabTable, EmptyStruct
 
 const HDF5Parent = Union{HDF5.File, HDF5.Group}
 const HDF5BitsOrBool = Union{HDF5.BitsType,Bool}
@@ -687,11 +687,23 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::M
     end
 end
 
+# Write empty (zero-dimensional) structs with no fields
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::EmptyStruct)
+    dset, dtype = create_dataset(parent, name, s.dims)
+    try
+        write_attribute(dset, empty_attr_matlab, 0x01)
+        write_attribute(dset, name_type_attr_matlab, "struct")
+        write_dataset(dset, dtype, s.dims)
+    finally
+        close(dtype); close(dset)
+    end
+end
+
 # Write a struct from arrays of keys and values
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, k::Vector{String}, v::Vector)
     if length(k) == 0
         # empty struct
-        adata = UInt64[0, 0]
+        adata = UInt64[1, 1]
         dset, dtype = create_dataset(parent, name, adata)
         try
             write_attribute(dset, empty_attr_matlab, 0x01)
@@ -758,7 +770,17 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::M
 end
 
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::AbstractArray{MatlabOpaque})
-    error("writing of MatlabOpaque types is not yet supported")
+    metadata = MAT_subsys.set_mcos_object_metadata(mfile.subsystem, obj)
+    dset, dtype = create_dataset(parent, name, metadata)
+    try
+        # TODO: Handle empty array case
+        write_dataset(dset, dtype, metadata)
+        write_attribute(dset, name_type_attr_matlab, first(obj).class)
+        write_attribute(dset, object_type_attr_matlab, UInt32(3))
+    finally
+        close(dset)
+        close(dtype)
+    end
 end
 
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::PooledArray)
