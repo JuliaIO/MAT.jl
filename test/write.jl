@@ -216,6 +216,19 @@ end
     end
 end
 
+@testset "Empty Struct 1x1" begin
+    var_dict = Dict("empty_struct" => Dict{String,Any}())
+    mktempdir() do tmpdir
+        tmpfile = joinpath(tmpdir, "test.mat")
+        matwrite(tmpfile, var_dict)
+        read_var = matread(tmpfile)
+
+        @test haskey(read_var, "empty_struct")
+        @test isa(read_var["empty_struct"], Dict{String,Any})
+        @test length(keys(read_var["empty_struct"])) == 0
+    end
+end
+
 @testset "MatlabOpaque handle" begin
     d = Dict{String,Any}("a" => 1, "b" => Any[1.0, 2.0])
     obj = MatlabOpaque(d, "TestClassHandle")
