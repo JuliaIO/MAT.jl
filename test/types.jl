@@ -134,51 +134,68 @@ end
 end
 
 @testset "MatlabOpaque datetime" begin
-    d = Dict{String, Any}(
-        "tz"         => "",
-        "data"       => ComplexF64[
-            1482192000000.0+0.0im;
-            1482278400000.0+0.0im;
-            1482364800000.0+0.0im;;
-            ],
-        "fmt"        => "",
-        "isDateOnly" => true, # Note: "isDateOnly" not in all versions
-    )
-    obj = MatlabOpaque(d, "datetime")
-    expected_dates = [
-        DateTime(2016, 12, 20) # 20-Dec-2016
-        DateTime(2016, 12, 21) # 21-Dec-2016
-        DateTime(2016, 12, 22) # 22-Dec-2016
-    ]
-    @test all(MAT.convert_opaque(obj) .== expected_dates)
+    @testset "datetime array" begin
+        d = Dict{String, Any}(
+            "tz"         => "",
+            "data"       => ComplexF64[
+                1482192000000.0+0.0im;
+                1482278400000.0+0.0im;
+                1482364800000.0+0.0im;;
+                ],
+            "fmt"        => "",
+            #"isDateOnly" => true, # Note: "isDateOnly" not available in all versions
+        )
+        obj = MatlabOpaque(d, "datetime")
+        expected_dates = [
+            DateTime(2016, 12, 20) # 20-Dec-2016
+            DateTime(2016, 12, 21) # 21-Dec-2016
+            DateTime(2016, 12, 22) # 22-Dec-2016
+        ]
+        dt = MAT.convert_opaque(obj)
+        @test all(dt .== expected_dates)
 
-    d = Dict{String, Any}(
-        "tz"         => "",
-        "data"       => 1575304969634.0+0.0im,
-        "fmt"        => "",
-        "isDateOnly" => false,
-    )
-    obj = MatlabOpaque(d, "datetime")
-    # "02-Dec-2019 16:42:49"
-    expected_dt = DateTime(2019, 12, 2, 16, 42, 49)
-    # still have some millisecond rounding issue?
-    @test MAT.convert_opaque(obj) - expected_dt < Second(1)
+        obj_conv = MatlabOpaque(dt)
+        @test obj_conv == obj
+    end
+
+    @testset "datetime element" begin
+        d = Dict{String, Any}(
+            "tz"         => "",
+            "data"       => 1575304969634.0+0.0im,
+            "fmt"        => "",
+            #"isDateOnly" => false,
+        )
+        obj = MatlabOpaque(d, "datetime")
+        # "02-Dec-2019 16:42:49"
+        expected_dt = DateTime(2019, 12, 2, 16, 42, 49)
+        # still have some millisecond rounding issue?
+        dt = MAT.convert_opaque(obj)
+        @test dt - expected_dt < Second(1)
+
+        # convert back to MatlabOpaque
+        obj_conv = MatlabOpaque(dt)
+        @test obj_conv == obj
+    end
 end
 
 @testset "MatlabOpaque duration" begin
     d = Dict(
         "millis" => [3.6e6 7.2e6],
-        "fmt"    => 'h',
+        # "fmt"    => 'h' # optional format
     )
     obj = MatlabOpaque(d, "duration")
-    @test MAT.convert_opaque(obj) == map(Millisecond, d["millis"])
+    ms = MAT.convert_opaque(obj)
+    @test ms == map(Millisecond, d["millis"])
+    @test MatlabOpaque(ms) == obj
 
     d = Dict(
         "millis" => 12000.0,
-        "fmt"    => 'h',
+        # "fmt"    => 'h',
     )
     obj = MatlabOpaque(d, "duration")
-    @test MAT.convert_opaque(obj) == Millisecond(d["millis"])
+    ms = MAT.convert_opaque(obj)
+    @test ms == Millisecond(d["millis"])
+    @test MatlabOpaque(ms) == obj
 end
 
 @testset "MatlabOpaque categorical" begin

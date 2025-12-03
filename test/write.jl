@@ -1,4 +1,4 @@
-using MAT, Test
+using MAT, Test, Dates
 
 tmpfile = string(tempname(), ".mat")
 
@@ -13,9 +13,7 @@ function test_write(data; kwargs...)
         close(fid)
     end
 
-    if !isequal(result, data)
-        error("Data mismatch")
-    end
+    @test isequal(result, data)
 end
 
 function test_write(data)
@@ -300,4 +298,18 @@ end
         @test inner_read["b"] == inner_obj["b"]
     end
 
+end
+
+@testset "Dates" begin
+    dt = DateTime[
+        DateTime(2016, 12, 20) # 20-Dec-2016
+        DateTime(2016, 12, 21) # 21-Dec-2016
+        DateTime(2016, 12, 22) # 22-Dec-2016
+    ]
+    test_write(Dict{String,Any}("dt" => dt))
+    test_write(Dict{String,Any}("dt" => dt[1]))
+
+    ms = Millisecond(500)
+    test_write(Dict{String,Any}("ms" => ms))
+    test_write(Dict{String,Any}("ms" => [ms, Millisecond(50000)]))
 end

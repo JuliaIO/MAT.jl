@@ -36,7 +36,16 @@ import HDF5: Reference
 import Dates
 import Tables
 import PooledArrays: PooledArray
-import ..MAT_types: MatlabStructArray, StructArrayField, convert_struct_array, MatlabClassObject, MatlabOpaque, MatlabTable, EmptyStruct
+
+import ..MAT_types: 
+    convert_struct_array,
+    EmptyStruct,
+    MatlabClassObject, 
+    MatlabOpaque,
+    MatlabStructArray,  
+    MatlabTable, 
+    ScalarOrArray,
+    StructArrayField
 
 const HDF5Parent = Union{HDF5.File, HDF5.Group}
 const HDF5BitsOrBool = Union{HDF5.BitsType,Bool}
@@ -747,8 +756,12 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s)
     m_write(mfile, parent, name, check_struct_keys([string(x) for x in fieldnames(T)]), [getfield(s, x) for x in fieldnames(T)])
 end
 
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat::Dates.AbstractTime)
-    error("writing of Dates types is not yet supported")
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat::ScalarOrArray{T}) where T<:Dates.AbstractTime
+    error("writing of type $T is not yet supported")
+end
+
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat::ScalarOrArray{T}) where T<:Union{Dates.DateTime, Dates.Millisecond}
+    m_write(mfile, parent, name, MatlabOpaque(dat))
 end
 
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::MatlabOpaque)

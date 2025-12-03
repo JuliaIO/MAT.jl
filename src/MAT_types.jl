@@ -30,6 +30,7 @@ module MAT_types
 
 using StringEncodings: StringEncodings
 import StringEncodings: Encoding
+import Dates
 import Dates: DateTime, Second, Millisecond
 import PooledArrays: PooledArray, RefArray
 using Tables: Tables
@@ -38,6 +39,9 @@ export MatlabStructArray, StructArrayField, convert_struct_array
 export MatlabClassObject
 export MatlabOpaque, convert_opaque
 export MatlabTable
+export ScalarOrArray
+
+const ScalarOrArray{T} = Union{T, AbstractArray{T}}
 
 # struct arrays are stored as columns per field name
 """
@@ -374,6 +378,28 @@ Base.iterate(m::MatlabOpaque) = iterate(m.d)
 Base.haskey(m::MatlabOpaque, k) = haskey(m.d, k)
 Base.get(m::MatlabOpaque, k, default) = get(m.d, k, default)
 
+function Base.:(==)(m1::MatlabOpaque, m2::MatlabOpaque)
+    return m1.class == m2.class && m1.d == m2.d
+end
+
+function Base.isapprox(m1::MatlabOpaque, m2::MatlabOpaque; kwargs...)
+    return m1.class == m2.class && dict_isapprox(m1.d, m2.d; kwargs...)
+end
+
+function dict_isapprox(d1::AbstractDict{T}, d2::AbstractDict{T}; kwargs...) where T
+    keys(d1) == keys(d2) || return false
+    for k in keys(d1)
+        v1, v2 = d1[k], d2[k]
+        value_isapprox(v1, v2) || return false
+    end
+    return true
+end
+dict_isapprox(d1::AbstractDict{T1}, d2::AbstractDict{T2}; kwargs...) where {T1,T2} = false
+
+value_isapprox(x1::AbstractString, x2::AbstractString; kwargs...) = isequal(x1, x2)
+value_isapprox(x1, x2; kwargs...) = isapprox(x1, x2; kwargs...)
+value_isapprox(d1::AbstractDict, d2::AbstractDict; kwargs...) = dict_isapprox(x1, x2; kwargs...)
+
 function convert_opaque(obj::MatlabOpaque; table::Type=Nothing)
     if obj.class == "string"
         return from_string(obj)
@@ -445,6 +471,28 @@ function ms_to_datetime(ms::Real)
     return DateTime(1970, 1, 1) + Second(s) + Millisecond(ms_rem)
 end
 
+function to_matlab_data(d::DateTime)
+    ms = Dates.value(d)
+
+    # matlab counts w.r.t. 1970
+    matlab_offset = Dates.value(DateTime(1970, 1, 1))
+
+    # note: can be negative, that's fine
+    matlab_ms = ms - matlab_offset
+    return Complex(Float64(matlab_ms))
+end
+
+function MatlabOpaque(d::ScalarOrArray{DateTime})
+    return MatlabOpaque(
+        Dict(
+            "tz"   => "",
+            "data" => map_or_not(to_matlab_data, d),
+            "fmt"  => "",
+        ),
+        "datetime"
+    )
+end
+
 function from_duration(obj::MatlabOpaque)
     dat = obj["millis"]
     #fmt = obj["fmt"] # TODO: format, e.g. 'd' to Day
@@ -452,6 +500,17 @@ function from_duration(obj::MatlabOpaque)
         return Millisecond[]
     end
     return map_or_not(Millisecond, dat)
+end
+
+to_matlab_millis(d::Millisecond) = Float64(Dates.value(d))
+
+function MatlabOpaque(d::ScalarOrArray{Millisecond})
+    return MatlabOpaque(
+        Dict(
+            "millis" => map_or_not(to_matlab_millis, d),
+        ),
+        "duration"
+    )
 end
 
 function from_categorical(obj::MatlabOpaque)
