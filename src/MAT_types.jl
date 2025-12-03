@@ -173,7 +173,7 @@ function Base.:(==)(m1::MatlabStructArray{N}, m2::MatlabStructArray{N}) where {N
 end
 
 function Base.isapprox(m1::MatlabStructArray, m2::MatlabStructArray; kwargs...)
-    return isequal(m1.names, m2.names) && isapprox(m1.values, m2.values; kwargs...)
+    return isequal(m1.class, m2.class) && isequal(m1.names, m2.names) && isapprox(m1.values, m2.values; kwargs...)
 end
 
 function find_index(m::MatlabStructArray, s::AbstractString)
@@ -311,6 +311,14 @@ Base.iterate(m::MatlabClassObject, i) = iterate(m.d, i)
 Base.iterate(m::MatlabClassObject) = iterate(m.d)
 Base.haskey(m::MatlabClassObject, k) = haskey(m.d, k)
 Base.get(m::MatlabClassObject, k, default) = get(m.d, k, default)
+
+function Base.:(==)(m1::MatlabClassObject, m2::MatlabClassObject)
+    return m1.class == m2.class && m1.d == m2.d
+end
+
+function Base.isapprox(m1::MatlabClassObject, m2::MatlabClassObject; kwargs...)
+    return m1.class == m2.class && dict_isapprox(m1.d, m2.d; kwargs...)
+end
 
 function MatlabStructArray(arr::AbstractArray{MatlabClassObject})
     first_obj, remaining_obj = Iterators.peel(arr)

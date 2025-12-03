@@ -59,13 +59,15 @@ using Dates
     d_symbol = Array{Dict{Symbol,Any}}(MatlabStructArray(d_arr))
     @test d_symbol[2][:x] == d_arr[2]["x"]
     @test Array(MatlabStructArray(d_symbol)) == d_arr
+    @test s_arr == MatlabStructArray(d_arr)
 
     # class object array conversion
-    s_arr = MatlabStructArray(d_arr, "TestClass")
-    c_arr = Array(s_arr)
+    s_arr_class = MatlabStructArray(d_arr, "TestClass")
+    c_arr = Array(s_arr_class)
     @test c_arr isa Array{MatlabClassObject}
     @test all(c->c.class=="TestClass", c_arr)
-    @test MatlabStructArray(c_arr) == s_arr
+    @test MatlabStructArray(c_arr) == s_arr_class
+    @test s_arr_class != s_arr
 
     # test error of unequal structs
     wrong_sarr = Dict{String, Any}[
@@ -86,8 +88,8 @@ end
     @test haskey(obj, "a")
     @test get(obj, "b", "default") == "default"
 
-    obj["b"] = 7
-    @test obj["b"] == 7
+    obj["b"] = "str"
+    @test obj["b"] == "str"
 
     c_arr = [MatlabClassObject(d, "TestClassOld"), MatlabClassObject(d, "TestClassOld")]
     s_arr = MatlabStructArray(c_arr)
@@ -95,6 +97,14 @@ end
 
     wrong_arr = [MatlabClassObject(d, "TestClassOld"), MatlabClassObject(d, "Bah")]
     @test_throws ErrorException MatlabStructArray(wrong_arr)
+
+    d2 = deepcopy(obj.d)
+    @test obj == MatlabClassObject(d2, "TestClassOld")
+    @test obj != MatlabClassObject(obj.d, "Banana")
+    d2["a"] = 5.0 + 1e-9
+    @test obj != MatlabClassObject(d2, "TestClassOld")
+    @test obj ≈ MatlabClassObject(d2, "TestClassOld")
+    @test !(obj ≈ MatlabClassObject(d2, "Banana"))
 end
 
 @testset "MatlabOpaque string" begin
