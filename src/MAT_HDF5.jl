@@ -552,6 +552,16 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, c::Abs
     m_write(mfile, parent, name, string(c))
 end
 
+# Tuple
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, t::Tuple)
+    m_write(mfile, parent, name, [x for x in t])
+end
+
+# Symbol
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::Symbol)
+    m_write(mfile, parent, name, string(s))
+end
+
 # Write cell arrays
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::AbstractArray{T}, object_decode::UInt32=UInt32(0)) where T
     data = _normalize_arr(data)

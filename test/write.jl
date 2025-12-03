@@ -1,4 +1,5 @@
 using MAT, Test, Dates
+using SparseArrays, LinearAlgebra
 
 tmpfile = string(tempname(), ".mat")
 
@@ -150,12 +151,33 @@ test_write(Dict("reshape_arr"=>reshape([1 2 3;4 5 6;7 8 9]',1,9)))
 test_write(Dict("adjoint_arr"=>Any[1 2 3;4 5 6;7 8 9]'))
 test_write(Dict("reshape_arr"=>reshape(Any[1 2 3;4 5 6;7 8 9]',1,9)))
 
-# named tuple
-nt = (x = 5, y = Any[6, "string"])
-matwrite(tmpfile, Dict("nt" => nt))
-nt_read = matread(tmpfile)["nt"]
-@test nt_read["x"] == 5
-@test nt_read["y"] == nt.y
+@testset "named tuple" begin
+    nt = (x = 5, y = Any[6, "string"])
+    matwrite(tmpfile, Dict("nt" => nt))
+    nt_read = matread(tmpfile)["nt"]
+    @test nt_read["x"] == 5
+    @test nt_read["y"] == nt.y
+end
+
+@testset "tuple" begin
+    # NTuple{T}
+    t = (5, 6)
+    matwrite(tmpfile, Dict("t" => (5, 6)))
+    r = matread(tmpfile)["t"]
+    @test r == [x for x in t]
+
+    # otherwise cell array
+    t = (5, "string")
+    matwrite(tmpfile, Dict("t" => t))
+    r = matread(tmpfile)["t"]
+    @test r == [x for x in t]
+end
+
+@testset "symbol" begin
+    matwrite(tmpfile, Dict("s" => :symbol))
+    r = matread(tmpfile)["s"]
+    @test r == "symbol"
+end
 
 # test nested struct array - interface via Dict array
 @testset "MatlabStructArray writing" begin
