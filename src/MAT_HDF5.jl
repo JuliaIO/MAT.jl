@@ -36,7 +36,16 @@ import HDF5: Reference
 import Dates
 import Tables
 import PooledArrays: PooledArray
-import ..MAT_types: MatlabStructArray, StructArrayField, convert_struct_array, MatlabClassObject, MatlabOpaque, MatlabTable, EmptyStruct
+
+import ..MAT_types: 
+    convert_struct_array,
+    EmptyStruct,
+    MatlabClassObject, 
+    MatlabOpaque,
+    MatlabStructArray,  
+    MatlabTable, 
+    ScalarOrArray,
+    StructArrayField
 
 const HDF5Parent = Union{HDF5.File, HDF5.Group}
 const HDF5BitsOrBool = Union{HDF5.BitsType,Bool}
@@ -100,7 +109,7 @@ function close(f::MatlabHDF5File)
     nothing
 end
 
-function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool, endian_indicator::Bool; table::Type=MatlabTable)
+function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool, endian_indicator::Bool; table::Type=MatlabTable, convert_opaque::Bool=true)
     local f
     if ff && !wr
         error("Cannot append to a read-only file")
@@ -132,6 +141,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     subsys_refs = "#subsystem#"
     if rd && haskey(fid.plain, subsys_refs)
         fid.subsystem.table_type = table
+        fid.subsystem.convert_opaque = convert_opaque
         subsys_data = m_read(fid.plain[subsys_refs], fid.subsystem)
         MAT_subsys.load_subsys!(fid.subsystem, subsys_data, endian_indicator)
     elseif wr
@@ -747,8 +757,12 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s)
     m_write(mfile, parent, name, check_struct_keys([string(x) for x in fieldnames(T)]), [getfield(s, x) for x in fieldnames(T)])
 end
 
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat::Dates.AbstractTime)
-    error("writing of Dates types is not yet supported")
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat::ScalarOrArray{T}) where T<:Dates.AbstractTime
+    error("writing of type $T is not yet supported")
+end
+
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat::ScalarOrArray{T}) where T<:Union{Dates.DateTime, Dates.Millisecond}
+    m_write(mfile, parent, name, MatlabOpaque(dat))
 end
 
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::MatlabOpaque)
