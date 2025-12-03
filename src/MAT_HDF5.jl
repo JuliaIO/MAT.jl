@@ -109,7 +109,7 @@ function close(f::MatlabHDF5File)
     nothing
 end
 
-function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool, endian_indicator::Bool; table::Type=MatlabTable)
+function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool, endian_indicator::Bool; table::Type=MatlabTable, convert_opaque::Bool=true)
     local f
     if ff && !wr
         error("Cannot append to a read-only file")
@@ -141,6 +141,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     subsys_refs = "#subsystem#"
     if rd && haskey(fid.plain, subsys_refs)
         fid.subsystem.table_type = table
+        fid.subsystem.convert_opaque = convert_opaque
         subsys_data = m_read(fid.plain[subsys_refs], fid.subsystem)
         MAT_subsys.load_subsys!(fid.subsystem, subsys_data, endian_indicator)
     elseif wr

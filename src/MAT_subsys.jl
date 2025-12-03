@@ -57,7 +57,10 @@ mutable struct Subsystem
     prop_vals_defaults::Any
     handle_data::Any
     java_data::Any
-    table_type::Type # Julia type to convert Matlab tables into
+
+    # automatic MatlabOpaque conversion
+    convert_opaque::Bool
+    table_type::Type 
 
     # Counters for saving
     saveobj_counter::UInt32
@@ -84,6 +87,7 @@ mutable struct Subsystem
             nothing,
             nothing,
             nothing,
+            true,
             Nothing,
             UInt32(0),
             UInt32(0),
@@ -420,7 +424,11 @@ function load_mcos_object(metadata::Array{UInt32}, type_name::String, subsys::Su
     if nobjects == 1
         oid = object_ids[1]
         obj = get_object!(subsys, oid, classname)
-        return convert_opaque(obj; table=subsys.table_type)
+        if subsys.convert_opaque
+            return convert_opaque(obj; table=subsys.table_type)
+        else
+            return obj
+        end
     else
         # no need to convert_opaque, matlab wraps object arrays in a single class normally
         object_arr = Array{MatlabOpaque}(undef, convert(Vector{Int}, dims)...)
