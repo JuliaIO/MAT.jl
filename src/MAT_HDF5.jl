@@ -36,7 +36,16 @@ import HDF5: Reference
 import Dates
 import Tables
 import PooledArrays: PooledArray
-import ..MAT_types: MatlabStructArray, StructArrayField, convert_struct_array, MatlabClassObject, MatlabOpaque, MatlabTable
+
+import ..MAT_types: 
+    convert_struct_array,
+    EmptyStruct,
+    MatlabClassObject, 
+    MatlabOpaque,
+    MatlabStructArray,  
+    MatlabTable, 
+    ScalarOrArray,
+    StructArrayField
 
 const HDF5Parent = Union{HDF5.File, HDF5.Group}
 const HDF5BitsOrBool = Union{HDF5.BitsType,Bool}
@@ -100,7 +109,7 @@ function close(f::MatlabHDF5File)
     nothing
 end
 
-function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool, endian_indicator::Bool; table::Type=MatlabTable)
+function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool, endian_indicator::Bool; table::Type=MatlabTable, convert_opaque::Bool=true)
     local f
     if ff && !wr
         error("Cannot append to a read-only file")
@@ -130,10 +139,13 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         close(g)
     end
     subsys_refs = "#subsystem#"
-    if haskey(fid.plain, subsys_refs)
+    if rd && haskey(fid.plain, subsys_refs)
         fid.subsystem.table_type = table
+        fid.subsystem.convert_opaque = convert_opaque
         subsys_data = m_read(fid.plain[subsys_refs], fid.subsystem)
         MAT_subsys.load_subsys!(fid.subsystem, subsys_data, endian_indicator)
+    elseif wr
+        MAT_subsys.init_save!(fid.subsystem)
     end
     fid
 end
@@ -464,7 +476,7 @@ function _normalize_arr(x)
 end
 
 # Write a scalar or array
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Union{T, Complex{T}, AbstractArray{T}, AbstractArray{Complex{T}}}) where {T<:HDF5BitsOrBool}
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Union{T, Complex{T}, AbstractArray{T}, AbstractArray{Complex{T}}}, ) where {T<:HDF5BitsOrBool}
     data = _normalize_arr(data)
     if isempty(data)
         m_writeempty(parent, name, data)
@@ -540,15 +552,30 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, c::Abs
     m_write(mfile, parent, name, string(c))
 end
 
+# Tuple
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, t::Tuple)
+    m_write(mfile, parent, name, [x for x in t])
+end
+
+# Symbol
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::Symbol)
+    m_write(mfile, parent, name, string(s))
+end
+
 # Write cell arrays
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::AbstractArray{T}) where T
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::AbstractArray{T}, object_decode::UInt32=UInt32(0)) where T
     data = _normalize_arr(data)
     refs = _write_references!(mfile, parent, data)
     # Write the references as the chosen variable
     cset, ctype = create_dataset(parent, name, refs)
     try
         write_dataset(cset, ctype, refs)
-        write_attribute(cset, name_type_attr_matlab, "cell")
+        if object_decode == UInt32(3)
+            write_attribute(cset, object_decode_attr_matlab, object_decode)
+            write_attribute(cset, name_type_attr_matlab, "FileWrapper__")
+        else
+            write_attribute(cset, name_type_attr_matlab, "cell")
+        end
     finally
         close(ctype)
         close(cset)
@@ -680,8 +707,34 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::M
     end
 end
 
+# Write empty (zero-dimensional) structs with no fields
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::EmptyStruct)
+    dset, dtype = create_dataset(parent, name, s.dims)
+    try
+        write_attribute(dset, empty_attr_matlab, 0x01)
+        write_attribute(dset, name_type_attr_matlab, "struct")
+        write_dataset(dset, dtype, s.dims)
+    finally
+        close(dtype); close(dset)
+    end
+end
+
 # Write a struct from arrays of keys and values
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, k::Vector{String}, v::Vector)
+    if length(k) == 0
+        # empty struct
+        adata = UInt64[1, 1]
+        dset, dtype = create_dataset(parent, name, adata)
+        try
+            write_attribute(dset, empty_attr_matlab, 0x01)
+            write_attribute(dset, name_type_attr_matlab, "struct")
+            write_dataset(dset, dtype, adata)
+        finally
+            close(dtype); close(dset)
+        end
+        return
+    end
+
     g = create_group(parent, name)
     try
         write_attribute(g, name_type_attr_matlab, "struct")
@@ -714,16 +767,44 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s)
     m_write(mfile, parent, name, check_struct_keys([string(x) for x in fieldnames(T)]), [getfield(s, x) for x in fieldnames(T)])
 end
 
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat::Dates.AbstractTime)
-    error("writing of Dates types is not yet supported")
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat::ScalarOrArray{T}) where T<:Dates.AbstractTime
+    error("writing of type $T is not yet supported")
+end
+
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat::ScalarOrArray{T}) where T<:Union{Dates.DateTime, Dates.Millisecond}
+    m_write(mfile, parent, name, MatlabOpaque(dat))
 end
 
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::MatlabOpaque)
-    error("writing of MatlabOpaque types is not yet supported")
+    if obj.class == "FileWrapper__"
+        m_write(mfile, parent, name, obj["__filewrapper__"], UInt32(3))
+        return
+    end
+
+    metadata = MAT_subsys.set_mcos_object_metadata(mfile.subsystem, obj)
+    dset, dtype = create_dataset(parent, name, metadata)
+    try
+        write_dataset(dset, dtype, metadata)
+        write_attribute(dset, name_type_attr_matlab, obj.class)
+        write_attribute(dset, object_type_attr_matlab, UInt32(3))
+    finally
+        close(dset)
+        close(dtype)
+    end
 end
 
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::AbstractArray{MatlabOpaque})
-    error("writing of MatlabOpaque types is not yet supported")
+    metadata = MAT_subsys.set_mcos_object_metadata(mfile.subsystem, obj)
+    dset, dtype = create_dataset(parent, name, metadata)
+    try
+        # TODO: Handle empty array case
+        write_dataset(dset, dtype, metadata)
+        write_attribute(dset, name_type_attr_matlab, first(obj).class)
+        write_attribute(dset, object_type_attr_matlab, UInt32(3))
+    finally
+        close(dset)
+        close(dtype)
+    end
 end
 
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::PooledArray)
@@ -741,6 +822,11 @@ See `matopen` and `matwrite`.
 function write(parent::MatlabHDF5File, name::String, thing)
     check_valid_varname(name)
     m_write(parent, parent.plain, name, thing)
+end
+
+function write_subsys(mfile::MatlabHDF5File, subsys_data::Dict{String,Any})
+    name = "#subsystem#"
+    m_write(mfile, mfile.plain, name, subsys_data)
 end
 
 ## Type conversion operations ##

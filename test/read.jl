@@ -1,5 +1,6 @@
 using MAT, Test
 using Dates
+using SparseArrays, LinearAlgebra
 
 function check(filename, result)
     matfile = matopen(filename)
@@ -281,6 +282,12 @@ for format in ["v7", "v7.3"]
         dt = vars["testDatetime"]
         @test dt isa DateTime
         @test dt - DateTime(2019, 12, 2, 16, 42, 49) < Second(1)
+
+        # test no conversion at all
+        vars = matread(filepath; convert_opaque=false)["s"]
+        t = vars["testTable"]
+        @test t isa MatlabOpaque
+        @test t["data"][3] isa MatlabOpaque
     end
     end
 

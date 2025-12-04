@@ -394,7 +394,7 @@ function read_matrix(f::IO, swap_bytes::Bool, subsys::Subsystem)
 end
 
 # Open MAT file for reading
-function matopen(ios::IOStream, endian_indicator::UInt16; table::Type=MatlabTable)
+function matopen(ios::IOStream, endian_indicator::UInt16; table::Type=MatlabTable, convert_opaque::Bool=true)
     matfile = Matlabv5File(ios, endian_indicator == 0x494D)
 
     seek(matfile.ios, 116)
@@ -405,6 +405,7 @@ function matopen(ios::IOStream, endian_indicator::UInt16; table::Type=MatlabTabl
     if subsys_offset != 0
         matfile.subsystem_position = subsys_offset
         matfile.subsystem.table_type = table
+        matfile.subsystem.convert_opaque = convert_opaque
         read_subsystem!(matfile)
     end
 

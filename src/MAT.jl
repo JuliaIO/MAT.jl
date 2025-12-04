@@ -41,11 +41,11 @@ export MatlabStructArray, MatlabClassObject, MatlabOpaque, MatlabTable
 
 # Open a MATLAB file
 const HDF5_HEADER = UInt8[0x89, 0x48, 0x44, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]
-function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool; table::Type=MatlabTable)
+function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Bool, ff::Bool, compress::Bool; table::Type=MatlabTable, convert_opaque::Bool=true)
     # When creating new files, create as HDF5 by default
     fs = filesize(filename)
     if cr && (tr || fs == 0)
-        return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff, compress, Base.ENDIAN_BOM == 0x04030201; table=table)
+        return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff, compress, Base.ENDIAN_BOM == 0x04030201; table=table, convert_opaque=convert_opaque)
     elseif fs == 0
         error("File \"$filename\" does not exist and create was not specified")
     end
@@ -73,7 +73,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         if wr || cr || tr || ff
             error("creating or appending to MATLAB v5 files is not supported")
         end
-        return MAT_v5.matopen(rawfid, endian_indicator; table=table)
+        return MAT_v5.matopen(rawfid, endian_indicator; table=table, convert_opaque=convert_opaque)
     end
 
     # Check for HDF5 file
@@ -81,7 +81,7 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         seek(rawfid, offset)
         if read!(rawfid, Vector{UInt8}(undef, 8)) == HDF5_HEADER
             close(rawfid)
-            return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff, compress, endian_indicator == 0x494D; table=table)
+            return MAT_HDF5.matopen(filename, rd, wr, cr, tr, ff, compress, endian_indicator == 0x494D; table=table, convert_opaque=convert_opaque)
         end
     end
 
@@ -89,10 +89,10 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     error("\"$filename\" is not a MAT file")
 end
 
-function matopen(fname::AbstractString, mode::AbstractString; compress::Bool = false, table::Type = MatlabTable)
-    mode == "r"  ? matopen(fname, true , false, false, false, false, false; table=table)    :
-    mode == "r+" ? matopen(fname, true , true , false, false, false, compress; table=table) :
-    mode == "w"  ? matopen(fname, false, true , true , true , false, compress; table=table) :
+function matopen(fname::AbstractString, mode::AbstractString; compress::Bool = false, kwargs...)
+    mode == "r"  ? matopen(fname, true , false, false, false, false, false; kwargs...)    :
+    mode == "r+" ? matopen(fname, true , true , false, false, false, compress; kwargs...) :
+    mode == "w"  ? matopen(fname, false, true , true , true , false, compress; kwargs...) :
     # mode == "w+" ? matopen(fname, true , true , true , true , false, compress) :
     # mode == "a"  ? matopen(fname, false, true , true , false, true, compress)  :
     # mode == "a+" ? matopen(fname, true , true , true , false, true, compress)  :
@@ -185,8 +185,8 @@ vars["s"]["testTable"]
    3 │    3489.0  Smith     2016-12-22T00:00:00  Fair    Late, but only by half an hour. …
 ```
 """
-function matread(filename::AbstractString; table::Type=MatlabTable)
-    file = matopen(filename; table=table)
+function matread(filename::AbstractString; table::Type=MatlabTable, convert_opaque::Bool=true)
+    file = matopen(filename; table=table, convert_opaque=convert_opaque)
     local vars
     try
         vars = read(file)
@@ -204,31 +204,43 @@ Write a dictionary containing variable names as keys and values as values
 to a Matlab file, opening and closing it automatically.
 """
 function matwrite(filename::AbstractString, dict::AbstractDict{S, T}; compress::Bool = false, version::String ="v7.3") where {S, T}
-    if version == "v4"
-        file = open(filename, "w")
-        m = MAT_v4.Matlabv4File(file, false)
-        _write_dict(m, dict)
-    elseif version == "v7.3"
-        file = matopen(filename, "w"; compress = compress)
-        _write_dict(file, dict)
-    else
-        error("writing for \"$(version)\" is not supported")
+    file = nothing
+    try
+        if version == "v4"
+            file = open(filename, "w")
+            file = MAT_v4.Matlabv4File(file, false)
+            _write_dict(file, dict)
+        elseif version == "v7.3"
+            file = matopen(filename, "w"; compress = compress)
+            _write_dict(file, dict)
+        else
+            error("writing for \"$(version)\" is not supported")
+        end
+    finally
+        if file !== nothing
+            close(file)
+        end
     end
 end
 
 function _write_dict(fileio, dict::AbstractDict)
-    try
-        for (k, v) in dict
-            local kstring
-            try
-                kstring = ascii(convert(String, k))
-            catch x
-                error("matwrite requires a Dict with ASCII keys")
-            end
-            write(fileio, kstring, v)
+
+    for (k, v) in dict
+        local kstring
+        try
+            kstring = ascii(convert(String, k))
+        catch x
+            error("matwrite requires a Dict with ASCII keys")
         end
-    finally
-        close(fileio)
+        write(fileio, kstring, v)
+    end
+
+    if hasproperty(fileio, :subsystem) && fileio.subsystem !== nothing
+        # will always be nothing for MATv4 so we can ignore that case
+        subsys_data = MAT_subsys.set_subsystem_data!(fileio.subsystem)
+        if subsys_data !== nothing
+            MAT_HDF5.write_subsys(fileio, subsys_data)
+        end
     end
 end
 
