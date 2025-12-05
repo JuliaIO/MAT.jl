@@ -34,6 +34,7 @@ import Dates
 import Dates: DateTime, Second, Millisecond
 import PooledArrays: PooledArray, RefArray
 using Tables: Tables
+import OrderedCollections: OrderedDict
 
 export MatlabStructArray, StructArrayField, convert_struct_array
 export MatlabClassObject
@@ -68,7 +69,7 @@ using MAT
 s_arr = MatlabStructArray(["a", "b"], [[1, 2],["foo", 5]])
 
 # write-read
-matwrite("matfile.mat", Dict("struct_array" => s_arr))
+matwrite("matfile.mat", Dict{String,Any}("struct_array" => s_arr))
 read_s_arr = matread("matfile.mat")["struct_array"]
 
 # convert to Dict Array
@@ -144,6 +145,8 @@ Base.haskey(arr::MatlabStructArray, k::AbstractString) = k in keys(arr)
 function Base.copy(arr::MatlabStructArray{N}) where {N}
     return MatlabStructArray{N}(copy(arr.names), copy(arr.values))
 end
+class(arr::MatlabStructArray) = arr.class
+class(d::AbstractDict) = ""
 
 function Base.iterate(arr::T, i=next_state(arr)) where {T<:MatlabStructArray}
     if i == 0
@@ -255,6 +258,16 @@ function Base.Array{D,N}(arr::MatlabStructArray{N}) where {D<:AbstractDict,N}
     return result
 end
 
+function Base.getindex(arr::MatlabStructArray, s::Integer)
+    row_values = [getindex(v, s) for v in arr.values]
+    if isempty(arr.class)
+        D = Dict{String,Any}
+    else
+        D = OrderedDict{String,Any}
+    end
+    return create_struct(D, arr.names, row_values, arr.class)
+end
+
 function create_struct(::Type{D}, keys, values, class::String) where {T,D<:AbstractDict{T}}
     return D(T.(keys) .=> values)
 end
@@ -284,7 +297,7 @@ Internal Marker for Empty Structs with dimensions like 1x0 or 0x0
 struct EmptyStruct
    dims::Vector{UInt64}
 end
-
+class(m::EmptyStruct) = ""
 
 """
     MatlabClassObject(
@@ -296,10 +309,12 @@ Type to store old class objects. Inside MATLAB a class named \"TestClassOld\" wo
 
 If you want to write these objects you have to make sure the keys in the Dict match the class defined properties/fields.
 """
-struct MatlabClassObject <: AbstractDict{String,Any}
-    d::Dict{String,Any}
+struct MatlabClassObject{D<:AbstractDict{String,Any}} <: AbstractDict{String,Any}
+    d::D
     class::String
 end
+
+class(m::MatlabClassObject) = m.class
 
 Base.eltype(::Type{MatlabClassObject}) = Pair{String,Any}
 Base.length(m::MatlabClassObject) = length(m.d)
@@ -320,7 +335,7 @@ function Base.isapprox(m1::MatlabClassObject, m2::MatlabClassObject; kwargs...)
     return m1.class == m2.class && dict_isapprox(m1.d, m2.d; kwargs...)
 end
 
-function MatlabStructArray(arr::AbstractArray{MatlabClassObject})
+function MatlabStructArray(arr::AbstractArray{<:MatlabClassObject})
     first_obj, remaining_obj = Iterators.peel(arr)
     class = first_obj.class
     if !all(x -> isequal(class, x.class), remaining_obj)
@@ -331,7 +346,7 @@ function MatlabStructArray(arr::AbstractArray{MatlabClassObject})
     return MatlabStructArray(arr, class)
 end
 
-function convert_struct_array(d::Dict{String,Any}, class::String="")
+function convert_struct_array(d::AbstractDict{String,Any}, class::String="")
     # there is no possibility of having cell arrays mixed with struct arrays (afaik)
     field_values = first(values(d))
     if field_values isa StructArrayField
@@ -351,13 +366,15 @@ function Base.Array(arr::MatlabStructArray{N}) where {N}
     if isempty(arr.class)
         return Array{Dict{String,Any},N}(arr)
     else
-        return Array{MatlabClassObject,N}(arr)
+        # ordered dict by default, to preserve field order
+        D = OrderedDict{String,Any}
+        return Array{MatlabClassObject{D},N}(arr)
     end
 end
 
-function create_struct(::Type{D}, keys, values, class::String) where {D<:MatlabClassObject}
-    d = Dict{String,Any}(string.(keys) .=> values)
-    return MatlabClassObject(d, class)
+function create_struct(::Type{MatlabClassObject{D}}, keys, values, class::String) where {D<:AbstractDict}
+    d = D(string.(keys) .=> values)
+    return MatlabClassObject{D}(d, class)
 end
 
 """
@@ -370,10 +387,11 @@ Type to store opaque class objects.
 These are the 'modern' Matlab classes, different from the old `MatlabClassObject` types.
 
 """
-struct MatlabOpaque <: AbstractDict{String,Any}
-    d::Dict{String,Any}
+struct MatlabOpaque{D<:AbstractDict{String,Any}} <: AbstractDict{String,Any}
+    d::D
     class::String
 end
+class(m::MatlabOpaque) = m.class
 
 Base.eltype(::Type{MatlabOpaque}) = Pair{String,Any}
 Base.length(m::MatlabOpaque) = length(m.d)
@@ -492,7 +510,7 @@ end
 
 function MatlabOpaque(d::ScalarOrArray{DateTime})
     return MatlabOpaque(
-        Dict(
+        Dict{String,Any}(
             "tz"   => "",
             "data" => map_or_not(to_matlab_data, d),
             "fmt"  => "",
@@ -514,7 +532,7 @@ to_matlab_millis(d::Millisecond) = Float64(Dates.value(d))
 
 function MatlabOpaque(d::ScalarOrArray{Millisecond})
     return MatlabOpaque(
-        Dict(
+        Dict{String,Any}(
             "millis" => map_or_not(to_matlab_millis, d),
         ),
         "duration"

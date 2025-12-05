@@ -754,7 +754,7 @@ function set_fwrap_data!(subsys::Subsystem)
     push!(fwrap_data, reshape(subsys.mcos_class_alias_metadata, :, 1))
     push!(fwrap_data, reshape(subsys.prop_vals_defaults, :, 1))
 
-    fw_obj = MatlabOpaque(Dict("__filewrapper__" => reshape(fwrap_data, :, 1)), "FileWrapper__")
+    fw_obj = MatlabOpaque(Dict{String,Any}("__filewrapper__" => reshape(fwrap_data, :, 1)), "FileWrapper__")
     return fw_obj
 end
 

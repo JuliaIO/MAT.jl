@@ -26,7 +26,7 @@
 # http://www.mathworks.com/help/pdf_doc/matlab/matfile_format.pdf
 
 module MAT_v5
-using CodecZlib, BufferedStreams, HDF5, SparseArrays
+using CodecZlib, HDF5, SparseArrays
 import Base: read, write, close
 import ..MAT_types: MatlabStructArray, MatlabClassObject, MatlabTable
 

@@ -64,7 +64,7 @@ using Dates
     # class object array conversion
     s_arr_class = MatlabStructArray(d_arr, "TestClass")
     c_arr = Array(s_arr_class)
-    @test c_arr isa Array{MatlabClassObject}
+    @test c_arr isa Array{<:MatlabClassObject}
     @test all(c->c.class=="TestClass", c_arr)
     @test MatlabStructArray(c_arr) == s_arr_class
     @test s_arr_class != s_arr
@@ -76,6 +76,28 @@ using Dates
     ]
     msg = "Cannot convert Dict array to MatlabStructArray. All elements must share identical field names"
     @test_throws ErrorException(msg) MatlabStructArray(wrong_sarr)
+end
+
+@testset "MatlabStructArray integer indexing" begin
+    d_arr = Dict{String, Any}[
+        Dict("x"=>[1.0,2.0], SubString("y")=>3.0),
+        Dict("x"=>[5.0,6.0], "y"=>[])
+    ]
+    s_arr = MatlabStructArray(d_arr)
+    @test s_arr[1] == Array(s_arr)[1]
+    @test s_arr[2] == Array(s_arr)[2]
+
+    s_arr = MatlabStructArray(reshape(d_arr, 1, 2))
+    @test s_arr[1] == Array(s_arr)[1]
+    @test s_arr[2] == Array(s_arr)[2]
+
+    s_arr = MatlabStructArray(reshape(d_arr, 2, 1))
+    @test s_arr[1] == Array(s_arr)[1]
+    @test s_arr[2] == Array(s_arr)[2]
+
+    s_arr = MatlabStructArray(reshape(d_arr, 2, 1), "TestClass")
+    @test s_arr[1] == Array(s_arr)[1]
+    @test s_arr[2] == Array(s_arr)[2]
 end
 
 @testset "MatlabClassObject" begin
@@ -189,7 +211,7 @@ end
 end
 
 @testset "MatlabOpaque duration" begin
-    d = Dict(
+    d = Dict{String,Any}(
         "millis" => [3.6e6 7.2e6],
         # "fmt"    => 'h' # optional format
     )
@@ -198,7 +220,7 @@ end
     @test ms == map(Millisecond, d["millis"])
     @test MatlabOpaque(ms) == obj
 
-    d = Dict(
+    d = Dict{String,Any}(
         "millis" => 12000.0,
         # "fmt"    => 'h',
     )
@@ -209,7 +231,7 @@ end
 end
 
 @testset "MatlabOpaque categorical" begin
-    d = Dict(
+    d = Dict{String,Any}(
         "isProtected"   => false,
         "codes"         => reshape(UInt8[0x02, 0x03, 0x01, 0x01, 0x01, 0x02], 3, 2),
         "categoryNames" => Any["Fair"; "Good"; "Poor";;],
