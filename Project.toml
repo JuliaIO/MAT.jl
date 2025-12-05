@@ -3,20 +3,20 @@ uuid = "23992714-dd62-5051-b70f-ba57cb901cac"
 version = "0.11.2"
 
 [deps]
-BufferedStreams = "e1450e63-4bb3-523b-b2a4-4ffa8c0fd77d"
 CodecZlib = "944b1d66-785c-5afd-91f1-9de20f533193"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 PooledArrays = "2dfb63ee-cc39-5dd5-95bd-886bf059d720"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StringEncodings = "69024149-9ee7-55f6-a4c4-859efe599b68"
 Tables = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
 
 [compat]
-BufferedStreams = "0.4.1, 1"
 CodecZlib = "0.5, 0.6, 0.7"
 Dates = "1"
 HDF5 = "0.16, 0.17"
+OrderedCollections = "1.8.1"
 PooledArrays = "1.4.3"
 StringEncodings = "0.3.7"
 Tables = "1.12.1"

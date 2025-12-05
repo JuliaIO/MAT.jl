@@ -64,7 +64,7 @@ using Dates
     # class object array conversion
     s_arr_class = MatlabStructArray(d_arr, "TestClass")
     c_arr = Array(s_arr_class)
-    @test c_arr isa Array{MatlabClassObject}
+    @test c_arr isa Array{<:MatlabClassObject}
     @test all(c->c.class=="TestClass", c_arr)
     @test MatlabStructArray(c_arr) == s_arr_class
     @test s_arr_class != s_arr
@@ -189,7 +189,7 @@ end
 end
 
 @testset "MatlabOpaque duration" begin
-    d = Dict(
+    d = Dict{String,Any}(
         "millis" => [3.6e6 7.2e6],
         # "fmt"    => 'h' # optional format
     )
@@ -198,7 +198,7 @@ end
     @test ms == map(Millisecond, d["millis"])
     @test MatlabOpaque(ms) == obj
 
-    d = Dict(
+    d = Dict{String,Any}(
         "millis" => 12000.0,
         # "fmt"    => 'h',
     )
@@ -209,7 +209,7 @@ end
 end
 
 @testset "MatlabOpaque categorical" begin
-    d = Dict(
+    d = Dict{String,Any}(
         "isProtected"   => false,
         "codes"         => reshape(UInt8[0x02, 0x03, 0x01, 0x01, 0x01, 0x02], 3, 2),
         "categoryNames" => Any["Fair"; "Good"; "Poor";;],

@@ -660,6 +660,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::M
             else
                 write_attribute(g, name_type_attr_matlab, arr.class)
                 write_attribute(g, object_decode_attr_matlab, UInt32(2))
+                write_attribute(g, "MATLAB_fields", HDF5.VLen(arr.names))
             end
             for (fieldname, field_values) in arr
                 refs = _write_references!(mfile, parent, field_values)
@@ -699,7 +700,9 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::M
     try
         write_attribute(g, name_type_attr_matlab, obj.class)
         write_attribute(g, object_decode_attr_matlab, UInt32(2))
-        for (ki, vi) in zip(keys(obj), values(obj))
+        all_keys = collect(keys(obj))
+        write_attribute(g, "MATLAB_fields", HDF5.VLen(all_keys))
+        for (ki, vi) in zip(all_keys, values(obj))
             m_write(mfile, g, ki, vi)
         end
     finally

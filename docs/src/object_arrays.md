@@ -84,24 +84,26 @@ Note that before v0.11 MAT.jl will read struct arrays as a Dict with concatenate
 
 You can write an old class object with the `MatlabClassObject` and arrays of objects with `MatlabStructArray` by providing the class name. These are also the types you obtain when you read files.
 
+> Please note that the order of the fields is important for MatlabClassObjects to be read properly in MATLAB. You may get `Warning: Fields of object 'tc' do not match the current constructor definition for class 'TestClass'. The object has been converted to a structure.`. Consider using `OrderedDict` if you have multiple fields.
+
 Write a single class object:
 ```julia
-d = Dict("foo" => 5.0)
-obj = MatlabClassObject(d, "TestClassOld")
-matwrite("matfile.mat", Dict("tc_old" => obj))
+d = Dict{String,Any}("foo" => 5.0)
+obj = MatlabClassObject(d, "TestClass")
+matwrite("matfile.mat", Dict("tc" => obj))
 ```
 
 A class object array
 ```julia
-class_array = MatlabStructArray(["foo"], [[5.0, "bar"]], "TestClassOld")
+class_array = MatlabStructArray(["foo"], [[5.0, "bar"]], "TestClass")
 matwrite("matfile.mat", Dict("class_array" => class_array))
 ```
 
 Also a class object array, but will be converted to `MatlabStructArray` internally:
 ```julia
 class_array = MatlabClassObject[
-    MatlabClassObject(Dict("foo" => 5.0), "TestClassOld"),
-    MatlabClassObject(Dict("foo" => "bar"), "TestClassOld")
+    MatlabClassObject(Dict{String,Any}("foo" => 5.0), "TestClass"),
+    MatlabClassObject(Dict{String,Any}("foo" => "bar"), "TestClass")
 ]
 matwrite("matfile.mat", Dict("class_array" => class_array))
 ```
@@ -109,9 +111,8 @@ matwrite("matfile.mat", Dict("class_array" => class_array))
 A cell array:
 ```julia
 cell_array = Any[
-    MatlabClassObject(Dict("foo" => 5.0), "TestClassOld"),
-    MatlabClassObject(Dict("a" => "bar"), "AnotherClass")
+    MatlabClassObject(Dict{String,Any}("foo" => 5.0), "TestClass"),
+    MatlabClassObject(Dict{String,Any}("a" => "bar"), "AnotherClass")
 ]
 matwrite("matfile.mat", Dict("cell_array" => cell_array))
 ```
-

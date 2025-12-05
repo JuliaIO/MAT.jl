@@ -27,7 +27,7 @@
 # http://www.mathworks.com/help/pdf_doc/matlab/matfile_format.pdf
 
 module MAT_v4
-using BufferedStreams, HDF5, SparseArrays
+using HDF5, SparseArrays
 import Base: read, write, close
 
 round_uint8(data) = round.(UInt8, data)
