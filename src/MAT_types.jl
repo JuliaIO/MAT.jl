@@ -258,6 +258,16 @@ function Base.Array{D,N}(arr::MatlabStructArray{N}) where {D<:AbstractDict,N}
     return result
 end
 
+function Base.getindex(arr::MatlabStructArray, s::Integer)
+    row_values = [getindex(v, s) for v in arr.values]
+    if isempty(arr.class)
+        D = Dict{String,Any}
+    else
+        D = OrderedDict{String,Any}
+    end
+    return create_struct(D, arr.names, row_values, arr.class)
+end
+
 function create_struct(::Type{D}, keys, values, class::String) where {T,D<:AbstractDict{T}}
     return D(T.(keys) .=> values)
 end

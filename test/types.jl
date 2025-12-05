@@ -78,6 +78,28 @@ using Dates
     @test_throws ErrorException(msg) MatlabStructArray(wrong_sarr)
 end
 
+@testset "MatlabStructArray integer indexing" begin
+    d_arr = Dict{String, Any}[
+        Dict("x"=>[1.0,2.0], SubString("y")=>3.0),
+        Dict("x"=>[5.0,6.0], "y"=>[])
+    ]
+    s_arr = MatlabStructArray(d_arr)
+    @test s_arr[1] == Array(s_arr)[1]
+    @test s_arr[2] == Array(s_arr)[2]
+
+    s_arr = MatlabStructArray(reshape(d_arr, 1, 2))
+    @test s_arr[1] == Array(s_arr)[1]
+    @test s_arr[2] == Array(s_arr)[2]
+
+    s_arr = MatlabStructArray(reshape(d_arr, 2, 1))
+    @test s_arr[1] == Array(s_arr)[1]
+    @test s_arr[2] == Array(s_arr)[2]
+
+    s_arr = MatlabStructArray(reshape(d_arr, 2, 1), "TestClass")
+    @test s_arr[1] == Array(s_arr)[1]
+    @test s_arr[2] == Array(s_arr)[2]
+end
+
 @testset "MatlabClassObject" begin
     d = Dict{String,Any}("a" => 5)
     obj = MatlabClassObject(d, "TestClassOld")
