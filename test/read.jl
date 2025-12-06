@@ -353,6 +353,22 @@ for format in ["v7", "v7.3"]
     end
     end
 
+    @testset "corrupted subsystem" begin
+    let objtestfile = "corrupted_subsystem.mat"
+        filepath = joinpath(dirname(@__FILE__), format, objtestfile)
+        # Subsystem data is corrupted - unsupported version (v=5)
+        @test_logs (:warn,) match_mode=:any matread(filepath)
+    end
+    end
+
+    @testset "corrupted mcos object metadata" begin
+    let objtestfile = "corrupted_mcos_object_metadata.mat"
+        filepath = joinpath(dirname(@__FILE__), format, objtestfile)
+        # object metadata is corrupted - object ID does not exist in file
+        @test_logs (:warn,) match_mode=:any matread(filepath)
+    end
+    end
+
 end
 
 # test reading of old-style Matlab object in v7.3 format
