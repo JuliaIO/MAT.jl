@@ -325,9 +325,12 @@ end
 
 function get_dynamic_properties(subsys::Subsystem, dep_id::UInt32)
 
-    if length(subsys.dynprop_metadata) == 0
+    if dep_id == UInt32(0)
         return Dict{String,Any}()
     end
+
+    # dynprops metadata is stored in format
+    # [(nprops, prop_obj_id_1, ..., prop_obj_id_n), ...] for each dep_id
 
     offset = 1
     while dep_id > 0
@@ -341,7 +344,7 @@ function get_dynamic_properties(subsys::Subsystem, dep_id::UInt32)
     offset += 1
     dyn_prop_obj_ids = subsys.dynprop_metadata[offset:(offset + ndynprops - 1)]
 
-    if dyn_prop_obj_ids == UInt32[]
+    if length(dyn_prop_obj_ids) == 0
         return Dict{String,Any}()
     end
     dyn_prop_map = Dict{String,Any}()
@@ -361,7 +364,7 @@ function get_properties(subsys::Subsystem, object_id::UInt32)
         return Dict{String,Any}()
     end
 
-    class_id, _, _, saveobj_id, normobj_id, _ = get_object_metadata(subsys, object_id)
+    class_id, _, _, saveobj_id, normobj_id, dep_id = get_object_metadata(subsys, object_id)
     if saveobj_id != 0
         saveobj_ret_type = true
         obj_type_id = saveobj_id
@@ -372,7 +375,7 @@ function get_properties(subsys::Subsystem, object_id::UInt32)
 
     defaults = get_default_properties(subsys, class_id)
     prop_map = merge(defaults, get_saved_properties(subsys, obj_type_id, saveobj_ret_type))
-    dyn_props = get_dynamic_properties(subsys, object_id)
+    dyn_props = get_dynamic_properties(subsys, dep_id)
     merge!(prop_map, dyn_props)
     return prop_map
 end
