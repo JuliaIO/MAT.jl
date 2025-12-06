@@ -273,6 +273,10 @@ for format in ["v7", "v7.3"]
         @test dt isa DateTime
         @test dt - DateTime(2019, 12, 2, 16, 42, 49) < Second(1)
 
+        @test "testDatetimeComplex" in keys(vars)
+        dtc = vars["testDatetimeComplex"]
+        @test dtc isa DateTime
+
         # test no conversion at all
         vars = matread(filepath; convert_opaque=false)["s"]
         t = vars["testTable"]
