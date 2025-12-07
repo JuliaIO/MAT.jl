@@ -39,6 +39,9 @@ const matlab_saveobj_ret_types = String[
     "timetable"
 ]
 
+# Warning message for unknown regions
+const warn_msg = "Unknown metadata found in MCOS subsystem. Please raise an issue to the maintainers to help improve support."
+
 mutable struct Subsystem
     load_object_cache::Dict{UInt32,MatlabOpaque}
     save_object_cache::IdDict{MatlabOpaque,UInt32}
@@ -183,7 +186,6 @@ function check_unknown_regions(subsys::Subsystem)
     # Warn about unsupported regions
     # We don't know what they contain yet
     # Users can raise issues if they see this warning to help improve support
-    warn_msg = "Unknown metadata found in MCOS subsystem. Please raise an issue to the maintainers to help improve support."
 
     if length(subsys._u6_metadata) > 0
         # This region is supposedly empty
@@ -256,6 +258,12 @@ end
 function get_classname(subsys::Subsystem, class_id::UInt32)
     namespace_idx = subsys.class_id_metadata[class_id * 4 + 1]
     classname_idx = subsys.class_id_metadata[class_id * 4 + 2]
+
+    if subsys.class_id_metadata[class_id * 4 + 3] != 0 ||
+       subsys.class_id_metadata[class_id * 4 + 4] != 0
+       # Unknown metadata
+       @warn warn_msg
+    end
 
     namespace = if namespace_idx == 0
         ""
@@ -391,7 +399,12 @@ function get_properties(subsys::Subsystem, object_id::UInt32)
         return Dict{String,Any}()
     end
 
-    class_id, _, _, saveobj_id, normobj_id, _ = get_object_metadata(subsys, object_id)
+    class_id, _x1, _x2, saveobj_id, normobj_id, _ = get_object_metadata(subsys, object_id)
+    if _x1 != 0 || _x2 != 0
+        # Unknown metadata
+        @warn warn_msg
+    end
+
     if saveobj_id != 0
         saveobj_ret_type = true
         obj_type_id = saveobj_id
