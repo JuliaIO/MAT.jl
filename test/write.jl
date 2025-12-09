@@ -92,13 +92,19 @@ test_write(Dict(
     "cell" => Any[1 2.01 "string" Any["string1" "string2"]]
 ))
 
+s3 = Dict()
+for i in 1:526
+    s3["field$i"] = 1
+end
+
 test_write(Dict(
     "s" => Dict(
         "a" => 1.0,
         "b" => [1.0 2.0],
         "c" => [1.0 2.0 3.0]
     ),
-    "s2" => Dict("a" => [1.0 2.0])
+    "s2" => Dict("a" => [1.0 2.0]),
+    "s3" => s3
 ))
 
 test_write(Dict(

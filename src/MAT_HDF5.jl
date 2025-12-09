@@ -37,13 +37,13 @@ import Dates
 import Tables
 import PooledArrays: PooledArray
 
-import ..MAT_types: 
+import ..MAT_types:
     convert_struct_array,
     EmptyStruct,
-    MatlabClassObject, 
+    MatlabClassObject,
     MatlabOpaque,
-    MatlabStructArray,  
-    MatlabTable, 
+    MatlabStructArray,
+    MatlabTable,
     ScalarOrArray,
     StructArrayField
 
@@ -722,6 +722,31 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::Emp
     end
 end
 
+function _write_field_reference!(mfile::MatlabHDF5File, parent::HDF5Parent, k::Vector{String})
+    pathrefs = "/#refs#"
+    fid = HDF5.file(parent)
+    local g
+    local ref
+    if !haskey(fid, pathrefs)
+        g = create_group(fid, pathrefs)
+    else
+        g = fid[pathrefs]
+    end
+
+    try
+        mfile.refcounter +=1
+        itemname = string(mfile.refcounter)
+        cset, ctype = create_dataset(g, itemname, HDF5.VLen(k))
+        write_dataset(cset, ctype, HDF5.VLen(k))
+        tmp = g[itemname]
+        ref = Reference(tmp, pathrefs*"/"*itemname)
+        close(tmp)
+    finally
+        close(g)
+    end
+    return ref
+end
+
 # Write a struct from arrays of keys and values
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, k::Vector{String}, v::Vector)
     if length(k) == 0
@@ -744,7 +769,14 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, k::Vec
         for i = 1:length(k)
             m_write(mfile, g, k[i], v[i])
         end
-        write_attribute(g, "MATLAB_fields", HDF5.VLen(k))
+        total_chars = sum(length, k)
+        if total_chars < 4096
+            write_attribute(g, "MATLAB_fields", HDF5.VLen(k))
+        else
+            # Write reference instead
+            ref = _write_field_reference!(mfile, parent, k)
+            write_attribute(g, "MATLAB_fields", ref)
+        end
     finally
         close(g)
     end
