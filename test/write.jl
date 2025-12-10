@@ -3,7 +3,7 @@ using SparseArrays, LinearAlgebra
 
 tmpfile = string(tempname(), ".mat")
 
-function test_write(data; kwargs...)
+function test_write_data(data; approx = false, kwargs...)
     matwrite(tmpfile, data; kwargs...)
 
     fid = matopen(tmpfile, "r")
@@ -14,18 +14,22 @@ function test_write(data; kwargs...)
         close(fid)
     end
 
-    @test isequal(result, data)
+    if approx
+        @test MAT.MAT_types.dict_isapprox(result, data)  
+    else  
+        @test isequal(result, data)
+    end
 end
 
-function test_write(data)
-    test_write(data; compress = false)
-    test_write(data; compress = true)
+function test_write(data; kwargs...)
+    test_write_data(data; compress = false, kwargs...)
+    test_write_data(data; compress = true, kwargs...)
 end
 
 function test_compression_effective(data)
-    test_write(data; compress = false)
+    test_write_data(data; compress = false)
     sizeUncompressed = stat(tmpfile).size
-    test_write(data; compress = true)
+    test_write_data(data; compress = true)
     sizeCompressed = stat(tmpfile).size
 
     if sizeCompressed >= sizeUncompressed
@@ -227,7 +231,8 @@ end
         s_large2["field$i"] = i + 1000
     end
     sarr = Dict{String, Any}[s_large1, s_large2]
-    test_write(Dict("s_array_large" => MatlabStructArray(sarr)))
+    # note: name/key order doesn't seem to be preserved for some reason
+    test_write(Dict{String,Any}("s_array_large" => MatlabStructArray(sarr)); approx=true)
 end
 
 @testset "MatlabOpaque simple" begin

@@ -21,6 +21,8 @@ using Dates
     @test isapprox(MatlabStructArray(["a"], [[0.1, 0.2]]), MatlabStructArray(["a"], [[0.1+eps(0.1), 0.2]]))
     @test !isapprox(MatlabStructArray(["a"], [[0.1, 0.2]]), MatlabStructArray(["b"], [[0.1, 0.2]]))
     @test !isapprox(MatlabStructArray(["a"], [[0.1, 0.2]]), MatlabStructArray(["a"], [[0.11, 0.2]]))
+    # name order shouldn't matter in isapprox
+    @test isapprox(MatlabStructArray(["a", "b"], [[0.1], [0.2]]), MatlabStructArray(["b", "a"], [[0.2], [0.1]]))
 
     # empty struct array constructor
     s_arr = MatlabStructArray(["x", "y"], (0,1))
