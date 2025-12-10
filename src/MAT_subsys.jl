@@ -402,7 +402,7 @@ function get_properties(subsys::Subsystem, object_id::UInt32)
         return Dict{String,Any}()
     end
 
-    class_id, _x1, _x2, saveobj_id, normobj_id, _ = get_object_metadata(subsys, object_id)
+    class_id, _x1, _x2, saveobj_id, normobj_id, dep_id = get_object_metadata(subsys, object_id)
     if _x1 != 0 || _x2 != 0
         # Unknown metadata
         @warn warn_msg
