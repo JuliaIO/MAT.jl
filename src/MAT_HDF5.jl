@@ -566,7 +566,7 @@ end
 # Write cell arrays
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::AbstractArray{T}, object_decode::UInt32=UInt32(0)) where T
     data = _normalize_arr(data)
-    refs = _write_references!(mfile, parent, data)
+    refs = _write_references(mfile, parent, data)
     # Write the references as the chosen variable
     cset, ctype = create_dataset(parent, name, refs)
     try
@@ -583,7 +583,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::
     end
 end
 
-function _write_references!(mfile::MatlabHDF5File, parent::HDF5Parent, data::AbstractArray)
+function _write_references(mfile::MatlabHDF5File, parent::HDF5Parent, data::AbstractArray)
     pathrefs = "/#refs#"
     fid = HDF5.file(parent)
     local g
@@ -631,7 +631,7 @@ function _write_references!(mfile::MatlabHDF5File, parent::HDF5Parent, data::Abs
     return refs
 end
 
-function _write_field_reference!(mfile::MatlabHDF5File, parent::HDF5Parent, k::Vector{String})
+function _write_field_reference(mfile::MatlabHDF5File, parent::HDF5Parent, k::Vector{String})
     pathrefs = "/#refs#"
     fid = HDF5.file(parent)
     local g
@@ -662,7 +662,7 @@ function _write_struct_fields(mfile::MatlabHDF5File, parent::Union{HDF5.Group, H
         write_attribute(parent, struct_field_attr_matlab, HDF5.VLen(fieldnames))
     else
         # Write Reference instead
-        ref = _write_field_reference!(mfile, parent, fieldnames)
+        ref = _write_field_reference(mfile, parent, fieldnames)
         write_attribute(parent, struct_field_attr_matlab, ref)
     end
 end
@@ -699,7 +699,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::M
                 _write_struct_fields(mfile, g, arr.names)
             end
             for (fieldname, field_values) in arr
-                refs = _write_references!(mfile, parent, field_values)
+                refs = _write_references(mfile, parent, field_values)
                 dset, dtype = create_dataset(g, fieldname, refs)
                 try
                     write_dataset(dset, dtype, refs)
