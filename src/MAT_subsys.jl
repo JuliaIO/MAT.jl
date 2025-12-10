@@ -252,41 +252,12 @@ function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_
         end
 
         subsys.prop_vals_defaults = mcos_data[end, 1]
+        check_unknown_regions(subsys)
         return subsys
     catch
         @warn "Failed to load MAT-file subsystem data. Opaque objects will be skipped. Error: $(catch_backtrace())"
         return subsys
     end
-
-    if mcos_data isa Tuple
-        # Backward compatibility with MAT_v5
-        mcos_data = mcos_data[2]
-    end
-    fwrap_metadata::Vector{UInt8} = vec(mcos_data[1, 1])
-
-    version = swapped_reinterpret(fwrap_metadata[1:4], swap_bytes)[1]
-    if version <= 1 || version > FWRAP_VERSION
-        error("Cannot read subsystem: Unsupported FileWrapper version: $version")
-    end
-
-    subsys.num_names = swapped_reinterpret(fwrap_metadata[5:8], swap_bytes)[1]
-    load_mcos_names!(subsys, fwrap_metadata)
-
-    load_mcos_regions!(subsys, fwrap_metadata, swap_bytes)
-
-    if version == 2
-        subsys.prop_vals_saved = mcos_data[3:(end - 1), 1]
-    elseif version == 3
-        subsys.prop_vals_saved = mcos_data[3:(end - 2), 1]
-        subsys.mcos_class_alias_metadata = mcos_data[end - 1, 1]
-    else
-        subsys.prop_vals_saved = mcos_data[3:(end - 3), 1]
-        subsys._c3 = mcos_data[end - 2, 1]
-    end
-
-    subsys.prop_vals_defaults = mcos_data[end, 1]
-    check_unknown_regions(subsys)
-    return subsys
 end
 
 function get_classname(subsys::Subsystem, class_id::UInt32)
