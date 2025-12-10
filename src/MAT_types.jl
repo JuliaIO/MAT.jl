@@ -494,7 +494,7 @@ end
 ms_to_datetime(ms::Complex) = ms_to_datetime(real(ms))
 function ms_to_datetime(ms::Real)
     s, ms_rem = fldmod(ms, 1_000)  # whole seconds and remainder milliseconds
-    return DateTime(1970, 1, 1) + Second(s) + Millisecond(ms_rem)
+    return DateTime(1970, 1, 1) + Second(s) + Millisecond(round(Int, ms_rem))
 end
 
 function to_matlab_data(d::DateTime)
