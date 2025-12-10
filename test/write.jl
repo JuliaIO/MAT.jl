@@ -94,7 +94,7 @@ test_write(Dict(
 
 s3 = Dict()
 for i in 1:526
-    s3["field$i"] = 1
+    s3["field$i"] = i
 end
 
 test_write(Dict(
@@ -219,6 +219,15 @@ end
     matwrite(tmpfile, Dict("class_array" => carr))
     carr_read = matread(tmpfile)["class_array"]
     @test carr_read == MatlabStructArray(carr)
+
+    s_large1 = Dict()
+    s_large2 = Dict()
+    for i in 1:600
+        s_large1["field$i"] = i
+        s_large2["field$i"] = i + 1000
+    end
+    sarr = Dict{String, Any}[s_large1, s_large2]
+    test_write(Dict("s_array_large" => MatlabStructArray(sarr)))
 end
 
 @testset "MatlabOpaque simple" begin

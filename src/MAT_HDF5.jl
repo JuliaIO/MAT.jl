@@ -158,6 +158,7 @@ const sparse_attr_matlab = "MATLAB_sparse"
 const int_decode_attr_matlab = "MATLAB_int_decode"
 const object_type_attr_matlab = "MATLAB_object_decode"
 const object_decode_attr_matlab = "MATLAB_object_decode"
+const struct_field_attr_matlab = "MATLAB_fields"
 
 ### Reading
 function read_complex(dtype::HDF5.Datatype, dset::HDF5.Dataset, ::Type{T}) where T
@@ -193,8 +194,8 @@ function m_read(dset::HDF5.Dataset, subsys::Subsystem)
         elseif mattype == "struct"
             # Not sure if this check is necessary but it is checked in
             # `m_read(g::HDF5.Group)`
-            if haskey(dset, "MATLAB_fields")
-                field_names = [join(n) for n in read_attribute(dset, "MATLAB_fields")]
+            if haskey(dset, struct_field_attr_matlab)
+                field_names = [join(n) for n in read_attribute(dset, struct_field_attr_matlab)]
                 return MatlabStructArray(field_names, tuple(dims...))
             else
                 return Dict{String,Any}()
@@ -219,7 +220,7 @@ function m_read(dset::HDF5.Dataset, subsys::Subsystem)
         if mattype == "FileWrapper__"
             return read_cell(dset, subsys)
         end
-        if haskey(dset, "MATLAB_fields")
+        if haskey(dset, struct_field_attr_matlab)
             @warn "Enumeration Instances are not supported currently."
             return missing
         end
@@ -292,8 +293,8 @@ function read_sparse_matrix(g::HDF5.Group, mattype::String)
 end
 
 function read_struct_as_dict(g::HDF5.Group, subsys::Subsystem)
-    if haskey(g, "MATLAB_fields")
-        fn = [join(f) for f in read_attribute(g, "MATLAB_fields")]
+    if haskey(g, struct_field_attr_matlab)
+        fn = [join(f) for f in read_attribute(g, struct_field_attr_matlab)]
     else
         fn = keys(g)
     end
@@ -630,6 +631,41 @@ function _write_references!(mfile::MatlabHDF5File, parent::HDF5Parent, data::Abs
     return refs
 end
 
+function _write_field_reference!(mfile::MatlabHDF5File, parent::HDF5Parent, k::Vector{String})
+    pathrefs = "/#refs#"
+    fid = HDF5.file(parent)
+    local g
+    local ref
+    if !haskey(fid, pathrefs)
+        g = create_group(fid, pathrefs)
+    else
+        g = fid[pathrefs]
+    end
+
+    try
+        mfile.refcounter +=1
+        itemname = string(mfile.refcounter)
+        cset, ctype = create_dataset(g, itemname, HDF5.VLen(k))
+        write_dataset(cset, ctype, HDF5.VLen(k))
+        tmp = g[itemname]
+        ref = Reference(tmp, pathrefs*"/"*itemname)
+        close(tmp)
+    finally
+        close(g)
+    end
+    return ref
+end
+
+function _write_struct_fields(mfile::MatlabHDF5File, parent::Union{HDF5.Group, HDF5.Dataset}, fieldnames::Vector{String})
+    total_chars = sum(length, fieldnames)
+    if total_chars < 4096
+        write_attribute(parent, struct_field_attr_matlab, HDF5.VLen(fieldnames))
+    else
+        # Write Reference instead
+        ref = _write_field_reference!(mfile, parent, fieldnames)
+        write_attribute(parent, struct_field_attr_matlab, ref)
+    end
+end
 
 # Struct array: Array of Dict => MATLAB struct array
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::AbstractArray{<:AbstractDict})
@@ -646,7 +682,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::M
         try
             write_attribute(dset, empty_attr_matlab, 0x01)
             write_attribute(dset, name_type_attr_matlab, "struct")
-            write_attribute(dset, "MATLAB_fields", HDF5.VLen(arr.names))
+            _write_struct_fields(mfile, dset, arr.names)
             write_dataset(dset, dtype, adata)
         finally
             close(dtype); close(dset)
@@ -656,11 +692,11 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::M
         try
             if isempty(arr.class)
                 write_attribute(g, name_type_attr_matlab, "struct")
-                write_attribute(g, "MATLAB_fields", HDF5.VLen(arr.names))
+                _write_struct_fields(mfile, g, arr.names)
             else
                 write_attribute(g, name_type_attr_matlab, arr.class)
                 write_attribute(g, object_decode_attr_matlab, UInt32(2))
-                write_attribute(g, "MATLAB_fields", HDF5.VLen(arr.names))
+                _write_struct_fields(mfile, g, arr.names)
             end
             for (fieldname, field_values) in arr
                 refs = _write_references!(mfile, parent, field_values)
@@ -701,7 +737,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::M
         write_attribute(g, name_type_attr_matlab, obj.class)
         write_attribute(g, object_decode_attr_matlab, UInt32(2))
         all_keys = collect(keys(obj))
-        write_attribute(g, "MATLAB_fields", HDF5.VLen(all_keys))
+        _write_struct_fields(mfile, g, all_keys)
         for (ki, vi) in zip(all_keys, values(obj))
             m_write(mfile, g, ki, vi)
         end
@@ -720,31 +756,6 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::Emp
     finally
         close(dtype); close(dset)
     end
-end
-
-function _write_field_reference!(mfile::MatlabHDF5File, parent::HDF5Parent, k::Vector{String})
-    pathrefs = "/#refs#"
-    fid = HDF5.file(parent)
-    local g
-    local ref
-    if !haskey(fid, pathrefs)
-        g = create_group(fid, pathrefs)
-    else
-        g = fid[pathrefs]
-    end
-
-    try
-        mfile.refcounter +=1
-        itemname = string(mfile.refcounter)
-        cset, ctype = create_dataset(g, itemname, HDF5.VLen(k))
-        write_dataset(cset, ctype, HDF5.VLen(k))
-        tmp = g[itemname]
-        ref = Reference(tmp, pathrefs*"/"*itemname)
-        close(tmp)
-    finally
-        close(g)
-    end
-    return ref
 end
 
 # Write a struct from arrays of keys and values
@@ -769,14 +780,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, k::Vec
         for i = 1:length(k)
             m_write(mfile, g, k[i], v[i])
         end
-        total_chars = sum(length, k)
-        if total_chars < 4096
-            write_attribute(g, "MATLAB_fields", HDF5.VLen(k))
-        else
-            # Write reference instead
-            ref = _write_field_reference!(mfile, parent, k)
-            write_attribute(g, "MATLAB_fields", ref)
-        end
+        _write_struct_fields(mfile, g, k)
     finally
         close(g)
     end
