@@ -217,11 +217,45 @@ function get_region(
 end
 
 function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_bytes::Bool)
-    subsys.handle_data = get(subsystem_data, "handle", nothing)
-    subsys.java_data = get(subsystem_data, "java", nothing)
-    mcos_data = get(subsystem_data, "MCOS", nothing)
-    if mcos_data === nothing
-        return nothing
+    try
+        subsys.handle_data = get(subsystem_data, "handle", nothing)
+        subsys.java_data = get(subsystem_data, "java", nothing)
+        mcos_data = get(subsystem_data, "MCOS", nothing)
+        if mcos_data === nothing
+            return nothing
+        end
+
+        if mcos_data isa Tuple
+            # Backward compatibility with MAT_v5
+            mcos_data = mcos_data[2]
+        end
+        fwrap_metadata::Vector{UInt8} = vec(mcos_data[1, 1])
+
+        version = swapped_reinterpret(fwrap_metadata[1:4], swap_bytes)[1]
+        if version <= 1 || version > FWRAP_VERSION
+            error("Cannot read subsystem: Unsupported FileWrapper version: $version")
+        end
+
+        subsys.num_names = swapped_reinterpret(fwrap_metadata[5:8], swap_bytes)[1]
+        load_mcos_names!(subsys, fwrap_metadata)
+
+        load_mcos_regions!(subsys, fwrap_metadata, swap_bytes)
+
+        if version == 2
+            subsys.prop_vals_saved = mcos_data[3:(end - 1), 1]
+        elseif version == 3
+            subsys.prop_vals_saved = mcos_data[3:(end - 2), 1]
+            subsys.mcos_class_alias_metadata = mcos_data[end - 1, 1]
+        else
+            subsys.prop_vals_saved = mcos_data[3:(end - 3), 1]
+            subsys._c3 = mcos_data[end - 2, 1]
+        end
+
+        subsys.prop_vals_defaults = mcos_data[end, 1]
+        return subsys
+    catch
+        @warn "Failed to load MAT-file subsystem data. Opaque objects will be skipped. Error: $(catch_backtrace())"
+        return subsys
     end
 
     if mcos_data isa Tuple
@@ -449,41 +483,53 @@ function load_mcos_object(metadata::Dict, type_name::String, subsys::Subsystem)
 end
 
 function load_mcos_object(metadata::Array{UInt32}, type_name::String, subsys::Subsystem)
-    if type_name != "MCOS"
-        @warn "Loading Type:$type_name is not implemented. Returning metadata."
-        return metadata
-    end
-
-    if metadata[1, 1] != MCOS_IDENTIFIER
-        @warn "MCOS object metadata is corrupted. Returning raw data."
-        return metadata
-    end
-
-    ndims = metadata[2, 1]
-    dims = metadata[3:(2 + ndims), 1]
-    nobjects = prod(dims)
-    object_ids = metadata[(3 + ndims):(2 + ndims + nobjects), 1]
-
-    class_id = metadata[end, 1]
-    classname = get_classname(subsys, class_id)
-
-    if nobjects == 1
-        oid = object_ids[1]
-        obj = get_object!(subsys, oid, classname)
-        if subsys.convert_opaque
-            return convert_opaque(obj; table=subsys.table_type)
-        else
-            return obj
+    try
+        if length(subsys.class_id_metadata) == 0
+            # Subsystem was not loaded properly
+            # No need to warn again
+            return metadata
         end
-    else
-        # no need to convert_opaque, matlab wraps object arrays in a single class normally
-        object_arr = Array{MatlabOpaque}(undef, convert(Vector{Int}, dims)...)
-        for i in 1:length(object_arr)
-            oid = object_ids[i]
+
+        if type_name != "MCOS"
+            @warn "Loading Type:$type_name is not implemented. Returning metadata."
+            return metadata
+        end
+
+        if metadata[1, 1] != MCOS_IDENTIFIER
+            @warn "MCOS object metadata is corrupted. Returning raw data."
+            return metadata
+        end
+
+        ndims = metadata[2, 1]
+        dims = metadata[3:(2 + ndims), 1]
+        nobjects = prod(dims)
+        object_ids = metadata[(3 + ndims):(2 + ndims + nobjects), 1]
+
+        class_id = metadata[end, 1]
+        classname = get_classname(subsys, class_id)
+
+        if nobjects == 1
+            oid = object_ids[1]
             obj = get_object!(subsys, oid, classname)
-            object_arr[i] = obj
+            if subsys.convert_opaque
+                return convert_opaque(obj; table=subsys.table_type)
+            else
+                return obj
+            end
+        else
+            # no need to convert_opaque, matlab wraps object arrays in a single class normally
+            object_arr = Array{MatlabOpaque}(undef, convert(Vector{Int}, dims)...)
+            for i in 1:length(object_arr)
+                oid = object_ids[i]
+                obj = get_object!(subsys, oid, classname)
+                object_arr[i] = obj
+            end
+            return object_arr
         end
-        return object_arr
+
+    catch e
+        @warn "Failed to load MCOS object. Returning raw metadata. Error: $e"
+        return metadata
     end
 end
 
