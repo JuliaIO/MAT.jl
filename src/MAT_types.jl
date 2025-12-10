@@ -176,7 +176,8 @@ function Base.:(==)(m1::MatlabStructArray{N}, m2::MatlabStructArray{N}) where {N
 end
 
 function Base.isapprox(m1::MatlabStructArray, m2::MatlabStructArray; kwargs...)
-    return isequal(m1.class, m2.class) && isequal(m1.names, m2.names) && isapprox(m1.values, m2.values; kwargs...)
+    return isequal(m1.class, m2.class) && issetequal(m1.names, m2.names) && 
+    key_based_isapprox(m1.names, m1, m2; kwargs...)
 end
 
 function find_index(m::MatlabStructArray, s::AbstractString)
@@ -413,14 +414,18 @@ function Base.isapprox(m1::MatlabOpaque, m2::MatlabOpaque; kwargs...)
 end
 
 function dict_isapprox(d1::AbstractDict{T}, d2::AbstractDict{T}; kwargs...) where T
-    keys(d1) == keys(d2) || return false
-    for k in keys(d1)
-        v1, v2 = d1[k], d2[k]
-        value_isapprox(v1, v2) || return false
+    issetequal(keys(d1), keys(d2)) || return false
+    return key_based_isapprox(keys(d1), d1, d2; kwargs...)
+end
+dict_isapprox(d1::AbstractDict{T1}, d2::AbstractDict{T2}; kwargs...) where {T1,T2} = false
+
+function key_based_isapprox(keys, collection1, collection2; kwargs...)
+    for k in keys
+        v1, v2 = collection1[k], collection2[k]
+        value_isapprox(v1, v2; kwargs...) || return false
     end
     return true
 end
-dict_isapprox(d1::AbstractDict{T1}, d2::AbstractDict{T2}; kwargs...) where {T1,T2} = false
 
 value_isapprox(x1::AbstractString, x2::AbstractString; kwargs...) = isequal(x1, x2)
 value_isapprox(x1, x2; kwargs...) = isapprox(x1, x2; kwargs...)

@@ -3,7 +3,7 @@ using SparseArrays, LinearAlgebra
 
 tmpfile = string(tempname(), ".mat")
 
-function test_write(data; kwargs...)
+function test_write_data(data; approx = false, kwargs...)
     matwrite(tmpfile, data; kwargs...)
 
     fid = matopen(tmpfile, "r")
@@ -14,18 +14,22 @@ function test_write(data; kwargs...)
         close(fid)
     end
 
-    @test isequal(result, data)
+    if approx
+        @test MAT.MAT_types.dict_isapprox(result, data)  
+    else  
+        @test isequal(result, data)
+    end
 end
 
-function test_write(data)
-    test_write(data; compress = false)
-    test_write(data; compress = true)
+function test_write(data; kwargs...)
+    test_write_data(data; compress = false, kwargs...)
+    test_write_data(data; compress = true, kwargs...)
 end
 
 function test_compression_effective(data)
-    test_write(data; compress = false)
+    test_write_data(data; compress = false)
     sizeUncompressed = stat(tmpfile).size
-    test_write(data; compress = true)
+    test_write_data(data; compress = true)
     sizeCompressed = stat(tmpfile).size
 
     if sizeCompressed >= sizeUncompressed
@@ -92,13 +96,19 @@ test_write(Dict(
     "cell" => Any[1 2.01 "string" Any["string1" "string2"]]
 ))
 
+s3 = Dict()
+for i in 1:526
+    s3["field$i"] = i
+end
+
 test_write(Dict(
     "s" => Dict(
         "a" => 1.0,
         "b" => [1.0 2.0],
         "c" => [1.0 2.0 3.0]
     ),
-    "s2" => Dict("a" => [1.0 2.0])
+    "s2" => Dict("a" => [1.0 2.0]),
+    "s3" => s3
 ))
 
 test_write(Dict(
@@ -213,6 +223,16 @@ end
     matwrite(tmpfile, Dict("class_array" => carr))
     carr_read = matread(tmpfile)["class_array"]
     @test carr_read == MatlabStructArray(carr)
+
+    s_large1 = Dict()
+    s_large2 = Dict()
+    for i in 1:600
+        s_large1["field$i"] = i
+        s_large2["field$i"] = i + 1000
+    end
+    sarr = Dict{String, Any}[s_large1, s_large2]
+    # note: name/key order doesn't seem to be preserved for some reason
+    test_write(Dict{String,Any}("s_array_large" => MatlabStructArray(sarr)); approx=true)
 end
 
 @testset "MatlabOpaque simple" begin
