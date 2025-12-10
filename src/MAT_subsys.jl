@@ -39,6 +39,9 @@ const matlab_saveobj_ret_types = String[
     "timetable"
 ]
 
+# Warning message for unknown regions
+const warn_msg = "Unknown metadata found in MCOS subsystem. Please raise an issue to the maintainers to help improve support."
+
 mutable struct Subsystem
     load_object_cache::Dict{UInt32,MatlabOpaque}
     save_object_cache::IdDict{MatlabOpaque,UInt32}
@@ -179,6 +182,34 @@ function load_mcos_regions!(
     end
 end
 
+function check_unknown_regions(subsys::Subsystem)
+    # Warn about unsupported regions
+    # We don't know what they contain yet
+    # Users can raise issues if they see this warning to help improve support
+
+    if length(subsys._u6_metadata) > 0
+        # This region is supposedly empty
+        @warn warn_msg
+    end
+
+    if any(subsys._u7_metadata .!= 0)
+        # This is an 8 byte region, all zeros
+        @warn warn_msg
+    end
+
+    if subsys._c3 === nothing
+        return
+    else
+        for i=1:length(subsys._c3)
+            # This region is a cell array of empty structs
+            if length(subsys._c3[i]) > 0
+                @warn warn_msg
+                break
+            end
+        end
+    end
+end
+
 function get_region(
     fwrap_metadata::Vector{UInt8}, region_offsets::AbstractVector{UInt32}, region::Integer
 )
@@ -221,6 +252,7 @@ function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_
         end
 
         subsys.prop_vals_defaults = mcos_data[end, 1]
+        check_unknown_regions(subsys)
         return subsys
     catch
         @warn "Failed to load MAT-file subsystem data. Opaque objects will be skipped. Error: $(catch_backtrace())"
@@ -231,6 +263,12 @@ end
 function get_classname(subsys::Subsystem, class_id::UInt32)
     namespace_idx = subsys.class_id_metadata[class_id * 4 + 1]
     classname_idx = subsys.class_id_metadata[class_id * 4 + 2]
+
+    if subsys.class_id_metadata[class_id * 4 + 3] != 0 ||
+       subsys.class_id_metadata[class_id * 4 + 4] != 0
+       # Unknown metadata
+       @warn warn_msg
+    end
 
     namespace = if namespace_idx == 0
         ""
@@ -369,7 +407,12 @@ function get_properties(subsys::Subsystem, object_id::UInt32)
         return Dict{String,Any}()
     end
 
-    class_id, _, _, saveobj_id, normobj_id, dep_id = get_object_metadata(subsys, object_id)
+    class_id, _x1, _x2, saveobj_id, normobj_id, dep_id = get_object_metadata(subsys, object_id)
+    if _x1 != 0 || _x2 != 0
+        # Unknown metadata
+        @warn warn_msg
+    end
+
     if saveobj_id != 0
         saveobj_ret_type = true
         obj_type_id = saveobj_id
