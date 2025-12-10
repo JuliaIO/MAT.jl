@@ -357,15 +357,13 @@ for format in ["v7", "v7.3"]
     let objtestfile = "corrupted_subsystem.mat"
         filepath = joinpath(dirname(@__FILE__), format, objtestfile)
         # Subsystem data is corrupted - unsupported version (v=5)
-        @test_logs (:warn,) match_mode=:any matread(filepath)
-    end
+        @test_logs (:warn,r"^Failed to load MAT-file subsystem data") matread(filepath)
     end
 
-    @testset "corrupted mcos object metadata" begin
     let objtestfile = "corrupted_mcos_object_metadata.mat"
         filepath = joinpath(dirname(@__FILE__), format, objtestfile)
         # object metadata is corrupted - object ID does not exist in file
-        @test_logs (:warn,) match_mode=:any matread(filepath)
+        @test_logs (:warn,r"^Failed to load MCOS object") match_mode=:any matread(filepath)
     end
     end
 
