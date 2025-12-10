@@ -289,7 +289,7 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         else
             data = Vector{String}(undef, dimensions[1])
             for i = 1:dimensions[1]
-                data[i] = rstrip(String(chars[i:dimensions[1]:end]))
+                data[i] = String(chars[i:dimensions[1]:end])
             end
         end
     elseif dtype <= 4 || dtype == 17
@@ -316,7 +316,7 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
         elseif dimensions[1] == 1
             data = String(take!(bufs[1]))
         else
-            data = String[rstrip(String(take!(buf))) for buf in bufs]
+            data = String[String(take!(buf)) for buf in bufs]
         end
     else
         error("Unsupported string type")
@@ -372,7 +372,7 @@ function read_matrix(f::IO, swap_bytes::Bool, subsys::Subsystem)
         data = read_struct(f, swap_bytes, dimensions, class == mxOBJECT_CLASS, subsys)
     elseif class == mxSPARSE_CLASS
         data = read_sparse(f, swap_bytes, dimensions, flags)
-    elseif class == mxCHAR_CLASS && length(dimensions) <= 2
+    elseif class == mxCHAR_CLASS
         data = read_string(f, swap_bytes, dimensions)
     elseif class == mxFUNCTION_CLASS
         data = read_matrix(f, swap_bytes, subsys)

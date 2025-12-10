@@ -911,12 +911,29 @@ function read(obj::Union{HDF5.Dataset,HDF5.Attribute}, ::Type{MatlabString})
         data = reshape(data, sz[2:end])
     end
     if ndims(data) == 1
-        return String(convert(Vector{Char}, data))
+        return convert_string(data)
     elseif ndims(data) == 2
-        return datap = String[rstrip(String(convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
+        return String[convert_string(c) for c in eachrow(data)]
     else
-        return data
+        return stringify_eachrow(data)
     end
+end
+
+function stringify_eachrow(data)
+    dims = size(data)
+    fixed_dims = [1, 3:length(dims)...] # all except 2
+    output_dims = dims[fixed_dims]
+    output = Array{String}(undef, output_dims...)
+    for I in CartesianIndices(output_dims)
+        idx = ntuple(d -> d == 2 ? Colon() : I[d < 2 ? d : d-1], length(dims))
+        slice = view(data, idx...)
+        output[I] = convert_string(slice)
+    end
+    return output
+end
+
+function convert_string(v::AbstractArray{UInt16})
+    return String(convert(Vector{Char}, v))
 end
 
 ## Utilities for handling complex numbers
