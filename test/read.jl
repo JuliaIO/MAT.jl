@@ -222,12 +222,12 @@ end
 # test reading file containing Matlab function handle, table, and datetime objects
 let objtestfile = "function_handles.mat"
     vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))
-    @test "sin" in keys(vars)
-    @test typeof(vars["sin"]) == Dict{String, Any}
-    @test Set(keys(vars["sin"])) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
-    @test "anonymous" in keys(vars)
-    @test typeof(vars["anonymous"]) == Dict{String, Any}
-    @test Set(keys(vars["anonymous"])) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
+    @test haskey(vars, "sin")
+    @test haskey(vars, "anonymous")
+    @test vars["sin"] isa FunctionHandle
+    @test vars["anonymous"] isa FunctionHandle
+    @test Set(keys(vars["sin"].d)) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
+    @test Set(keys(vars["anonymous"].d)) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
 end
 
 for format in ["v7", "v7.3"]

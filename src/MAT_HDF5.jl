@@ -324,7 +324,9 @@ function m_read(g::HDF5.Group, subsys::Subsystem)
         if haskey(attr, sparse_attr_matlab)
             return read_sparse_matrix(g, mattype)
         elseif mattype == "function_handle"
-            # TODO: fall through for now, will become a Dict
+            if haskey(attr, object_decode_attr_matlab) && read_attribute(g, object_decode_attr_matlab)==1
+                is_object = true
+            end
         else
             if haskey(attr, object_decode_attr_matlab) && read_attribute(g, object_decode_attr_matlab)==2
                 # I think this means it's an old object class similar to mXOBJECT_CLASS in MAT_v5

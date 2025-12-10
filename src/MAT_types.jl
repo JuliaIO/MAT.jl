@@ -41,6 +41,7 @@ export MatlabClassObject
 export MatlabOpaque, convert_opaque
 export MatlabTable
 export ScalarOrArray
+export FunctionHandle
 
 const ScalarOrArray{T} = Union{T, AbstractArray{T}}
 
@@ -176,7 +177,7 @@ function Base.:(==)(m1::MatlabStructArray{N}, m2::MatlabStructArray{N}) where {N
 end
 
 function Base.isapprox(m1::MatlabStructArray, m2::MatlabStructArray; kwargs...)
-    return isequal(m1.class, m2.class) && issetequal(m1.names, m2.names) && 
+    return isequal(m1.class, m2.class) && issetequal(m1.names, m2.names) &&
     key_based_isapprox(m1.names, m1, m2; kwargs...)
 end
 
@@ -301,6 +302,13 @@ end
 class(m::EmptyStruct) = ""
 
 """
+Function Handles which are stored as structs
+"""
+struct FunctionHandle
+    d::Dict{String,Any}
+end
+
+"""
     MatlabClassObject(
         d::Dict{String, Any},
         class::String,
@@ -357,6 +365,8 @@ function convert_struct_array(d::AbstractDict{String,Any}, class::String="")
     else
         if isempty(class)
             return d
+        elseif class == "function_handle"
+            return FunctionHandle(d)
         else
             return MatlabClassObject(d, class)
         end
