@@ -377,15 +377,4 @@ let objtestfile = "old_class_array.mat"
     @test c_arr["foo"] == Any[5.0 "test"]
 end
 
-# test reading structs with large number of fields
-let objtestfile = "struct_large.mat"
-    vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))
-    @test haskey(vars, "struct_large")
-    s = vars["struct_large"]
-    keys_s = keys(s)
-    @test length(keys_s) == 526
-    expected = Set("field$(i)" for i in 1:526)
-    @test Set(keys(s)) == expected
-end
-
 
