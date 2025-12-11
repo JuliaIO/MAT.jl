@@ -219,17 +219,6 @@ let objtestfile = "figure.fig"
     @test vars["hgS_070000"]["type"] == "figure"
 end
 
-# test reading file containing Matlab function handle, table, and datetime objects
-let objtestfile = "function_handles.mat"
-    vars = matread(joinpath(dirname(@__FILE__), "v7.3", objtestfile))
-    @test haskey(vars, "sin")
-    @test haskey(vars, "anonymous")
-    @test vars["sin"] isa FunctionHandle
-    @test vars["anonymous"] isa FunctionHandle
-    @test Set(keys(vars["sin"].d)) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
-    @test Set(keys(vars["anonymous"].d)) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
-end
-
 for format in ["v7", "v7.3"]
     @testset "struct_table_datetime $format" begin
     let objtestfile = "struct_table_datetime.mat"

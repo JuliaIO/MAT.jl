@@ -15,8 +15,8 @@ function test_write_data(data; approx = false, kwargs...)
     end
 
     if approx
-        @test MAT.MAT_types.dict_isapprox(result, data)  
-    else  
+        @test MAT.MAT_types.dict_isapprox(result, data)
+    else
         @test isequal(result, data)
     end
 end
@@ -354,4 +354,29 @@ end
     ms = Millisecond(500)
     test_write(Dict{String,Any}("ms" => ms))
     test_write(Dict{String,Any}("ms" => [ms, Millisecond(50000)]))
+end
+
+@testset "function handles" begin
+    let objtestfile = "function_handles.mat"
+        filepath = joinpath(dirname(@__FILE__), "v7.3", objtestfile)
+        vars = matread(filepath)
+
+        mktempdir() do tmpdir
+            tmpfile = joinpath(tmpdir, "test.mat")
+            matwrite(tmpfile, vars)
+            vars_write = matread(tmpfile)
+
+            @test haskey(vars_write, "sin")
+            @test haskey(vars_write, "anonymous")
+
+            @test isa(vars_write["sin"], FunctionHandle)
+            @test isa(vars_write["anonymous"], FunctionHandle)
+
+            @test Set(keys(vars_write["sin"].d)) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
+            @test Set(keys(vars_write["anonymous"].d)) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
+
+            @test isequal(vars_write["sin"].d, vars["sin"].d)
+            @test isequal(vars_write["anonymous"].d, vars["anonymous"].d)
+        end
+    end
 end
