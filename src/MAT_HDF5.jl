@@ -45,7 +45,8 @@ import ..MAT_types:
     MatlabStructArray,
     MatlabTable,
     ScalarOrArray,
-    StructArrayField
+    StructArrayField,
+    FunctionHandle
 
 const HDF5Parent = Union{HDF5.File, HDF5.Group}
 const HDF5BitsOrBool = Union{HDF5.BitsType,Bool}
@@ -159,6 +160,10 @@ const int_decode_attr_matlab = "MATLAB_int_decode"
 const object_type_attr_matlab = "MATLAB_object_decode"
 const object_decode_attr_matlab = "MATLAB_object_decode"
 const struct_field_attr_matlab = "MATLAB_fields"
+
+const matlab_function_decode = UInt32(1)
+const matlab_object_decode = UInt32(2)
+const matlab_opaque_decode = UInt32(3)
 
 ### Reading
 function read_complex(dtype::HDF5.Datatype, dset::HDF5.Dataset, ::Type{T}) where T
@@ -324,7 +329,9 @@ function m_read(g::HDF5.Group, subsys::Subsystem)
         if haskey(attr, sparse_attr_matlab)
             return read_sparse_matrix(g, mattype)
         elseif mattype == "function_handle"
-            # TODO: fall through for now, will become a Dict
+            if haskey(attr, object_decode_attr_matlab) && read_attribute(g, object_decode_attr_matlab)==1
+                is_object = true
+            end
         else
             if haskey(attr, object_decode_attr_matlab) && read_attribute(g, object_decode_attr_matlab)==2
                 # I think this means it's an old object class similar to mXOBJECT_CLASS in MAT_v5
@@ -727,6 +734,22 @@ function check_struct_keys(k::Vector)
     asckeys
 end
 
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::FunctionHandle)
+    g = create_group(parent, name)
+    try
+        write_attribute(g, name_type_attr_matlab, "function_handle")
+        write_attribute(g, object_decode_attr_matlab, matlab_function_decode)
+        obj_struct = obj.d
+        all_keys = collect(keys(obj_struct))
+        _write_struct_fields(mfile, g, all_keys)
+        for (ki, vi) in zip(all_keys, values(obj_struct))
+            m_write(mfile, g, ki, vi)
+        end
+    finally
+        close(g)
+    end
+end
+
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::AbstractArray{MatlabClassObject})
     m_write(mfile, parent, name, MatlabStructArray(arr))
 end
@@ -735,7 +758,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::M
     g = create_group(parent, name)
     try
         write_attribute(g, name_type_attr_matlab, obj.class)
-        write_attribute(g, object_decode_attr_matlab, UInt32(2))
+        write_attribute(g, object_decode_attr_matlab, matlab_object_decode)
         all_keys = collect(keys(obj))
         _write_struct_fields(mfile, g, all_keys)
         for (ki, vi) in zip(all_keys, values(obj))
@@ -825,7 +848,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::M
     try
         write_dataset(dset, dtype, metadata)
         write_attribute(dset, name_type_attr_matlab, obj.class)
-        write_attribute(dset, object_type_attr_matlab, UInt32(3))
+        write_attribute(dset, object_type_attr_matlab, matlab_opaque_decode)
     finally
         close(dset)
         close(dtype)
@@ -839,7 +862,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::A
         # TODO: Handle empty array case
         write_dataset(dset, dtype, metadata)
         write_attribute(dset, name_type_attr_matlab, first(obj).class)
-        write_attribute(dset, object_type_attr_matlab, UInt32(3))
+        write_attribute(dset, object_type_attr_matlab, matlab_opaque_decode)
     finally
         close(dset)
         close(dtype)

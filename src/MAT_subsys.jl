@@ -36,7 +36,8 @@ const MCOS_IDENTIFIER = 0xdd000000
 
 const matlab_saveobj_ret_types = String[
     "string",
-    "timetable"
+    "timetable",
+    "function_handle_workspace"
 ]
 
 # Warning message for unknown regions
@@ -556,22 +557,27 @@ end
 
 save_nested_props(prop_value, subsys::Subsystem) = prop_value
 
+# Prop values are copied to avoid mutating original with object metadata
+# Should be cheap as underlying data will be shared by reference unless modified
+
 function save_nested_props(
     prop_value::Union{AbstractDict,MatlabStructArray}, subsys::Subsystem
 )
     # Save nested objects in structs
+    prop_value_copy = copy(prop_value)
     for (key, value) in prop_value
-        prop_value[key] = save_nested_props(value, subsys)
+        prop_value_copy[key] = save_nested_props(value, subsys)
     end
-    return prop_value
+    return prop_value_copy
 end
 
 function save_nested_props(prop_value::Array{Any}, subsys::Subsystem)
     # Save nested objects in a Cell
+    prop_value_copy = copy(prop_value)
     for i in eachindex(prop_value)
-        prop_value[i] = save_nested_props(prop_value[i], subsys)
+        prop_value_copy[i] = save_nested_props(prop_value[i], subsys)
     end
-    return prop_value
+    return prop_value_copy
 end
 
 function save_nested_props(prop_value::Union{MatlabOpaque, Array{MatlabOpaque}}, subsys::Subsystem)
@@ -581,8 +587,8 @@ function save_nested_props(prop_value::Union{MatlabOpaque, Array{MatlabOpaque}},
 
     # FIXME: Does this overwrite prop_value from the user dict?
     # Might have to create a copy instead - Test needed
-    prop_value = set_mcos_object_metadata(subsys, prop_value)
-    return prop_value
+    prop_metadata = set_mcos_object_metadata(subsys, prop_value)
+    return prop_metadata
 end
 
 function serialize_object_props!(subsys::Subsystem, obj::MatlabOpaque, obj_prop_metadata::Vector{UInt32})
@@ -629,7 +635,7 @@ function set_object_id(subsys::Subsystem, obj::MatlabOpaque, saveobj_ret_type=fa
         # This is a deleted object
         # MATLAB keeps weak references to deleted objects for some reason
         class_id = set_class_id!(subsys, obj.class)
-        obj_id = 0
+        obj_id = UInt32(0)
         return obj_id, class_id
     end
 

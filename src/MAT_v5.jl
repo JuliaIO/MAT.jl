@@ -28,7 +28,7 @@
 module MAT_v5
 using CodecZlib, HDF5, SparseArrays
 import Base: read, write, close
-import ..MAT_types: MatlabStructArray, MatlabClassObject, MatlabTable
+import ..MAT_types: MatlabStructArray, MatlabClassObject, MatlabTable, FunctionHandle
 
 using ..MAT_subsys
 
@@ -325,6 +325,11 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
     data
 end
 
+function read_function_handle(f::IO, swap_bytes::Bool, subsys::Subsystem)
+    data = read_matrix(f, swap_bytes, subsys)[2] # read_matrix returns (var_name, data)
+    return FunctionHandle(data)
+end
+
 function read_opaque(f::IO, swap_bytes::Bool, subsys::Subsystem)
     type_name = String(read_element(f, swap_bytes, UInt8))
     classname = String(read_element(f, swap_bytes, UInt8))
@@ -375,7 +380,7 @@ function read_matrix(f::IO, swap_bytes::Bool, subsys::Subsystem)
     elseif class == mxCHAR_CLASS && length(dimensions) <= 2
         data = read_string(f, swap_bytes, dimensions)
     elseif class == mxFUNCTION_CLASS
-        data = read_matrix(f, swap_bytes, subsys)
+        data = read_function_handle(f, swap_bytes, subsys)
     elseif class == mxOPAQUE_CLASS
         data = read_opaque(f, swap_bytes, subsys)
     else
