@@ -384,4 +384,18 @@ let objtestfile = "old_class_array.mat"
     @test c_arr["foo"] == Any[5.0 "test"]
 end
 
+let objtestfile = "function_handles.mat"
+    vars = matread(joinpath(dirname(@__FILE__), "v7", objtestfile))
+    @test haskey(vars, "sin")
+    @test haskey(vars, "anonymous")
+
+    @test isa(vars["sin"], FunctionHandle)
+    @test isa(vars["anonymous"], FunctionHandle)
+    @test Set(keys(vars["sin"].d)) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
+    @test Set(keys(vars["anonymous"].d)) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
+
+    @test isequal(vars["sin"].d, vars["sin"].d)
+    @test isequal(vars["anonymous"].d, vars["anonymous"].d)
+end
+
 
