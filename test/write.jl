@@ -372,11 +372,11 @@ end
             @test isa(vars_write["sin"], FunctionHandle)
             @test isa(vars_write["anonymous"], FunctionHandle)
 
-            @test Set(keys(vars_write["sin"].d)) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
-            @test Set(keys(vars_write["anonymous"].d)) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
+            @test Set(keys(vars_write["sin"])) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
+            @test Set(keys(vars_write["anonymous"])) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
 
-            @test isequal(vars_write["sin"].d, vars["sin"].d)
-            @test isequal(vars_write["anonymous"].d, vars["anonymous"].d)
+            @test isequal(vars_write["sin"], vars["sin"])
+            @test isequal(vars_write["anonymous"], vars["anonymous"])
         end
     end
 end

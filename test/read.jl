@@ -391,11 +391,11 @@ let objtestfile = "function_handles.mat"
 
     @test isa(vars["sin"], FunctionHandle)
     @test isa(vars["anonymous"], FunctionHandle)
-    @test Set(keys(vars["sin"].d)) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
-    @test Set(keys(vars["anonymous"].d)) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
+    @test Set(keys(vars["sin"])) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
+    @test Set(keys(vars["anonymous"])) == Set(["function_handle", "sentinel", "separator", "matlabroot"])
 
-    @test isequal(vars["sin"].d, vars["sin"].d)
-    @test isequal(vars["anonymous"].d, vars["anonymous"].d)
+    @test isequal(vars["sin"], vars["sin"])
+    @test isequal(vars["anonymous"], vars["anonymous"])
 end
 
 
