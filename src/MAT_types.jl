@@ -41,6 +41,7 @@ export MatlabClassObject
 export MatlabOpaque, convert_opaque
 export MatlabTable
 export ScalarOrArray
+export FunctionHandle
 
 const ScalarOrArray{T} = Union{T, AbstractArray{T}}
 
@@ -176,7 +177,7 @@ function Base.:(==)(m1::MatlabStructArray{N}, m2::MatlabStructArray{N}) where {N
 end
 
 function Base.isapprox(m1::MatlabStructArray, m2::MatlabStructArray; kwargs...)
-    return isequal(m1.class, m2.class) && issetequal(m1.names, m2.names) && 
+    return isequal(m1.class, m2.class) && issetequal(m1.names, m2.names) &&
     key_based_isapprox(m1.names, m1, m2; kwargs...)
 end
 
@@ -296,9 +297,37 @@ dimension(::StructArrayField{N}) where {N} = N
 Internal Marker for Empty Structs with dimensions like 1x0 or 0x0
 """
 struct EmptyStruct
-   dims::Vector{UInt64}
+    dims::Vector{UInt64}
 end
 class(m::EmptyStruct) = ""
+
+"""
+    FunctionHandle(d::Dict{String, Any}) <: AbstractDict{String, Any}
+
+Type to store function handles which are stored as structs in MATLAB.
+"""
+struct FunctionHandle{D<:AbstractDict{String,Any}} <: AbstractDict{String,Any}
+    d::D
+end
+
+Base.eltype(::Type{FunctionHandle}) = Pair{String,Any}
+Base.length(m::FunctionHandle) = length(m.d)
+Base.keys(m::FunctionHandle) = keys(m.d)
+Base.values(m::FunctionHandle) = values(m.d)
+Base.getindex(m::FunctionHandle, i) = getindex(m.d, i)
+Base.setindex!(m::FunctionHandle, v, k) = setindex!(m.d, v, k)
+Base.iterate(m::FunctionHandle, i) = iterate(m.d, i)
+Base.iterate(m::FunctionHandle) = iterate(m.d)
+Base.haskey(m::FunctionHandle, k) = haskey(m.d, k)
+Base.get(m::FunctionHandle, k, default) = get(m.d, k, default)
+
+function Base.:(==)(m1::FunctionHandle, m2::FunctionHandle)
+    return m1.d == m2.d
+end
+
+function Base.isapprox(m1::FunctionHandle, m2::FunctionHandle; kwargs...)
+    return dict_isapprox(m1.d, m2.d; kwargs...)
+end
 
 """
     MatlabClassObject(
@@ -357,6 +386,8 @@ function convert_struct_array(d::AbstractDict{String,Any}, class::String="")
     else
         if isempty(class)
             return d
+        elseif class == "function_handle"
+            return FunctionHandle(d)
         else
             return MatlabClassObject(d, class)
         end
