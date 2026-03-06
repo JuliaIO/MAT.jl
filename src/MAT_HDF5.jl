@@ -46,7 +46,8 @@ import ..MAT_types:
     MatlabTable,
     ScalarOrArray,
     StructArrayField,
-    FunctionHandle
+    FunctionHandle,
+    decode_char_array
 
 const HDF5Parent = Union{HDF5.File, HDF5.Group}
 const HDF5BitsOrBool = Union{HDF5.BitsType,Bool}
@@ -195,7 +196,7 @@ function m_read(dset::HDF5.Dataset, subsys::Subsystem)
         dims = convert(Vector{Int}, read(dset))
         mattype = read_attribute(dset, name_type_attr_matlab)
         if mattype == "char"
-            return ""
+            return String[]
         elseif mattype == "struct"
             # Not sure if this check is necessary but it is checked in
             # `m_read(g::HDF5.Group)`
@@ -929,17 +930,7 @@ const type2str_matlab = Dict(
 function read(obj::Union{HDF5.Dataset,HDF5.Attribute}, ::Type{MatlabString})
     T = HDF5.get_jl_type(obj)
     data = read(obj, T)
-    if size(data, 1) == 1
-        sz = size(data)
-        data = reshape(data, sz[2:end])
-    end
-    if ndims(data) == 1
-        return String(convert(Vector{Char}, data))
-    elseif ndims(data) == 2
-        return datap = String[rstrip(String(convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
-    else
-        return data
-    end
+    return decode_char_array(data, Val(:utf16))
 end
 
 ## Utilities for handling complex numbers

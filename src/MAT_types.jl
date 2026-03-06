@@ -638,4 +638,46 @@ function try_vec(c::AbstractArray)
     return (size(c, 2) == 1) ? vec(c) : c
 end
 
+# UTF-8 (or ASCII?) bytes stored as UInt8, no conversion needed
+_decode_row(row::AbstractVector{UInt8},  ::Val{:utf8})  = String(row)
+
+# miUINT16 can be either:
+# - ISO-8859-1: values ≤ 0xFF, high byte is always 0x00 and can be discarded via UInt8.()
+#   Safe to treat as Unicode since ISO-8859-1 maps directly to the first 256 Unicode code points
+# - "Mongrel UTF-8": newer MATLAB versions incorrectly store UTF-8 multibyte sequences in
+#   miUINT16 fields. Values > 0xFF indicate this case — swap bytes to recover correct UTF-8
+#   byte order (big-endian), then filter null bytes left over from ASCII UInt16 slots
+_decode_row(row::AbstractVector{UInt16}, ::Val{:utf8}) =
+    any(v -> v > 0x00FF, row) ? String(filter(!=(0x00), reinterpret(UInt8, bswap.(row)))) : String(UInt8.(row))
+
+# UTF-16/32, transcode directly to Julia's native UTF-8
+_decode_row(row::AbstractVector{UInt16}, ::Val{:utf16}) = String(transcode(UInt8, row))
+_decode_row(row::AbstractVector{UInt32}, ::Val{:utf32}) = String(transcode(UInt8, row))
+
+function decode_char_array(arr::AbstractArray{T}, codec::Val) where T <: Union{UInt8, UInt16, UInt32}
+    char_len = size(arr, 2)
+    other_dims = (size(arr, 1), size(arr)[3:end]...)
+
+    if char_len == 0
+        return fill("", other_dims)
+    end
+
+    if ndims(arr) > 2
+        # Move string axis to the end for easier reshaping later
+        # Assumes that the string axis is the second dimension, which is typically true for MATLAB char arrays
+        arr = permutedims(arr, (1, 3:ndims(arr)..., 2))
+    end
+
+    n_strings = prod(other_dims)
+    flat = reshape(arr, n_strings, char_len)
+
+    decoded = Vector{String}(undef, n_strings)
+    for i in 1:n_strings
+        decoded[i] = _decode_row(flat[i, :], codec)
+    end
+
+    n_strings == 1 && return decoded[1]
+    return reshape(decoded, other_dims)
+end
+
 end
