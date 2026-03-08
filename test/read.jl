@@ -398,4 +398,17 @@ let objtestfile = "function_handles.mat"
     @test isequal(vars["anonymous"], vars["anonymous"])
 end
 
-
+for format in ["v7", "v7.3"]
+    @testset "char unicode $format" begin
+        result = Dict(
+            "a" => "Hello, MATLAB! 12345 ~!@#\$%^&*()_+-=[]{};:,.<>/?",
+            "b" => "Café naïve résumé — π ≈ 3.14159",
+            "c" => "Music symbol: 𝄞  | Gothic letter: 𐍈",
+            "d" => "Mixed planes: A Ω Ж 中 😀 🚀 🧬",
+            "e" => ["AB", "😀"],
+            "f" => ["😀𝄞𐍈🚀" "🚀😀𝄞𐍈"; "𝄞𐍈🚀😀" "😀𝄞𐍈🚀"; "𐍈🚀😀𝄞" "𝄞𐍈🚀😀"],
+            "g" => ["ABC", "DEF"],
+        )
+        check(joinpath(dirname(@__FILE__), format, "char_unicode.mat"), result)
+    end
+end
