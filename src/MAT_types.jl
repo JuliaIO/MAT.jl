@@ -638,19 +638,14 @@ function try_vec(c::AbstractArray)
     return (size(c, 2) == 1) ? vec(c) : c
 end
 
-# UTF-8 (or ASCII?) bytes stored as UInt8, no conversion needed
+# MATLAB char array storage types:
+# - miUINT8: ASCII or UTF-8. Can be directly converted to String.
+# - miUINT16: UTF-8 encoding packed in 16-bit values. Reinterpret as uint8, byteswap (if LE), remove null bytes
+# - miUTF8/16/32: UTF-8/16/32 encoding. Transcode to UTF-8 if needed, then convert to String
 _decode_row(row::AbstractVector{UInt8},  ::Val{:utf8})  = String(row)
-
-# miUINT16 can be either:
-# - ISO-8859-1: values ≤ 0xFF, high byte is always 0x00 and can be discarded via UInt8.()
-#   Safe to treat as Unicode since ISO-8859-1 maps directly to the first 256 Unicode code points
-# - "Mongrel UTF-8": newer MATLAB versions incorrectly store UTF-8 multibyte sequences in
-#   miUINT16 fields. Values > 0xFF indicate this case — swap bytes to recover correct UTF-8
-#   byte order (big-endian), then filter null bytes left over from ASCII UInt16 slots
 _decode_row(row::AbstractVector{UInt16}, ::Val{:utf8}) =
     any(v -> v > 0x00FF, row) ? String(filter(!=(0x00), reinterpret(UInt8, bswap.(row)))) : String(UInt8.(row))
-
-# UTF-16/32, transcode directly to Julia's native UTF-8
+# FIXME: I think bswap should be conditional on endianness
 _decode_row(row::AbstractVector{UInt16}, ::Val{:utf16}) = String(transcode(UInt8, row))
 _decode_row(row::AbstractVector{UInt32}, ::Val{:utf32}) = String(transcode(UInt8, row))
 
