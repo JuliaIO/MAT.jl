@@ -520,9 +520,34 @@ m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::BitArray) =
     m_write(mfile, parent, name, convert(Array{Bool}, s))
 
 # Write strings/chars
-encode_char_array(A::AbstractArray{<:AbstractChar}) = encode_char_array(string.(A))
+function encode_char_array(A::AbstractArray{<:AbstractChar})
+    # Encodes Julia char into MATLAB char array format
+    # Each char is transcoded to UTF-16, which can have 1 or 2 code units
+    # Expand 2nd dim, pad rows with spaces for uniform width
+    encoded = map(c -> transcode(UInt16, string(c)), A)
+    max_units = maximum(length, encoded)
+
+    d1 = size(A, 1)
+    d2 = ndims(A) == 1 ? 1 : size(A, 2)
+    trailing = ndims(A) <= 2 ? () : size(A)[3:end]
+    out = fill(UInt16(' '), d1, d2 * max_units, trailing...)
+
+    for idx in CartesianIndices(A)
+        units = encoded[idx]
+        row = idx[1]
+        col = ndims(A) == 1 ? 1 : idx[2]
+        rest = ndims(A) <= 2 ? () : Tuple(idx)[3:ndims(A)]  # fix: explicit end
+        col_start = (col - 1) * max_units + 1
+        out[row, col_start:col_start+length(units)-1, rest...] = units
+    end
+
+    return out
+end
 
 function encode_char_array(A::AbstractArray{<:AbstractString})
+    # Encode Julia strings into MATLAB char arrays
+    # Each string is transcoded to UTF-16
+    # Expand into new dimension for max char length, pad with spaces for uniform width
     flat = vec(A)
     encoded = Vector{Vector{UInt16}}(undef, length(flat))
     max_units = 0
@@ -536,9 +561,8 @@ function encode_char_array(A::AbstractArray{<:AbstractString})
     for i in eachindex(encoded)
         out[i, 1:length(encoded[i])] = encoded[i]
     end
-    reshaped = reshape(out, size(A)..., max_units)
 
-    # Move char dimension to axis=2
+    reshaped = reshape(out, size(A)..., max_units)
     perm = (1, ndims(reshaped), 2:ndims(reshaped)-1...)
     return permutedims(reshaped, perm)
 end
@@ -552,8 +576,8 @@ m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, c::AbstractChar
 
 # String/Char Arrays
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Union{AbstractArray{<:AbstractString}, AbstractArray{<:AbstractChar}})
-     str = string.(data)
-    if isempty(str)
+    str = string.(data)
+    if length(data) == 1 && isempty(data[1])
         data = UInt64[0, 0]
 
         # Create the dataset
