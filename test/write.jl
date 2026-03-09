@@ -71,8 +71,8 @@ test_write(Dict("ComplexF64" => 1.0im, "ComplexPair" => 2-3im))
 test_write(Dict(
     "simple_string" => "the quick brown fox",
     "accented_string" => "thé qüîck browñ fòx",
-    "concatenated_strings" => ["this is a string", "this is another string"],
-    "cell_strings" => ["this is a string" "this is another string"],
+    "concatenated_strings" => ["this is a string      ", "this is another string"],
+    "cell_strings" => ["this is a string      " "this is another string"],
     "empty_string" => ""
 ))
 

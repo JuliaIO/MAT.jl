@@ -519,8 +519,40 @@ end
 m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::BitArray) =
     m_write(mfile, parent, name, convert(Array{Bool}, s))
 
-# Write a string
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, str::AbstractString)
+# Write strings/chars
+encode_char_array(A::AbstractArray{<:AbstractChar}) = encode_char_array(string.(A))
+
+function encode_char_array(A::AbstractArray{<:AbstractString})
+    flat = vec(A)
+    encoded = Vector{Vector{UInt16}}(undef, length(flat))
+    max_units = 0
+    for i in eachindex(flat)
+        units = transcode(UInt16, flat[i])
+        encoded[i] = units
+        max_units = max(max_units, length(units))
+    end
+
+    out = fill(UInt16(' '), length(flat), max_units)
+    for i in eachindex(encoded)
+        out[i, 1:length(encoded[i])] = encoded[i]
+    end
+    reshaped = reshape(out, size(A)..., max_units)
+
+    # Move char dimension to axis=2
+    perm = (1, ndims(reshaped), 2:ndims(reshaped)-1...)
+    return permutedims(reshaped, perm)
+end
+
+# Single strings/chars
+m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::AbstractString) =
+    m_write(mfile, parent, name, reshape([s], 1, 1))
+
+m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, c::AbstractChar) =
+    m_write(mfile, parent, name, reshape([c], 1, 1))
+
+# String/Char Arrays
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Union{AbstractArray{<:AbstractString}, AbstractArray{<:AbstractChar}})
+     str = string.(data)
     if isempty(str)
         data = UInt64[0, 0]
 
@@ -535,30 +567,17 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, str::A
             close(dtype)
         end
     else
-        # Here we assume no UTF-16
-        data = zeros(UInt16, 1, length(str))
-        i = 1
-        for c in str
-            data[i] = c
-            i += 1
-        end
-
-        # Create the dataset
-        dset, dtype = create_dataset(parent, name, data)
+        encoded = encode_char_array(data)
+        dset, dtype = create_dataset(parent, name, encoded)
         try
             write_attribute(dset, name_type_attr_matlab, "char")
             write_attribute(dset, int_decode_attr_matlab, Int32(2))
-            write_dataset(dset, dtype, data)
+            write_dataset(dset, dtype, encoded)
         finally
             close(dset)
             close(dtype)
         end
     end
-end
-
-# Char
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, c::AbstractChar)
-    m_write(mfile, parent, name, string(c))
 end
 
 # Tuple
