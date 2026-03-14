@@ -280,29 +280,24 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
     codec =
         if dtype in (miUINT8, miUINT16, miUTF8)
-            Val(:utf8)
+            codec = :utf8
         elseif dtype == miUTF16
-            Val(:utf16)
+            codec = :utf16
         elseif dtype == miUTF32
-            Val(:utf32)
+            codec = :utf32
         else
-            error("Unsupported string type")
+            error("Unsupported char codec")
         end
 
     if dtype <= 2 || dtype == 16
         raw = read!(f, Vector{UInt8}(undef, nbytes))
-        arr = reshape(raw, Tuple(dimensions))
-    elseif dtype == 3 || dtype == 4
-        raw = read_bswap(f, swap_bytes, UInt16, div(nbytes, 2))
-        arr = reshape(raw, Tuple(dimensions))
-    elseif dtype == 17
+    elseif dtype <= 4 || dtype == 17
         raw = read_bswap(f, swap_bytes, UInt16, div(nbytes,2))
-        arr = reshape(raw, Tuple(dimensions))
     elseif dtype == 18
         raw = read_bswap(f, swap_bytes, UInt32, div(nbytes,4))
-        arr = reshape(raw, Tuple(dimensions))
     end
 
+    arr = reshape(raw, Tuple(dimensions))
     data = decode_char_array(arr, codec)
     skip_padding(f, nbytes, hbytes)
     data

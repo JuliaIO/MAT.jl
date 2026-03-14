@@ -640,16 +640,20 @@ end
 
 # MATLAB char array storage types:
 # - miUINT8: ASCII or UTF-8. Can be directly converted to String.
-# - miUINT16: UTF-8 encoding packed in 16-bit values. Reinterpret as uint8, byteswap (if LE), remove null bytes
+# - miUINT16: UTF-8 encoding packed in 16-bit values. Reinterpret as uint8 and remove null bytes
 # - miUTF8/16/32: UTF-8/16/32 encoding. Transcode to UTF-8 if needed, then convert to String
-_decode_row(row::AbstractVector{UInt8},  ::Val{:utf8})  = String(row)
-_decode_row(row::AbstractVector{UInt16}, ::Val{:utf8}) =
-    any(v -> v > 0x00FF, row) ? String(filter(!=(0x00), reinterpret(UInt8, bswap.(row)))) : String(UInt8.(row))
-# FIXME: I think bswap should be conditional on endianness
-_decode_row(row::AbstractVector{UInt16}, ::Val{:utf16}) = String(transcode(UInt8, row))
-_decode_row(row::AbstractVector{UInt32}, ::Val{:utf32}) = String(transcode(UInt8, row))
+_decode_row(row::AbstractVector{UInt8},  codec)  = String(row)
+_decode_row(row::AbstractVector{UInt32}, codec) = String(transcode(UInt8, row))
+_decode_row(row::AbstractVector{UInt16}, codec) =
+    if codec == :utf16
+        String(transcode(UInt8, row))
+    else # :utf8
+        # Byte swap on LE systems else utf-8 code points will be out of order
+        bytes = reinterpret(UInt8, ENDIAN_BOM == 0x4030201 ? bswap.(row) : row)
+        String(filter(!=(0x00), bytes))
+    end
 
-function decode_char_array(arr::AbstractArray{T}, codec::Val) where T <: Union{UInt8, UInt16, UInt32}
+function decode_char_array(arr::AbstractArray{T}, codec::Symbol) where T <: Union{UInt8, UInt16, UInt32}
     char_len = size(arr, 2)
     other_dims = (size(arr, 1), size(arr)[3:end]...)
 

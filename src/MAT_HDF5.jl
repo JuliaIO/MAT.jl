@@ -973,7 +973,7 @@ const type2str_matlab = Dict(
 function read(obj::Union{HDF5.Dataset,HDF5.Attribute}, ::Type{MatlabString})
     T = HDF5.get_jl_type(obj)
     data = read(obj, T)
-    return decode_char_array(data, Val(:utf16))
+    return decode_char_array(data, :utf16)
 end
 
 ## Utilities for handling complex numbers
