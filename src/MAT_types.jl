@@ -674,13 +674,15 @@ function decode_char_array(arr::AbstractArray{T}, codec::Symbol) where T <: Unio
 
     if ndims(arr) == 2 && size(arr, 1) == 1
         # Return as single string instead of 1-element array
-        return _decode_row(arr[1, :], codec)
+        row = view(arr, 1, :)
+        return _decode_row(row, codec)
     end
 
     out = Array{String}(undef, other_dims...)
     for I in CartesianIndices(out)
         idx = Tuple(I)
-        out[I] = _decode_row(arr[idx[1], :, idx[2:end]...], codec)
+        row = view(arr, idx[1], :, idx[2:end]...)
+        out[I] = _decode_row(row, codec)
     end
 
     return out
