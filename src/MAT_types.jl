@@ -640,7 +640,7 @@ end
 
 # MATLAB char array storage types:
 # - miUINT8: ASCII or UTF-8. Can be directly converted to String.
-# - miUINT16: UTF-8 encoding packed in 16-bit values. Reinterpret as uint8 and remove null bytes
+# - miUINT16: UTF-8 encoding packed in 16-bit values. Reinterpret as uint8 and remove 0x00 MSB bytes
 # - miUTF8/16/32: UTF-8/16/32 encoding. Transcode to UTF-8 if needed, then convert to String
 _decode_row(row::AbstractVector{UInt8},  codec)  = String(row)
 _decode_row(row::AbstractVector{UInt32}, codec) = String(transcode(UInt8, row))
@@ -650,7 +650,18 @@ _decode_row(row::AbstractVector{UInt16}, codec) =
     else # :utf8
         # Byte swap on LE systems else utf-8 code points will be out of order
         bytes = reinterpret(UInt8, ENDIAN_BOM == 0x4030201 ? bswap.(row) : row)
-        String(filter(!=(0x00), bytes))
+        # String(filter(!=(0x00), bytes))
+        out = UInt8[]
+        for i in 1:2:length(bytes)
+            msb = bytes[i]
+            lsb = bytes[i + 1]
+            if msb == 0x00
+                push!(out, lsb)
+            else
+                push!(out, msb, lsb)
+            end
+        end
+        String(out)
     end
 
 function decode_char_array(arr::AbstractArray{T}, codec::Symbol) where T <: Union{UInt8, UInt16, UInt32}
@@ -661,22 +672,18 @@ function decode_char_array(arr::AbstractArray{T}, codec::Symbol) where T <: Unio
         return fill("", other_dims)
     end
 
-    if ndims(arr) > 2
-        # Move string axis to the end for easier reshaping later
-        # Assumes that the string axis is the second dimension, which is typically true for MATLAB char arrays
-        arr = permutedims(arr, (1, 3:ndims(arr)..., 2))
+    if ndims(arr) == 2 && size(arr, 1) == 1
+        # Return as single string instead of 1-element array
+        return _decode_row(arr[1, :], codec)
     end
 
-    n_strings = prod(other_dims)
-    flat = reshape(arr, n_strings, char_len)
-
-    decoded = Vector{String}(undef, n_strings)
-    for i in 1:n_strings
-        decoded[i] = _decode_row(flat[i, :], codec)
+    out = Array{String}(undef, other_dims...)
+    for I in CartesianIndices(out)
+        idx = Tuple(I)
+        out[I] = _decode_row(arr[idx[1], :, idx[2:end]...], codec)
     end
 
-    n_strings == 1 && return decoded[1]
-    return reshape(decoded, other_dims)
+    return out
 end
 
 end
