@@ -650,7 +650,6 @@ _decode_row(row::AbstractVector{UInt16}, codec) =
     else # :utf8
         # Byte swap on LE systems else utf-8 code points will be out of order
         bytes = reinterpret(UInt8, ENDIAN_BOM == 0x4030201 ? bswap.(row) : row)
-        # String(filter(!=(0x00), bytes))
         out = UInt8[]
         for i in 1:2:length(bytes)
             msb = bytes[i]
