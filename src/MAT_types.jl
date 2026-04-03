@@ -644,24 +644,32 @@ end
 # - miUTF8/16/32: UTF-8/16/32 encoding. Transcode to UTF-8 if needed, then convert to String
 _decode_row(row::AbstractVector{UInt8},  codec)  = String(row)
 _decode_row(row::AbstractVector{UInt32}, codec) = String(transcode(UInt8, row))
-_decode_row(row::AbstractVector{UInt16}, codec) =
+function _decode_row(row::AbstractVector{UInt16}, codec)
     if codec == :utf16
-        String(transcode(UInt8, row))
-    else # :utf8
-        # Byte swap on LE systems else utf-8 code points will be out of order
-        bytes = reinterpret(UInt8, ENDIAN_BOM == 0x4030201 ? bswap.(row) : row)
-        out = UInt8[]
-        for i in 1:2:length(bytes)
-            msb = bytes[i]
-            lsb = bytes[i + 1]
-            if msb == 0x00
-                push!(out, lsb)
-            else
-                push!(out, msb, lsb)
-            end
-        end
-        String(out)
+        return String(transcode(UInt8, row))
     end
+
+    n = length(row)
+    out = Vector{UInt8}(undef, 2n)
+    j = 1
+
+    @inbounds for x in row
+        msb = UInt8(x >> 8)
+        lsb = UInt8(x & 0xff)
+
+        if msb == 0x00
+            out[j] = lsb
+            j += 1
+        else
+            out[j] = msb
+            out[j+1] = lsb
+            j += 2
+        end
+    end
+
+    resize!(out, j - 1)
+    return String(out)
+end
 
 function decode_char_array(arr::AbstractArray{T}, codec::Symbol) where T <: Union{UInt8, UInt16, UInt32}
     char_len = size(arr, 2)
