@@ -317,7 +317,8 @@ end
 
 # reading a struct, struct array, or sparse matrix
 function m_read(g::HDF5.Group, subsys::Subsystem)
-    if HDF5.name(g) == "/#subsystem#"
+    if !isempty(subsys) && HDF5.name(g) == "/#subsystem#"
+        # note: HDF5.name usage can be slow for larger files, so try to avoid it
         mattype = "#subsystem#"
     else
         mattype = read_attribute(g, name_type_attr_matlab)
