@@ -144,8 +144,10 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         fid.subsystem.table_type = table
         fid.subsystem.convert_opaque = convert_opaque
         subsys_group::HDF5.Group = fid.plain[subsys_refs]
-        subsys_data = m_read(subsys_group, fid.subsystem; check_subsystem=true)
+        HDF5.name(subsys_group) == "/#subsystem#" || error("Invalid subsystem group name")
+        subsys_data = m_read(subsys_group, fid.subsystem, "#subsystem#")
         MAT_subsys.load_subsys!(fid.subsystem, subsys_data, endian_indicator)
+        close(subsys_group)
     elseif wr
         MAT_subsys.init_save!(fid.subsystem)
     end
@@ -317,13 +319,12 @@ function read_struct_as_dict(g::HDF5.Group, subsys::Subsystem)
 end
 
 # reading a struct, struct array, or sparse matrix
-function m_read(g::HDF5.Group, subsys::Subsystem; check_subsystem::Bool=false)
-    if check_subsystem && HDF5.name(g) == "/#subsystem#"
-        # note: HDF5.name usage can be slow for larger files, so try to avoid it
-        mattype = "#subsystem#"
-    else
-        mattype = read_attribute(g, name_type_attr_matlab)
-    end
+function m_read(g::HDF5.Group, subsys::Subsystem)
+    mattype = read_attribute(g, name_type_attr_matlab)
+    return m_read(g, subsys, mattype)
+end
+
+function m_read(g::HDF5.Group, subsys::Subsystem, mattype::String)
     is_object = false
     if mattype != "struct"
         attr = attributes(g)
