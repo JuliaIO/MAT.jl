@@ -46,7 +46,8 @@ import ..MAT_types:
     MatlabTable,
     ScalarOrArray,
     StructArrayField,
-    FunctionHandle
+    FunctionHandle,
+    decode_char_array
 
 const HDF5Parent = Union{HDF5.File, HDF5.Group}
 const HDF5BitsOrBool = Union{HDF5.BitsType,Bool}
@@ -195,7 +196,7 @@ function m_read(dset::HDF5.Dataset, subsys::Subsystem)
         dims = convert(Vector{Int}, read(dset))
         mattype = read_attribute(dset, name_type_attr_matlab)
         if mattype == "char"
-            return ""
+            return String[]
         elseif mattype == "struct"
             # Not sure if this check is necessary but it is checked in
             # `m_read(g::HDF5.Group)`
@@ -518,9 +519,65 @@ end
 m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::BitArray) =
     m_write(mfile, parent, name, convert(Array{Bool}, s))
 
-# Write a string
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, str::AbstractString)
-    if isempty(str)
+# Write strings/chars
+function encode_char_array(A::AbstractArray{<:AbstractChar})
+    # Encodes Julia char into MATLAB char array format
+    # Each char is transcoded to UTF-16, which can have 1 or 2 code units
+    # Expand 2nd dim, pad rows with spaces for uniform width
+    encoded = map(c -> transcode(UInt16, string(c)), A)
+    max_units = maximum(length, encoded)
+
+    d1 = size(A, 1)
+    d2 = ndims(A) == 1 ? 1 : size(A, 2)
+    trailing = ndims(A) <= 2 ? () : size(A)[3:end]
+    out = fill(UInt16(' '), d1, d2 * max_units, trailing...)
+
+    for idx in CartesianIndices(A)
+        units = encoded[idx]
+        row = idx[1]
+        col = ndims(A) == 1 ? 1 : idx[2]
+        rest = ndims(A) <= 2 ? () : Tuple(idx)[3:ndims(A)]  # fix: explicit end
+        col_start = (col - 1) * max_units + 1
+        out[row, col_start:col_start+length(units)-1, rest...] = units
+    end
+
+    return out
+end
+
+function encode_char_array(A::AbstractArray{<:AbstractString})
+    # Encode Julia strings into MATLAB char arrays
+    # Each string is transcoded to UTF-16
+    # Expand into new dimension for max char length, pad with spaces for uniform width
+    flat = vec(A)
+    encoded = Vector{Vector{UInt16}}(undef, length(flat))
+    max_units = 0
+    for i in eachindex(flat)
+        units = transcode(UInt16, flat[i])
+        encoded[i] = units
+        max_units = max(max_units, length(units))
+    end
+
+    out = fill(UInt16(' '), length(flat), max_units)
+    for i in eachindex(encoded)
+        out[i, 1:length(encoded[i])] = encoded[i]
+    end
+
+    reshaped = reshape(out, size(A)..., max_units)
+    perm = (1, ndims(reshaped), 2:ndims(reshaped)-1...)
+    return permutedims(reshaped, perm)
+end
+
+# Single strings/chars
+m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::AbstractString) =
+    m_write(mfile, parent, name, reshape([s], 1, 1))
+
+m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, c::AbstractChar) =
+    m_write(mfile, parent, name, reshape([c], 1, 1))
+
+# String/Char Arrays
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, data::Union{AbstractArray{<:AbstractString}, AbstractArray{<:AbstractChar}})
+    str = string.(data)
+    if length(data) == 1 && isempty(data[1])
         data = UInt64[0, 0]
 
         # Create the dataset
@@ -534,30 +591,17 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, str::A
             close(dtype)
         end
     else
-        # Here we assume no UTF-16
-        data = zeros(UInt16, 1, length(str))
-        i = 1
-        for c in str
-            data[i] = c
-            i += 1
-        end
-
-        # Create the dataset
-        dset, dtype = create_dataset(parent, name, data)
+        encoded = encode_char_array(data)
+        dset, dtype = create_dataset(parent, name, encoded)
         try
             write_attribute(dset, name_type_attr_matlab, "char")
             write_attribute(dset, int_decode_attr_matlab, Int32(2))
-            write_dataset(dset, dtype, data)
+            write_dataset(dset, dtype, encoded)
         finally
             close(dset)
             close(dtype)
         end
     end
-end
-
-# Char
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, c::AbstractChar)
-    m_write(mfile, parent, name, string(c))
 end
 
 # Tuple
@@ -929,17 +973,7 @@ const type2str_matlab = Dict(
 function read(obj::Union{HDF5.Dataset,HDF5.Attribute}, ::Type{MatlabString})
     T = HDF5.get_jl_type(obj)
     data = read(obj, T)
-    if size(data, 1) == 1
-        sz = size(data)
-        data = reshape(data, sz[2:end])
-    end
-    if ndims(data) == 1
-        return String(convert(Vector{Char}, data))
-    elseif ndims(data) == 2
-        return datap = String[rstrip(String(convert(Vector{Char}, vec(data[i, :])))) for i = 1:size(data, 1)]
-    else
-        return data
-    end
+    return decode_char_array(data, :utf16)
 end
 
 ## Utilities for handling complex numbers

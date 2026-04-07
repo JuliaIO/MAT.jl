@@ -71,9 +71,19 @@ test_write(Dict("ComplexF64" => 1.0im, "ComplexPair" => 2-3im))
 test_write(Dict(
     "simple_string" => "the quick brown fox",
     "accented_string" => "thé qüîck browñ fòx",
-    "concatenated_strings" => ["this is a string", "this is another string"],
-    "cell_strings" => ["this is a string" "this is another string"],
-    "empty_string" => ""
+    "concatenated_strings" => ["this is a string      ", "this is another string"],
+    "cell_strings" => Any["this is a string" "this is another string"],
+    "empty_string" => String[]
+))
+
+test_write(Dict(
+    "a" => "Hello, MATLAB! 12345 ~!@#\$%^&*()_+-=[]{};:,.<>/?",
+    "b" => "Café naïve résumé — π ≈ 3.14159",
+    "c" => "Music symbol: 𝄞  | Gothic letter: 𐍈",
+    "d" => "Mixed planes: A Ω Ж 中 😀 🚀 🧬",
+    "e" => ["AB", "😀"],
+    "f" => reshape(["😀𝄞𐍈🚀" "🚀😀𝄞𐍈" "𝄞𐍈🚀😀" "😀𝄞𐍈🚀" "𐍈🚀😀𝄞" "𝄞𐍈🚀😀"], 2, 3),
+    "g" => ["ABC", "DEF"],
 ))
 
 test_write(Dict(
@@ -377,6 +387,44 @@ end
 
             @test isequal(vars_write["sin"], vars["sin"])
             @test isequal(vars_write["anonymous"], vars["anonymous"])
+        end
+    end
+end
+
+@testset "char arrays julia" begin
+    m = Dict(
+        "ascii_vector_chars" => ['A', 'B', 'C', 'D'],
+        "ascii_matrix_chars" => reshape(['A', 'B', 'C', 'D'], 2, 2),
+        "ascii_3d_chars" => reshape(['A','B','C','D','E','F','G','H'], 2, 2, 2),
+        "unicode_vector_chars" => ['é', 'ñ', 'ø', 'ß'],
+        "unicode_matrix_chars" => reshape(['é', 'ø', 'ñ', 'ß'], 2, 2),
+        "unicode_3d_chars" => reshape(['é','ñ','ø','ß','å','ç','ü','î'], 2, 2, 2),
+        "emoji_vector_chars" => ['😀','🚀','🎉','🐍'],
+        "emoji_matrix_chars" => reshape(['😀','🚀', '🎉','🐍'], 2, 2),
+        "emoji_3d_chars" => reshape(['😀','🎉','🚀','🐍','🧠','📦','🌍','🔥'], 2, 2, 2),
+        "mixed_chars" => reshape(['A'; '😀'], 2, 1),
+    )
+
+    m_actual = Dict(
+        "ascii_vector_chars"   => ["A", "B", "C", "D"],
+        "ascii_matrix_chars"   => ["AC", "BD"],
+        "ascii_3d_chars"       => ["AC" "EG"; "BD" "FH"],
+        "unicode_vector_chars" => ["é", "ñ", "ø", "ß"],
+        "unicode_matrix_chars" => ["éñ", "øß"],
+        "unicode_3d_chars"     => ["éø" "åü"; "ñß" "çî"],
+        "emoji_vector_chars"   => ["😀", "🚀", "🎉", "🐍"],
+        "emoji_matrix_chars"   => ["😀🎉", "🚀🐍"],
+        "emoji_3d_chars"       => ["😀🚀" "🧠🌍"; "🎉🐍" "📦🔥"],
+        "mixed_chars"          => ["A ", "😀"],
+    )
+
+    mktempdir() do tmpdir
+        tmpfile = joinpath(tmpdir, "test.mat")
+        matwrite(tmpfile, m)
+        vars_write = matread(tmpfile)
+        for key in keys(m_actual)
+            @test haskey(vars_write, key)
+            @test vars_write[key] == m_actual[key]
         end
     end
 end

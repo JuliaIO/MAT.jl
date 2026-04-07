@@ -28,7 +28,7 @@
 module MAT_v5
 using CodecZlib, HDF5, SparseArrays
 import Base: read, write, close
-import ..MAT_types: MatlabStructArray, MatlabClassObject, MatlabTable, FunctionHandle
+import ..MAT_types: MatlabStructArray, MatlabClassObject, MatlabTable, FunctionHandle, decode_char_array
 
 using ..MAT_subsys
 
@@ -278,49 +278,27 @@ truncate_to_uint8(x) = x % UInt8
 
 function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
-    if dtype <= 2 || dtype == 16
-        # If dtype <= 2, this may give an error on non-ASCII characters, since the string
-        # would be ISO-8859-1 and not UTF-8. However, MATLAB 2012b always saves strings with
-        # a 2-byte encoding in v6 format, and saves UTF-8 in v7 format. Thus, this may never
-        # happen in the wild.
-        chars = read!(f, Vector{UInt8}(undef, nbytes))
-        if dimensions[1] <= 1
-            data = String(chars)
+    codec =
+        if dtype in (miUINT8, miUINT16, miUTF8)
+            codec = :utf8
+        elseif dtype == miUTF16
+            codec = :utf16
+        elseif dtype == miUTF32
+            codec = :utf32
         else
-            data = Vector{String}(undef, dimensions[1])
-            for i = 1:dimensions[1]
-                data[i] = rstrip(String(chars[i:dimensions[1]:end]))
-            end
-        end
-    elseif dtype <= 4 || dtype == 17
-        # Technically, if dtype == 3 or dtype == 4, this is ISO-8859-1 and not Unicode.
-        # However, the first 256 Unicode code points are derived from ISO-8859-1, so UCS-2
-        # is a superset of 2-byte ISO-8859-1.
-        chars = read_bswap(f, swap_bytes, UInt16, convert(Int, div(nbytes, 2)))
-        bufs = [IOBuffer() for i = 1:dimensions[1]]
-        i = 1
-        while i <= length(chars)
-            for j = 1:dimensions[1]
-                char = convert(Char, chars[i])
-                if 255 < convert(UInt32, char)
-                    # Newer versions of MATLAB seem to write some mongrel UTF-8...
-                    char = String([truncate_to_uint8(chars[i] >> 8), truncate_to_uint8(chars[i])])[1]
-                end
-                write(bufs[j], char)
-                i += 1
-            end
+            error("Unsupported char codec")
         end
 
-        if dimensions[1] == 0
-            data = ""
-        elseif dimensions[1] == 1
-            data = String(take!(bufs[1]))
-        else
-            data = String[rstrip(String(take!(buf))) for buf in bufs]
-        end
-    else
-        error("Unsupported string type")
+    if dtype <= 2 || dtype == 16
+        raw = read!(f, Vector{UInt8}(undef, nbytes))
+    elseif dtype <= 4 || dtype == 17
+        raw = read_bswap(f, swap_bytes, UInt16, div(nbytes,2))
+    elseif dtype == 18
+        raw = read_bswap(f, swap_bytes, UInt32, div(nbytes,4))
     end
+
+    arr = reshape(raw, Tuple(dimensions))
+    data = decode_char_array(arr, codec)
     skip_padding(f, nbytes, hbytes)
     data
 end
@@ -377,7 +355,7 @@ function read_matrix(f::IO, swap_bytes::Bool, subsys::Subsystem)
         data = read_struct(f, swap_bytes, dimensions, class == mxOBJECT_CLASS, subsys)
     elseif class == mxSPARSE_CLASS
         data = read_sparse(f, swap_bytes, dimensions, flags)
-    elseif class == mxCHAR_CLASS && length(dimensions) <= 2
+    elseif class == mxCHAR_CLASS
         data = read_string(f, swap_bytes, dimensions)
     elseif class == mxFUNCTION_CLASS
         data = read_function_handle(f, swap_bytes, subsys)

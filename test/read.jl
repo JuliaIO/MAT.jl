@@ -81,9 +81,9 @@ for _format in ["v6", "v7", "v7.3"]
     result = Dict(
         "simple_string" => "the quick brown fox",
         "accented_string" => "thé qüîck browñ fòx",
-        "concatenated_strings" => String["this is a string", "this is another string"],
+        "concatenated_strings" => String["this is a string      ", "this is another string"],
         "cell_strings" => Any["this is a string" "this is another string"],
-        "empty_string" => ""
+        "empty_string" => String[]
     )
     check("string.mat", result)
 
@@ -398,4 +398,23 @@ let objtestfile = "function_handles.mat"
     @test isequal(vars["anonymous"], vars["anonymous"])
 end
 
+for format in ["v7", "v7.3"]
+    @testset "char unicode $format" begin
+        result = Dict(
+            "a" => "Hello, MATLAB! 12345 ~!@#\$%^&*()_+-=[]{};:,.<>/?",
+            "b" => "Café naïve résumé — π ≈ 3.14159",
+            "c" => "Music symbol: 𝄞  | Gothic letter: 𐍈",
+            "d" => "Mixed planes: A Ω Ж 中 😀 🚀 🧬",
+            "e" => ["AB", "😀"],
+            "f" => ["😀𝄞𐍈🚀" "🚀😀𝄞𐍈"; "𝄞𐍈🚀😀" "😀𝄞𐍈🚀"; "𐍈🚀😀𝄞" "𝄞𐍈🚀😀"],
+            "g" => ["ABC", "DEF"],
+        )
+        check(joinpath(dirname(@__FILE__), format, "char_unicode.mat"), result)
+    end
+end
 
+let objtestfile = "char_array_old_null.mat"
+    vars = matread(joinpath(dirname(@__FILE__), "v6", objtestfile))
+    @test haskey(vars, "simple_string")
+    @test vars["simple_string"] == "t\0e\0q\0i\0k\0b\0o\0n\0f\0x"
+end
