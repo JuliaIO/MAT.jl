@@ -101,10 +101,6 @@ mutable struct Subsystem
     end
 end
 
-function Base.isempty(subsys::Subsystem)
-    return subsys.class_id_counter == 0
-end
-
 function swapped_reinterpret(T::Type, A::AbstractArray{UInt8}, swap_bytes::Bool)
     return reinterpret(T, swap_bytes ? reverse(A) : A)
 end
