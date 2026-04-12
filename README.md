@@ -1,5 +1,5 @@
 # MAT.jl
-[![Build Status](https://github.com/JuliaIO/MAT.jl/workflows/CI/badge.svg?branch=master)](https://github.com/JuliaIO/MAT.jl/actions)
+[![CI](https://github.com/JuliaIO/MAT.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/JuliaIO/MAT.jl/actions/workflows/CI.yml)
 
 [![docs-stable][docs-stable-img]][docs-stable-url]
 [![docs-dev][docs-dev-img]][docs-dev-url]
