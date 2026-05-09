@@ -44,6 +44,7 @@ function check(filename, result)
 end
 cd(dirname(@__FILE__))
 for filename in readdir("v4")
+    endswith(filename, ".mat") || continue
     #println("testing $filename")
     d = matread("v4/$filename")
     matwrite("v4/tmp.mat", d; version="v4")
@@ -71,5 +72,23 @@ let tmp = "v4/tmp.mat"
     d = MAT.matread(tmp)
     @test haskey(d, "testnamelen")
     @test first(values(d)) == data
+    rm(tmp)
+end
+
+# Read zero-dimensional vars
+let tmp = "v4/tmp.mat"
+    open(tmp, "w") do fid
+        name = "testnamelen";
+        L = ncodeunits(name)
+        write(fid, Int32(0));
+        write(fid, Int32(0));
+        write(fid, Int32(0));
+        write(fid, Int32(0));
+        write(fid, Int32(L));
+        # name is store without null-terminator '\0'
+        write(fid, name)
+    end
+    d = MAT.matread(tmp)
+    @test haskey(d, "testnamelen")
     rm(tmp)
 end
