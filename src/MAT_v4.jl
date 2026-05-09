@@ -91,7 +91,7 @@ function checkv4(f::IO)
         swap_bytes = false
         return (true, swap_bytes)
     else
-        seek(f, 0)   
+        seek(f, 0)
         M, O, P, T, mrows, ncols, imagf, namlen = MAT_v4.read_header(f, true)
         if 0<=M<=4 && O == 0 && 0<=P<=5 && 0<=T<=2 && mrows>=0 && ncols>=0 && 0<=imagf<=1 && namlen>0
             swap_bytes = true
@@ -114,7 +114,7 @@ function read_header(f::IO, swap_bytes::Bool)
     ncols = read_bswap(f, swap_bytes, Int32)
     imagf = read_bswap(f, swap_bytes, Int32)
     namlen = read_bswap(f, swap_bytes, Int32)
-    
+
     M, O, P, T, mrows, ncols, imagf, namlen
 end
 
@@ -129,7 +129,8 @@ function read_matrix(f::IO, swap_bytes::Bool)
         #     a = {[], [], []}
         # then MATLAB does not save the empty cells as zero-byte matrices. To avoid
         # surprises, we produce an empty array in both cases.
-        return ("", Matrix{Union{}}(undef, 0, 0))
+        name = strip(String(read_bswap(f, M==mBIG_ENDIAN, Vector{UInt8}(undef, namlen))), '\0')
+        return (name, Matrix{Union{}}(undef, 0, 0))
     end
     name = strip(String(read_bswap(f, M==mBIG_ENDIAN, Vector{UInt8}(undef, namlen))), '\0')
     if T == tNUMERIC || T == tSPARSE
@@ -186,7 +187,7 @@ function getvarnames(matfile::Matlabv4File)
             offset = position(matfile.ios)
             M, O, P, T, mrows, ncols, imagf, namlen = read_header(matfile.ios, matfile.swap_bytes)
             f = matfile.ios
-            
+
             name = strip(String(read_bswap(f, M==mBIG_ENDIAN, Vector{UInt8}(undef, namlen))), '\0')
             varnames[name] = offset
             imag_offset = 0
@@ -240,7 +241,7 @@ function write(parent::Matlabv4File, name::String, s)
             P = p
         end
     end
-    if pTYPE[P] != eltype(s) && Complex{pTYPE[P]} != eltype(s) && 
+    if pTYPE[P] != eltype(s) && Complex{pTYPE[P]} != eltype(s) &&
         !(s isa AbstractString && pTYPE[P] == Float64) &&
         !(s isa Vector{String} && pTYPE[P] == Float64)
         error("invalid value type when writing v4 file")
@@ -276,7 +277,7 @@ function write(parent::Matlabv4File, name::String, s)
     end
     write(parent.ios, Int32(mrows))
     write(parent.ios, Int32(ncols))
-    
+
     imagf = 0
     if eltype(s) <: Complex && T == tNUMERIC
         imagf = 1
