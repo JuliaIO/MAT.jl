@@ -45,7 +45,6 @@ end
 cd(dirname(@__FILE__))
 for filename in readdir("v4")
     endswith(filename, ".mat") || continue
-    #println("testing $filename")
     d = matread("v4/$filename")
     matwrite("v4/tmp.mat", d; version="v4")
     check("v4/tmp.mat", d)
