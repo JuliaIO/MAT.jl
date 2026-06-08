@@ -441,10 +441,20 @@ function getvarnames(matfile::Matlabv5File)
                 error("Unexpected data type")
             end
 
-            read_element(f, matfile.swap_bytes, UInt32)
-            read_element(f, matfile.swap_bytes, Int32)
-            varnames[String(read_element(f, matfile.swap_bytes, UInt8))] = offset
+            flags = read_element(f, matfile.swap_bytes, UInt32)
+            class = flags[1] & 0xFF
+            if class != mxOPAQUE_CLASS
+                read_element(f, matfile.swap_bytes, Int32)
+            end
 
+            varname = String(read_element(f, matfile.swap_bytes, UInt8))
+            if varname == ""
+                # Skip unnamed variable (subsystem)
+                seek(matfile.ios, offset+nbytes+hbytes)
+                continue
+            end
+
+            varnames[varname] = offset
             seek(matfile.ios, offset+nbytes+hbytes)
         end
     end

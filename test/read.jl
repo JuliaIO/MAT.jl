@@ -418,3 +418,29 @@ let objtestfile = "char_array_old_null.mat"
     @test haskey(vars, "simple_string")
     @test vars["simple_string"] == "t\0e\0q\0i\0k\0b\0o\0n\0f\0x"
 end
+
+@testset "read variable names" begin
+    let objtestfile = "varnames.mat"
+        file = matopen(joinpath(dirname(@__FILE__), "v7", objtestfile))
+        var_name_dict = keys(file)
+        @test Set(var_name_dict) == Set(["a", "b", "c", "d"])
+
+        @test haskey(file, "a")
+        @test haskey(file, "b")
+        @test haskey(file, "c")
+        @test haskey(file, "d")
+        @test !haskey(file, "e")
+
+        data = read(file, "a")
+        @test data == reshape([1.0; 2.0; 3.0], 3, 1)
+
+        data = read(file, "b")
+        @test data == "hello"
+
+        data = read(file, "c")
+        @test data == "stringstring"
+
+        data = read(file, "d")
+        @test data == reshape([4.0, 5.0, 6.0], 3, 1)
+    end
+end
