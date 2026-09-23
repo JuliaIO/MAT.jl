@@ -601,12 +601,22 @@ promoted_eltype(::AbstractArray{T}) where {T} = T
 map_or_not(f, dat::AbstractArray) = map(f, dat)
 map_or_not(f, dat) = f(dat)
 
+"""
+    MatlabTable(names, columns)
+
+Representation of a MATLAB table read from a MAT-file. `names` contains the
+column names and `columns` contains the corresponding column vectors.
+
+`MatlabTable` implements the Tables.jl interface, so it can be converted to other 
+tabular formats such as DataFrames.jl with `DataFrame(table; copycols=true)`. 
+To convert all MATLAB tables while reading a file, pass `table=DataFrame` to `matread`.
+"""
 struct MatlabTable
     names::Vector{Symbol}
     columns::Vector
 end
 Tables.istable(::Type{MatlabTable}) = true
-Tables.columns(t::MatlabTable) = t.columns
+Tables.columns(t::MatlabTable) = Tables.CopiedColumns(t)
 Tables.columnnames(t::MatlabTable) = t.names
 Tables.getcolumn(t::MatlabTable, nm::Symbol) = t[nm]
 function find_index(m::MatlabTable, s::Symbol)
