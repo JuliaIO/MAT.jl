@@ -30,6 +30,7 @@ module MAT_HDF5
 
 using HDF5, SparseArrays
 using ..MAT_subsys
+using StructUtils
 
 import Base: names, read, write, close
 import HDF5: Reference
@@ -38,12 +39,15 @@ import Tables
 import PooledArrays: PooledArray
 
 import ..MAT_types:
+    construct_from_raw,
     convert_struct_array,
     EmptyStruct,
     MatlabClassObject,
     MatlabOpaque,
     MatlabStructArray,
     MatlabTable,
+    matlab_empty_matrix,
+    MATWriteStyle,
     ScalarOrArray,
     StructArrayField,
     FunctionHandle,
@@ -373,6 +377,10 @@ function read(f::MatlabHDF5File, name::String)
     val
 end
 
+function read(f::MatlabHDF5File, name::String, ::Type{T}) where {T}
+    return construct_from_raw(read(f, name), T)
+end
+
 """
     keys(matfile_handle) -> Vector{String}
 
@@ -673,7 +681,7 @@ function _write_references(mfile::MatlabHDF5File, parent::HDF5Parent, data::Abst
         for i = 1:length(data)
             mfile.refcounter += 1
             itemname = string(mfile.refcounter)
-            m_write(mfile, g, itemname, data[i])
+            m_write_value(mfile, g, itemname, data[i])
             # Extract references
             tmp = g[itemname]
             refs[i] = Reference(tmp, pathrefs*"/"*itemname)
@@ -790,7 +798,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::F
         all_keys = collect(keys(obj_struct))
         _write_struct_fields(mfile, g, all_keys)
         for (ki, vi) in zip(all_keys, values(obj_struct))
-            m_write(mfile, g, ki, vi)
+            m_write_value(mfile, g, ki, vi)
         end
     finally
         close(g)
@@ -809,7 +817,7 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::M
         all_keys = collect(keys(obj))
         _write_struct_fields(mfile, g, all_keys)
         for (ki, vi) in zip(all_keys, values(obj))
-            m_write(mfile, g, ki, vi)
+            m_write_value(mfile, g, ki, vi)
         end
     finally
         close(g)
@@ -828,7 +836,12 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::Emp
     end
 end
 
-# Write a struct from arrays of keys and values
+# Write a struct from arrays of keys and values.
+#
+# The values must already be lowered: this writes each one with `m_write` rather
+# than `m_write_value`, because both callers (the `AbstractDict` method and
+# `m_write_composite`, which lowers via `StructUtils.applyeach`) lower on the way
+# in, and lowering again here would apply `StructUtils.lower` twice.
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, k::Vector{String}, v::Vector)
     if length(k) == 0
         # empty struct
@@ -856,24 +869,54 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, k::Vec
     end
 end
 
+# Every value entering the writer funnels through here, so that
+# `StructUtils.lower(::MATWriteStyle, x)` overloads apply uniformly whether the
+# value is a top-level variable, a Dict value, or a cell/struct array element.
+# Struct fields are lowered by `StructUtils.applyeach` in `m_write_composite`
+# instead, and so do not pass through here.
+m_write_value(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, val) =
+    m_write(mfile, parent, name, StructUtils.lower(MATWriteStyle(), val))
+
 # Write Associative as a struct
 m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::AbstractDict) =
-    m_write(mfile, parent, name, check_struct_keys(collect(keys(s))), collect(values(s)))
+    m_write(mfile, parent, name, check_struct_keys(collect(keys(s))),
+            [StructUtils.lower(MATWriteStyle(), v) for v in values(s)])
+
+# `nothing` and `missing` are written as MATLAB's empty matrix `[]`; see
+# `matlab_empty_matrix` in MAT_types.jl for the round-trip asymmetry this implies.
+m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, ::Nothing) =
+    m_write(mfile, parent, name, matlab_empty_matrix)
+
+m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, ::Missing) =
+    m_write(mfile, parent, name, matlab_empty_matrix)
+
+# Write a struct-like value as a MATLAB struct. `StructUtils.applyeach` applies
+# field tags (`name`, `ignore`), field defaults and any `StructUtils.lower`
+# overloads, so the values it yields are already lowered.
+function m_write_composite(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s)
+    k = String[]
+    v = Any[]
+    StructUtils.applyeach(MATWriteStyle(), s) do key, val
+        push!(k, string(key))
+        push!(v, val)
+        nothing
+    end
+    m_write(mfile, parent, name, check_struct_keys(k), v)
+end
 
 # Write named tuple as a struct
-function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, nt::NamedTuple)
-    m_write(mfile, parent, name, [string(x) for x in keys(nt)], collect(nt))
-end
+m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, nt::NamedTuple) =
+    m_write_composite(mfile, parent, name, nt)
 
 # Write generic CompositeKind as a struct
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s)
-    if isbits(s)
-        error("This is the write function for CompositeKind, but the input doesn't fit")
+    T = typeof(s)
+    if !StructUtils.structlike(MATWriteStyle(), T)
+        error("cannot write a value of type `$T` to a MAT file")
     elseif Tables.istable(s)
         error("writing tables is not yet supported")
     end
-    T = typeof(s)
-    m_write(mfile, parent, name, check_struct_keys([string(x) for x in fieldnames(T)]), [getfield(s, x) for x in fieldnames(T)])
+    m_write_composite(mfile, parent, name, s)
 end
 
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, dat::ScalarOrArray{T}) where T<:Dates.AbstractTime
@@ -930,7 +973,7 @@ See `matopen` and `matwrite`.
 """
 function write(parent::MatlabHDF5File, name::String, thing)
     check_valid_varname(name)
-    m_write(parent, parent.plain, name, thing)
+    m_write_value(parent, parent.plain, name, thing)
 end
 
 function write_subsys(mfile::MatlabHDF5File, subsys_data::Dict{String,Any})

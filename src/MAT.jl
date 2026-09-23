@@ -25,6 +25,8 @@
 module MAT
 
 using HDF5, SparseArrays
+using StructUtils
+import StructUtils: @noarg, @kwarg, @defaults, @tags, @choosetype
 
 include("MAT_types.jl")
 using .MAT_types
@@ -38,6 +40,12 @@ using .MAT_HDF5, .MAT_v5, .MAT_v4, .MAT_subsys
 
 export matopen, matread, matwrite, @read, @write
 export MatlabStructArray, MatlabClassObject, MatlabOpaque, MatlabTable, FunctionHandle
+# StructUtils module is exported because macros like @choosetype generate code
+# referencing StructUtils.make, so the module must be accessible in user scope.
+export StructUtils, @noarg, @kwarg, @defaults, @tags, @choosetype
+# Style types, so that `StructUtils.lower(::MATWriteStyle, x)` and friends can be
+# extended without reaching into MAT internals.
+export MATStyle, MATReadStyle, MATWriteStyle, MATConstructionError
 
 # Open a MATLAB file
 const HDF5_HEADER = UInt8[0x89, 0x48, 0x44, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]
@@ -194,6 +202,59 @@ function matread(filename::AbstractString; table::Type=MatlabTable, convert_opaq
         close(file)
     end
     vars
+end
+
+"""
+    matread(filename, varname, T; table = MatlabTable) -> T
+
+Read a single variable from a Matlab file and construct it as type `T`
+using StructUtils.jl. This enables round-tripping Julia structs through .mat files.
+
+Supports StructUtils features including `@tags` for field renaming,
+`@defaults` for default values, and `@choosetype` for abstract type dispatch.
+
+Values are converted to the requested field types where MATLAB's data model
+differs from Julia's:
+
+  * a 1x1 MATLAB array is read back as a scalar, and is widened again for an
+    array-typed field, so `Vector{Float64}` accepts a one-element array;
+  * element types are converted, so a MATLAB `single`/`int32`/`logical` array or
+    a cell array of numbers can be read as `Matrix{Float64}`;
+  * trailing singleton dimensions are added or dropped to match the requested
+    dimensionality, and a MATLAB array with a single non-singleton dimension (a
+    row or column vector) can be read as a `Vector`. A shape that cannot be
+    matched this way is reported rather than being silently flattened;
+  * an empty array reads as `nothing`/`missing` for a `Union{Nothing,T}` or
+    `Union{Missing,T}` field, matching MATLAB's use of `[]` for a missing value.
+
+A value that cannot be constructed as `T` raises a [`MATConstructionError`](@ref),
+whose `cause` field holds the underlying error.
+
+# Example
+
+```julia
+using MAT
+
+@defaults struct Person
+    name::String = ""
+    age::Int = 0
+end
+
+matwrite("people.mat", Dict("person" => Person("Alice", 30)))
+person = matread("people.mat", "person", Person)
+# Person("Alice", 30)
+```
+"""
+function matread(filename::AbstractString, varname::AbstractString, ::Type{T};
+                 table::Type=MatlabTable, convert_opaque::Bool=true) where {T}
+    file = matopen(filename; table=table, convert_opaque=convert_opaque)
+    local val
+    try
+        val = read(file, String(varname), T)
+    finally
+        close(file)
+    end
+    val
 end
 
 # Write a dict to a MATLAB file
