@@ -1,5 +1,6 @@
 using MAT, Test
 using Dates
+using Tables
 
 @testset "MatlabStructArray" begin
     d_arr = Dict{String, Any}[
@@ -306,4 +307,14 @@ end
     @test t[:Age] == [25.0]
     @test t[:Name] == ["Smith"]
     @test t[:Matrix] == [1.0 2.0]
+end
+
+@testset "MatlabTable Tables.jl interface" begin
+    t = MatlabTable([:a, :b], [[1, 2], [3, 4]])
+    cols = Tables.columns(t)
+    @test cols isa Tables.CopiedColumns
+    # this behavior is needed to support df = DataFrame(t)
+    @test Tables.columnnames(cols) == [:a, :b]
+    @test Tables.getcolumn(cols, :a) == [1, 2]
+    @test Tables.getcolumn(cols, :b) == [3, 4]
 end
