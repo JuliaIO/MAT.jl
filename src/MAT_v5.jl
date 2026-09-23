@@ -28,7 +28,7 @@
 module MAT_v5
 using CodecZlib, HDF5, SparseArrays
 import Base: read, write, close
-import ..MAT_types: MatlabStructArray, MatlabClassObject, MatlabTable, FunctionHandle, decode_char_array
+import ..MAT_types: MatlabStructArray, MatlabClassObject, MatlabTable, construct_from_raw, FunctionHandle, decode_char_array
 
 using ..MAT_subsys
 
@@ -475,6 +475,10 @@ function read(matfile::Matlabv5File, varname::String)
     seek(matfile.ios, varnames[varname])
     (name, data) = read_matrix(matfile.ios, matfile.swap_bytes, matfile.subsystem)
     data
+end
+
+function read(matfile::Matlabv5File, varname::String, ::Type{T}) where {T}
+    return construct_from_raw(read(matfile, varname), T)
 end
 
 # Complain about writing to a MAT file
