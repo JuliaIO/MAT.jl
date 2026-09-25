@@ -135,7 +135,10 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
     close(fapl)
     fid = MatlabHDF5File(HDF5.File(f, filename), true, writeheader, 0, compress)
     pathrefs = "/#refs#"
-    if haskey(fid.plain, pathrefs)
+    # The count names the references a write adds. A read-only open never writes, and
+    # counting /#refs# (every cell element and object value in the file; tens of
+    # thousands of entries in large MATLAB files) is a slow walk of the group's index.
+    if wr && haskey(fid.plain, pathrefs)
         g = fid.plain[pathrefs]
         fid.refcounter = length(g)-1
         close(g)
