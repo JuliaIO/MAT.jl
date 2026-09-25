@@ -326,6 +326,30 @@ for format in ["v7", "v7.3"]
         end
     end
 
+    # timezone.mat is written by timezone_gen.m. MATLAB stores a zoned datetime as its UTC
+    # instant; until TimeZones.jl is loaded (timezones.jl) that instant is what is returned.
+    @testset "time zones, without TimeZones.jl $format" begin
+        filepath = joinpath(dirname(@__FILE__), format, "timezone.mat")
+        ext_loaded = isdefined(Base, :get_extension) && Base.get_extension(MAT, :MATTimeZonesExt) !== nothing
+        if isfile(filepath) && !ext_loaded
+            vars = @test_logs (:warn, r"timezone") match_mode=:any matread(filepath)
+            @test vars["dt_unzoned"] == DateTime(2022, 7, 20, 12)          # no zone: wall clock
+            @test vars["dt_utc"] == DateTime(2022, 7, 20, 12)
+            @test vars["dt_london_summer"] == DateTime(2022, 7, 20, 11)    # 12:00 BST
+            @test vars["dt_london_winter"] == DateTime(2022, 1, 20, 12)    # 12:00 GMT
+            @test vars["dt_offset"] == DateTime(2022, 7, 20, 6, 30)        # 12:00 +05:30
+            @test vars["dt_newyork"] == [DateTime(2022, 1, 20, 17) DateTime(2022, 7, 20, 16)]
+            # counted with leap seconds, which DateTime cannot represent: left as read
+            @test vars["dt_leap"] isa MatlabOpaque
+            @test vars["dt_leap"].class == "datetime"
+            @test vars["tt_zoned"][:Time] == DateTime(2022, 7, 20, 11) .+ Millisecond.([0, 1500])
+            @test vars["tt_zoned_step"][:Time] == DateTime(2022, 7, 20, 11) .+ Millisecond.([0, 500, 1000])
+        else
+            # generated in MATLAB by test/timezone_gen.m; skipped until it is committed
+            @test_skip isfile(filepath) && !ext_loaded
+        end
+    end
+
     @testset "user defined classdef $format" begin
     let objtestfile = "user_defined_classdefs.mat"
         filepath = joinpath(dirname(@__FILE__), format, objtestfile)
