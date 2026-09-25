@@ -473,6 +473,8 @@ function convert_opaque(obj::MatlabOpaque; table::Type=Nothing)
         return from_categorical(obj)
     elseif obj.class == "table"
         return from_table(obj, table)
+    elseif obj.class == "timetable"
+        return from_timetable(obj, table)
     else
         return obj
     end
@@ -513,17 +515,43 @@ function from_string(obj::MatlabOpaque, encoding::Encoding=Encoding(Symbol("UTF-
     end
 end
 
+"""
+    to_zoned(utc::DateTime, tz::String)
+
+A zoned datetime from its UTC instant and MATLAB's name for the zone (an IANA name such
+as "Europe/London", "UTC", or a fixed offset such as "+05:30"). Defined by the TimeZones
+extension (Julia 1.9 and later, when TimeZones.jl is loaded), which returns a
+`ZonedDateTime`; without it, zoned datetimes are read as their UTC instant.
+"""
+function to_zoned end
+
 function from_datetime(obj::MatlabOpaque)
     dat = obj["data"]
     if isnothing(dat) || isempty(dat)
         return DateTime[]
     end
-    if haskey(obj, "tz") && !isempty(obj["tz"])
-        tz = obj["tz"]
-        @warn "no timezone conversion yet for datetime objects. timezone of \"$tz\" ignored"
-    end
     #isdate = obj["isDateOnly"] # optional: convert to Date instead of DateTime?
-    return map_or_not(ms_to_datetime, dat)
+    tz = haskey(obj, "tz") ? obj["tz"] : ""
+    if !(tz isa AbstractString) || isempty(tz)
+        return map_or_not(ms_to_datetime, dat)  # no zone: the stored wall-clock time
+    end
+    # MATLAB stores a zoned datetime as its UTC instant, except in "UTCLeapSeconds", where
+    # the count includes leap seconds, which DateTime cannot represent
+    if tz == "UTCLeapSeconds"
+        @warn "datetime with timezone \"UTCLeapSeconds\" is not converted (leap seconds cannot be represented); returning the MatlabOpaque"
+        return obj
+    end
+    utc = map_or_not(ms_to_datetime, dat)
+    if !hasmethod(to_zoned, Tuple{DateTime,String})
+        @warn "datetime with timezone \"$tz\" is returned as its UTC instant; load TimeZones.jl to read it as a ZonedDateTime"
+        return utc
+    end
+    try
+        return map_or_not(t -> ismissing(t) ? missing : to_zoned(t, String(tz)), utc)
+    catch err
+        @warn "timezone \"$tz\" was not recognised ($(sprint(showerror, err))); returning the UTC instant"
+        return utc
+    end
 end
 
 # is the complex part the submilliseconds?
@@ -631,6 +659,39 @@ function from_table(obj::MatlabOpaque, ::Type{T}=MatlabTable) where {T}
 end
 # option to not convert and get the MatlabOpaque as table
 from_table(obj::MatlabOpaque, ::Type{Nothing}) = obj
+
+# A timetable is a table whose first column holds the row times, named after the row
+# dimension ("Time" unless renamed), then the variables. Row times are DateTime or
+# Millisecond; they are stored one per row, or, for a regular timetable, as a start time
+# and a sample rate (or time step), from which they are generated here. Row times that
+# cannot be interpreted leave the timetable as the MatlabOpaque it was read as.
+function from_timetable(obj::MatlabOpaque, ::Type{T}=MatlabTable) where {T}
+    tt = haskey(obj, "any") ? obj["any"] : obj
+    times = timetable_rowtimes(tt["rowTimes"], Int(tt["numRows"]))
+    if isnothing(times)
+        @warn "timetable row times of this kind are not converted; returning the MatlabOpaque"
+        return obj
+    end
+    names = Symbol[Symbol(tt["dimNames"][1]); Symbol.(vec(tt["varNames"]))]
+    cols = vcat(Any[times], Any[try_vec(c) for c in vec(tt["data"])])
+    t = MatlabTable(names, cols)
+    return T(Tables.CopiedColumns(t))
+end
+from_timetable(obj::MatlabOpaque, ::Type{Nothing}) = obj
+
+# row times stored one per row, already converted to DateTime or Millisecond
+timetable_rowtimes(times::AbstractArray, n::Int) = vec(times)
+# a regular timetable: a start time and a sample rate in Hz; MATLAB also stores the rate
+# when the time step was given instead, so the rate serves for both
+function timetable_rowtimes(regular::AbstractDict, n::Int)
+    origin, rate = get(regular, "origin", nothing), get(regular, "sampleRate", nothing)
+    # the start is a DateTime, a ZonedDateTime (TimeZones extension) or a duration
+    if !(origin isa Union{Dates.AbstractDateTime,Dates.Period} && rate isa Real && isfinite(rate) && rate > 0)
+        return nothing
+    end
+    return [origin + Millisecond(round(Int, 1000 * k / rate)) for k in 0:(n-1)]
+end
+timetable_rowtimes(times, n::Int) = nothing
 
 try_vec(c::Vector) = c
 try_vec(c) = [c]
