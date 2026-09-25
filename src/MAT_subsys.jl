@@ -55,7 +55,9 @@ mutable struct Subsystem
     dynprop_metadata::Vector{UInt32}
     _u6_metadata::Vector{UInt32}
     _u7_metadata::Vector{UInt32}
-    prop_vals_saved::Vector{Any}
+    # a view into the MCOS cell when reading (in v7.3 its elements are read on demand);
+    # a Vector when saving
+    prop_vals_saved::AbstractVector{Any}
     _c3::Any
     mcos_class_alias_metadata::Any
     prop_vals_defaults::Any
@@ -242,13 +244,14 @@ function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_
 
         load_mcos_regions!(subsys, fwrap_metadata, swap_bytes)
 
+        # views, not copies: copying a slice of a lazily read cell would read all of it
         if version == 2
-            subsys.prop_vals_saved = mcos_data[3:(end - 1), 1]
+            subsys.prop_vals_saved = @view mcos_data[3:(end - 1), 1]
         elseif version == 3
-            subsys.prop_vals_saved = mcos_data[3:(end - 2), 1]
+            subsys.prop_vals_saved = @view mcos_data[3:(end - 2), 1]
             subsys.mcos_class_alias_metadata = mcos_data[end - 1, 1]
         else
-            subsys.prop_vals_saved = mcos_data[3:(end - 3), 1]
+            subsys.prop_vals_saved = @view mcos_data[3:(end - 3), 1]
             subsys._c3 = mcos_data[end - 2, 1]
         end
 

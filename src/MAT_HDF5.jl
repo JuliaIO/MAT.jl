@@ -148,6 +148,10 @@ function matopen(filename::AbstractString, rd::Bool, wr::Bool, cr::Bool, tr::Boo
         HDF5.name(subsys_group) == "/#subsystem#" || error("Invalid subsystem group name")
         subsys_data = m_read(subsys_group, fid.subsystem, "#subsystem#")
         MAT_subsys.load_subsys!(fid.subsystem, subsys_data, endian_indicator)
+        if wr
+            # saving objects appends to the property values: read them all, as before
+            fid.subsystem.prop_vals_saved = collect(fid.subsystem.prop_vals_saved)
+        end
         close(subsys_group)
     elseif wr
         MAT_subsys.init_save!(fid.subsystem)
@@ -177,6 +181,44 @@ function read_complex(dtype::HDF5.Datatype, dset::HDF5.Dataset, ::Type{T}) where
     end
     return read(dset, Complex{T})
 end
+
+"""
+The `#subsystem#/MCOS` cell (MATLAB class `FileWrapper__`), which holds the property values
+of every object in the file. A read usually needs only the objects its variables reach, and
+a file can hold many more (acquisition code often saves unreferenced snapshots), so each
+element is read, and kept, the first time it is indexed rather than all at `matopen`. Valid
+while the file is open, which is as long as the subsystem is used.
+"""
+mutable struct LazyCell{N} <: AbstractArray{Any,N}
+    file::HDF5.File
+    refs::Array{Reference,N}
+    subsys::Subsystem
+    values::Array{Any,N}
+    loaded::BitArray{N}
+end
+function LazyCell(dset::HDF5.Dataset, subsys::Subsystem)
+    refs = read(dset, Reference)
+    return LazyCell(HDF5.file(dset), refs, subsys, Array{Any}(undef, size(refs)), falses(size(refs)))
+end
+Base.size(c::LazyCell) = size(c.refs)
+Base.IndexStyle(::Type{<:LazyCell}) = IndexLinear()
+function Base.getindex(c::LazyCell, i::Int)
+    if !c.loaded[i]
+        dset = c.file[c.refs[i]]
+        try
+            c.values[i] = m_read(dset, c.subsys)
+        finally
+            close(dset)
+        end
+        c.loaded[i] = true
+    end
+    return c.values[i]
+end
+
+# how many elements have been read: of a LazyCell, a view into one, or an array read in full
+nloaded(c::LazyCell) = count(c.loaded)
+nloaded(v::SubArray{Any,N,<:LazyCell} where {N}) = count(view(parent(v).loaded, parentindices(v)...))
+nloaded(v::AbstractArray) = length(v)
 
 function read_cell(dset::HDF5.Dataset, subsys::Subsystem)
     refs = read(dset, Reference)
@@ -227,7 +269,7 @@ function m_read(dset::HDF5.Dataset, subsys::Subsystem)
             return missing
         end
         if mattype == "FileWrapper__"
-            return read_cell(dset, subsys)
+            return LazyCell(dset, subsys)
         end
         if haskey(dset, struct_field_attr_matlab)
             @warn "Enumeration Instances are not supported currently."

@@ -384,6 +384,28 @@ let objtestfile = "old_class_array.mat"
     @test c_arr["foo"] == Any[5.0 "test"]
 end
 
+# v7.3: #subsystem#/MCOS holds the property values of every object in the file, most of
+# which a given read never needs (acquisition code often saves many unreferenced
+# snapshots). They are read when an object asks for them, not all at matopen.
+@testset "subsystem property values read on demand" begin
+    filepath = joinpath(dirname(@__FILE__), "v7.3", "user_defined_classdefs.mat")
+    full = matread(filepath)
+    matopen(filepath) do fid
+        vals = fid.subsystem.prop_vals_saved
+        @test MAT.MAT_HDF5.nloaded(vals) == 0                    # nothing read at open
+        obj = read(fid, "obj_with_vals")
+        @test obj.class == full["obj_with_vals"].class
+        @test obj["a"] == full["obj_with_vals"]["a"] == 10.0
+        @test 0 < MAT.MAT_HDF5.nloaded(vals) < length(vals)      # only what that object needed
+    end
+    # opened for writing as well, the subsystem is read in full, as before
+    rw = joinpath(mktempdir(), "rw.mat")
+    cp(filepath, rw)
+    matopen(rw, "r+") do fid
+        @test fid.subsystem.prop_vals_saved isa Vector
+    end
+end
+
 let objtestfile = "function_handles.mat"
     vars = matread(joinpath(dirname(@__FILE__), "v7", objtestfile))
     @test haskey(vars, "sin")
