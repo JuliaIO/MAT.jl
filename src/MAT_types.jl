@@ -526,9 +526,11 @@ function from_datetime(obj::MatlabOpaque)
     return map_or_not(ms_to_datetime, dat)
 end
 
-# is the complex part the submilliseconds?
+# The imaginary part is the low half of a double-double: smaller than half an ulp of the
+# real part, so real + imag == real in Float64 and nothing is lost at DateTime resolution.
 ms_to_datetime(ms::Complex) = ms_to_datetime(real(ms))
 function ms_to_datetime(ms::Real)
+    isfinite(ms) || return missing  # NaT is stored as NaN; DateTime has no ±Inf either
     s, ms_rem = fldmod(ms, 1_000)  # whole seconds and remainder milliseconds
     return DateTime(1970, 1, 1) + Second(s) + Millisecond(round(Int, ms_rem))
 end
@@ -561,8 +563,12 @@ function from_duration(obj::MatlabOpaque)
     if isnothing(dat) || isempty(dat)
         return Millisecond[]
     end
-    return map_or_not(Millisecond, dat)
+    return map_or_not(ms_to_millisecond, dat)
 end
+
+# milliseconds are stored as Float64: rounded to whole ones, as datetimes are, and a
+# missing (NaN) or infinite duration is missing
+ms_to_millisecond(ms::Real) = isfinite(ms) ? Millisecond(round(Int, ms)) : missing
 
 to_matlab_millis(d::Millisecond) = Float64(Dates.value(d))
 

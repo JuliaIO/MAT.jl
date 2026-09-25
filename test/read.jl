@@ -274,6 +274,30 @@ for format in ["v7", "v7.3"]
     end
     end
 
+    # missing_times.mat is written by missing_gen.m: datetime and duration arrays holding
+    # missing (NaT, NaN), infinite or fractional-millisecond values
+    @testset "missing and fractional times $format" begin
+        filepath = joinpath(dirname(@__FILE__), format, "missing_times.mat")
+        if isfile(filepath)
+            # dt_nat_zoned has a time zone, which is dropped with a warning
+            vars = @test_logs (:warn, r"timezone") match_mode=:any matread(filepath)
+            noon = DateTime(2022, 7, 20, 12)
+
+            @test isequal(vars["dt_nat"], [noon missing])                 # NaT is missing
+            @test eltype(vars["dt_nat"]) == Union{Missing,DateTime}
+            @test ismissing(vars["dt_nat_scalar"])
+            @test isequal(vars["dt_inf"], [noon missing missing])         # so are ±Inf
+            @test isequal(vars["dt_nat_zoned"], [noon - Hour(1) missing]) # the UTC instant
+
+            @test isequal(vars["dur_nan"], [Millisecond(1500) missing])
+            @test ismissing(vars["dur_nan_scalar"])
+            @test vec(vars["dur_frac"]) == Millisecond.([2, 2, 3])       # 1.5, 2.25, 2.75 ms
+        else
+            # generated in MATLAB by test/missing_gen.m; skipped until it is committed
+            @test_skip isfile(filepath)
+        end
+    end
+
     @testset "user defined classdef $format" begin
     let objtestfile = "user_defined_classdefs.mat"
         filepath = joinpath(dirname(@__FILE__), format, objtestfile)
