@@ -34,10 +34,14 @@ jobs:
         ])
     - uses: julia-actions/julia-buildpkg@v1
     - name: Precompile pull request before measurement
-      shell: julia --project=${{ runner.temp }}/invalidation-tools {0}
+      shell: julia {0}
+      env:
+        JULIA_PROJECT: ${{ runner.temp }}/invalidation-tools
       run: using Pkg; Pkg.precompile()
     - name: Measure pull request invalidations
-      shell: julia --color=yes --compiled-modules=strict --project=${{ runner.temp }}/invalidation-tools {0}
+      shell: julia --color=yes --compiled-modules=strict {0}
+      env:
+        JULIA_PROJECT: ${{ runner.temp }}/invalidation-tools
       run: include(joinpath(ENV["RUNNER_TEMP"], "invalidation.jl"))
       id: invs_pr
 
@@ -46,10 +50,14 @@ jobs:
         ref: ${{ github.event.repository.default_branch }}
     - uses: julia-actions/julia-buildpkg@v1
     - name: Precompile default branch before measurement
-      shell: julia --project=${{ runner.temp }}/invalidation-tools {0}
+      shell: julia {0}
+      env:
+        JULIA_PROJECT: ${{ runner.temp }}/invalidation-tools
       run: using Pkg; Pkg.resolve(); Pkg.instantiate(); Pkg.precompile()
     - name: Measure default branch invalidations
-      shell: julia --color=yes --compiled-modules=strict --project=${{ runner.temp }}/invalidation-tools {0}
+      shell: julia --color=yes --compiled-modules=strict {0}
+      env:
+        JULIA_PROJECT: ${{ runner.temp }}/invalidation-tools
       run: include(joinpath(ENV["RUNNER_TEMP"], "invalidation.jl"))
       id: invs_default
     
