@@ -428,3 +428,52 @@ end
         end
     end
 end
+
+# matopen counts /#refs# only to name the references a write adds. A read-only open never
+# writes, and MATLAB keeps every cell element and object value in /#refs# (tens of
+# thousands of entries in an acquisition file), so it no longer counts them.
+@testset "appending to files with references" begin
+    refcount(p) = MAT.MAT_HDF5.HDF5.h5open(h -> haskey(h, "#refs#") ? length(h["#refs#"]) : 0, p)
+    roundtrip(name, v) = mktempdir() do d
+        f = joinpath(d, "one.mat")
+        matwrite(f, Dict(name => v))
+        matread(f)[name]
+    end
+    v73 = joinpath(dirname(@__FILE__), "v7.3")
+
+    mktempdir() do dir
+        # a read-only open leaves /#refs# uncounted; one opened for writing counts it
+        cellfile = joinpath(v73, "cell.mat")
+        @test refcount(cellfile) > 1
+        matopen(fid -> (@test fid.refcounter == 0), cellfile)
+        rw = joinpath(dir, "cell_rw.mat")
+        cp(cellfile, rw)
+        matopen(fid -> (@test fid.refcounter == refcount(rw) - 1), rw, "r+")
+
+        new = Dict("c2" => Any["two", 2.0],
+                   "s" => Dict("x" => 3.0, "cell" => Any[4.0, "four"]),   # a struct with a cell field
+                   "c3" => Any[5.0])
+        # MAT.jl numbers the references it writes, so appending to its own file without
+        # the count would reuse a name; MATLAB names them with letters
+        makers = ["written by MAT.jl" => p -> matwrite(p, Dict("c1" => Any[1.0, "one", [1.0 2.0]])),
+                  "written by MATLAB" => p -> cp(cellfile, p),
+                  "without /#refs#" => p -> cp(joinpath(v73, "simple.mat"), p)]
+        for (i, (label, make)) in enumerate(makers)
+            @testset "$label" begin
+                p = joinpath(dir, "append$i.mat")
+                make(p)
+                before = matread(p)
+                nrefs = refcount(p)
+                matopen(p, "r+") do fid                 # two writes in one session
+                    write(fid, "c2", new["c2"])
+                    write(fid, "s", new["s"])
+                end
+                matopen(fid -> write(fid, "c3", new["c3"]), p, "r+")   # and one in another
+                after = matread(p)
+                @test all(isequal(after[k], v) for (k, v) in before)            # what was there is intact
+                @test all(isequal(after[k], roundtrip(k, v)) for (k, v) in new)  # the appended read back as written
+                @test refcount(p) > nrefs
+            end
+        end
+    end
+end
