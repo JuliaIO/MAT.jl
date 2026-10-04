@@ -1,6 +1,7 @@
 using MAT, Test
 using Dates
 using SparseArrays, LinearAlgebra
+import HDF5
 
 function check(filename, result)
     matfile = matopen(filename)
@@ -403,6 +404,29 @@ end
     cp(filepath, rw)
     matopen(rw, "r+") do fid
         @test fid.subsystem.prop_vals_saved isa Vector
+    end
+end
+
+@testset "single-variable reads skip large unused properties" begin
+    mktempdir() do dir
+        path = joinpath(dir, "large_property.mat")
+        cp(joinpath(@__DIR__, "v7.3", "user_defined_classdefs.mat"), path)
+        HDF5.h5open(path, "r+") do file
+            file["#refs#/large_property"] = fill(42.0, 100_000, 1)
+            data = file["#refs#/large_property"]
+            HDF5.attributes(data)["MATLAB_class"] = "double"
+            HDF5.attributes(data)["H5PATH"] = "/#refs#/large_property"
+            refs = file["#subsystem#/MCOS"]
+            values = read(refs, HDF5.Reference)
+            values[4] = HDF5.Reference(file, "#refs#/large_property")
+            refs[:, :] = values
+            close(data)
+            close(refs)
+        end
+        read_selected(path) = matopen(file -> read(file, "obj_with_vals"), path)
+        @test read_selected(path)["a"] == 10.0
+        @test (@allocated read_selected(path)) < 512_000
+        @test matread(path)["obj_no_vals"]["b"] == fill(42.0, 100_000, 1)
     end
 end
 

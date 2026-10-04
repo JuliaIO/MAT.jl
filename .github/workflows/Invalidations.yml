@@ -20,15 +20,45 @@ jobs:
       with:
         version: '1'
     - uses: actions/checkout@v7
+    - name: Install invalidation tools in a separate environment
+      shell: julia --project {0}
+      run: |
+        using Pkg
+        cp(".github/invalidation.jl", joinpath(ENV["RUNNER_TEMP"], "invalidation.jl"); force=true)
+        Pkg.activate(joinpath(ENV["RUNNER_TEMP"], "invalidation-tools"))
+        Pkg.develop(PackageSpec(path=pwd()))
+        Pkg.add([
+            PackageSpec(name="SnoopCompile", version="3"),
+            PackageSpec(name="SnoopCompileCore"),
+            PackageSpec(name="PrettyTables"),
+        ])
     - uses: julia-actions/julia-buildpkg@v1
-    - uses: julia-actions/julia-invalidations@v1
+    - name: Precompile pull request before measurement
+      shell: julia {0}
+      env:
+        JULIA_PROJECT: ${{ runner.temp }}/invalidation-tools
+      run: using Pkg; Pkg.precompile()
+    - name: Measure pull request invalidations
+      shell: julia --color=yes --compiled-modules=strict {0}
+      env:
+        JULIA_PROJECT: ${{ runner.temp }}/invalidation-tools
+      run: include(joinpath(ENV["RUNNER_TEMP"], "invalidation.jl"))
       id: invs_pr
 
     - uses: actions/checkout@v7
       with:
         ref: ${{ github.event.repository.default_branch }}
     - uses: julia-actions/julia-buildpkg@v1
-    - uses: julia-actions/julia-invalidations@v1
+    - name: Precompile default branch before measurement
+      shell: julia {0}
+      env:
+        JULIA_PROJECT: ${{ runner.temp }}/invalidation-tools
+      run: using Pkg; Pkg.resolve(); Pkg.instantiate(); Pkg.precompile()
+    - name: Measure default branch invalidations
+      shell: julia --color=yes --compiled-modules=strict {0}
+      env:
+        JULIA_PROJECT: ${{ runner.temp }}/invalidation-tools
+      run: include(joinpath(ENV["RUNNER_TEMP"], "invalidation.jl"))
       id: invs_default
     
     - name: Report invalidation counts
