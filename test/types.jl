@@ -1,5 +1,6 @@
 using MAT, Test
 using Dates
+import Tables
 
 @testset "MatlabStructArray" begin
     d_arr = Dict{String, Any}[
@@ -306,4 +307,26 @@ end
     @test t[:Age] == [25.0]
     @test t[:Name] == ["Smith"]
     @test t[:Matrix] == [1.0 2.0]
+end
+
+@testset "MatlabTable column consumers" begin
+    table = MatlabTable([:a, :b, :c], [[1, 2], [3.0, 4.0], ["five", "six"]])
+    columns = Tables.columns(table)
+    @test Tables.columnnames(columns) == [:a, :b, :c]
+    for (i, name) in enumerate(table.names)
+        @test Tables.getcolumn(columns, i) == table.columns[i]
+        @test Tables.getcolumn(columns, name) == table.columns[i]
+    end
+    expected = (a=[1, 2], b=[3.0, 4.0], c=["five", "six"])
+    @test Tables.columntable(table) == expected
+    @test Tables.rowtable(table) == [(a=1, b=3.0, c="five"), (a=2, b=4.0, c="six")]
+    copied = Tables.CopiedColumns(table)
+    for i in 1:3
+        @test Tables.getcolumn(copied, i) == table.columns[i]
+    end
+    @test Tables.columntable(copied) == expected
+    empty_table = MatlabTable([:a, :b], [Int[], String[]])
+    @test Tables.columnnames(Tables.columns(empty_table)) == [:a, :b]
+    @test isempty(Tables.rowtable(empty_table))
+    @test Tables.columntable(empty_table) == (a=Int[], b=String[])
 end
