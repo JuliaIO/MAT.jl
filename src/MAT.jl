@@ -123,7 +123,8 @@ keyword argument only affects write operations.
 
 Use with `read`, `write`, `close`, `keys`, and `haskey`.
 
-Optional keyword argument is the `table` type, for automatic conversion of Matlab tables.
+Optional keyword argument is the `table` type, for automatic conversion of Matlab tables
+and timetables (a timetable's row times become its first column).
 Note that Matlab tables may contain non-vector colums which cannot always be converted to a Julia table, like `DataFrame`.
 
 # Example
@@ -164,7 +165,7 @@ matopen
 Return a dictionary of all the variables and values in a Matlab file,
 opening and closing it automatically.
 
-Optionally provide the `table` type to convert Matlab tables into. Default uses a simple `MatlabTable` type.
+Optionally provide the `table` type to convert Matlab tables and timetables into. Default uses a simple `MatlabTable` type.
 
 # Example
 
