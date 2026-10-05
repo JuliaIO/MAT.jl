@@ -12,6 +12,12 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StringEncodings = "69024149-9ee7-55f6-a4c4-859efe599b68"
 Tables = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
 
+[weakdeps]
+TimeZones = "f269a46b-ccf7-5d73-abea-4c690281aa53"
+
+[extensions]
+MATTimeZonesExt = "TimeZones"
+
 [compat]
 CodecZlib = "0.5, 0.6, 0.7"
 Dates = "1"
@@ -20,6 +26,7 @@ OrderedCollections = "1, 2"
 PooledArrays = "1.4.3"
 StringEncodings = "0.3.7"
 Tables = "1.12.1"
+TimeZones = "1"
 julia = "1.6"
 
 [extras]
@@ -27,6 +34,7 @@ DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+TimeZones = "f269a46b-ccf7-5d73-abea-4c690281aa53"
 
 [targets]
-test = ["DataStructures", "LinearAlgebra", "SparseArrays", "Test"]
+test = ["DataStructures", "LinearAlgebra", "SparseArrays", "Test", "TimeZones"]
