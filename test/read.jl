@@ -1,6 +1,7 @@
 using MAT, Test
 using Dates
 using SparseArrays, LinearAlgebra
+import HDF5
 
 function check(filename, result)
     matfile = matopen(filename)
@@ -458,6 +459,51 @@ let objtestfile = "old_class_array.mat"
     @test c_arr isa MatlabStructArray
     @test c_arr.class == "TestClassOld"
     @test c_arr["foo"] == Any[5.0 "test"]
+end
+
+# v7.3: #subsystem#/MCOS holds the property values of every object in the file, most of
+# which a given read never needs (acquisition code often saves many unreferenced
+# snapshots). They are read when an object asks for them, not all at matopen.
+@testset "subsystem property values read on demand" begin
+    filepath = joinpath(dirname(@__FILE__), "v7.3", "user_defined_classdefs.mat")
+    full = matread(filepath)
+    matopen(filepath) do fid
+        vals = fid.subsystem.prop_vals_saved
+        @test MAT.MAT_HDF5.nloaded(vals) == 0                    # nothing read at open
+        obj = read(fid, "obj_with_vals")
+        @test obj.class == full["obj_with_vals"].class
+        @test obj["a"] == full["obj_with_vals"]["a"] == 10.0
+        @test 0 < MAT.MAT_HDF5.nloaded(vals) < length(vals)      # only what that object needed
+    end
+    # opened for writing as well, the subsystem is read in full, as before
+    rw = joinpath(mktempdir(), "rw.mat")
+    cp(filepath, rw)
+    matopen(rw, "r+") do fid
+        @test fid.subsystem.prop_vals_saved isa Vector
+    end
+end
+
+@testset "single-variable reads skip large unused properties" begin
+    mktempdir() do dir
+        path = joinpath(dir, "large_property.mat")
+        cp(joinpath(@__DIR__, "v7.3", "user_defined_classdefs.mat"), path)
+        HDF5.h5open(path, "r+") do file
+            file["#refs#/large_property"] = fill(42.0, 100_000, 1)
+            data = file["#refs#/large_property"]
+            HDF5.attributes(data)["MATLAB_class"] = "double"
+            HDF5.attributes(data)["H5PATH"] = "/#refs#/large_property"
+            refs = file["#subsystem#/MCOS"]
+            values = read(refs, HDF5.Reference)
+            values[4] = HDF5.Reference(file, "#refs#/large_property")
+            refs[:, :] = values
+            close(data)
+            close(refs)
+        end
+        read_selected(path) = matopen(file -> read(file, "obj_with_vals"), path)
+        @test read_selected(path)["a"] == 10.0
+        @test (@allocated read_selected(path)) < 512_000
+        @test matread(path)["obj_no_vals"]["b"] == fill(42.0, 100_000, 1)
+    end
 end
 
 let objtestfile = "function_handles.mat"
