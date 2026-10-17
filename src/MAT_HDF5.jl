@@ -287,7 +287,10 @@ function read_opaque(dset::HDF5.Dataset, mattype::String, objecttype, subsys::Su
         return read(dset)
     elseif HDF5.get_jl_type(dset) == UInt32
         return MAT_subsys.load_mcos_object(read(dset, UInt32), "MCOS", subsys)
+    elseif HDF5.get_jl_type(dset) == Reference
+        return read_cell(dset, subsys)
     end
+    @warn "MATLAB opaque type $mattype is not supported. Returning raw metadata."
     return read(dset)
 end
 

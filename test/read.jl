@@ -215,7 +215,7 @@ end
 @testset "v7.3 opaque type systems and enumeration metadata" begin
     filepath = joinpath(dirname(@__FILE__), "v7.3", "test_type_systems.mat")
     fid = matopen(filepath)
-    javatype = read(fid, "javatype")
+    javatype = @test_logs (:warn, r"opaque type java.lang.String is not supported") read(fid, "javatype")
     handletype = read(fid, "handletype")
     close(fid)
 
@@ -223,7 +223,8 @@ end
     @test vec(javatype) == UInt8[0xac, 0xed, 0x00, 0x05, 0x74, 0x00, 0x0b,
                                  0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77,
                                  0x6f, 0x72, 0x6c, 0x64]
-    @test handletype isa Matrix{HDF5.Reference}
+    @test handletype isa Matrix{Any}
+    @test length(handletype) == 139
 
     filepath = joinpath(dirname(@__FILE__), "v7.3", "test_enum.mat")
     fid = matopen(filepath)
