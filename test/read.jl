@@ -212,6 +212,60 @@ let objtestfile = "obj.mat"
     @test vars["A"].class == "Assoc"
 end
 
+@testset "v7.3 opaque type systems and enumeration metadata" begin
+    filepath = joinpath(dirname(@__FILE__), "v7.3", "test_type_systems.mat")
+    fid = matopen(filepath)
+    javatype = read(fid, "javatype")
+    handletype = read(fid, "handletype")
+    close(fid)
+
+    @test javatype isa Matrix{UInt8}
+    @test vec(javatype) == UInt8[0xac, 0xed, 0x00, 0x05, 0x74, 0x00, 0x0b,
+                                 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77,
+                                 0x6f, 0x72, 0x6c, 0x64]
+    @test handletype isa Matrix{HDF5.Reference}
+
+    filepath = joinpath(dirname(@__FILE__), "v7.3", "test_enum.mat")
+    fid = matopen(filepath)
+    enum_scalar = read(fid, "enum_scalar")
+    enum_uint32 = read(fid, "enum_uint32")
+    enum_array = read(fid, "enum_array")
+    enum_nested = read(fid, "enum_nested")
+    close(fid)
+
+    for enum_metadata in (enum_scalar, enum_uint32, enum_array)
+        @test enum_metadata isa Dict{String,Any}
+        @test enum_metadata["EnumerationInstanceTag"] == 0xdd000000
+        @test haskey(enum_metadata, "Values")
+    end
+    @test enum_nested isa MatlabOpaque
+    @test enum_nested["a"] isa Dict{String,Any}
+    @test enum_nested["a"]["EnumerationInstanceTag"] == 0xdd000000
+end
+
+@testset "empty function handle" begin
+    mktempdir() do dir
+        filepath = joinpath(dir, "empty_function_handle.mat")
+        matwrite(filepath, Dict("x" => [1.0, 2.0]))
+        HDF5.h5open(filepath, "r+") do file
+            file["fh"] = UInt64[0, 0]
+            dset = file["fh"]
+            try
+                HDF5.attributes(dset)["MATLAB_class"] = "function_handle"
+                HDF5.attributes(dset)["MATLAB_empty"] = UInt8(1)
+            finally
+                close(dset)
+            end
+        end
+
+        value = matopen(filepath) do fid
+            read(fid, "fh")
+        end
+        @test value isa Matrix{FunctionHandle}
+        @test size(value) == (0, 0)
+    end
+end
+
 # test reading of a Matlab figure
 let objtestfile = "figure.fig"
     vars = matread(joinpath(dirname(@__FILE__), objtestfile))
