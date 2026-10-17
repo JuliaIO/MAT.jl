@@ -444,6 +444,34 @@ let objtestfile = "function_handles.mat"
     @test isequal(vars["anonymous"], vars["anonymous"])
 end
 
+@testset "empty function handles v7" begin
+    # fh = function_handle.empty(1, 0); s.cb = function_handle.empty as MATLAB
+    # writes them with -v6: an mxFUNCTION_CLASS matrix with no data after the name
+    element(type, data) = vcat(reinterpret(UInt8, UInt32[type, length(data)]), data,
+                               zeros(UInt8, mod(-length(data), 8)))
+    matrix(class, dims, name, data=UInt8[]) = element(14, vcat(
+        element(6, reinterpret(UInt8, UInt32[class, 0])),
+        element(5, reinterpret(UInt8, Int32[dims...])),
+        element(1, Vector{UInt8}(name)),
+        data))
+    fh = matrix(16, (1, 0), "fh")
+    s = matrix(2, (1, 1), "s", vcat(
+        element(5, reinterpret(UInt8, Int32[8])),
+        element(1, UInt8['c', 'b', 0, 0, 0, 0, 0, 0]),
+        matrix(16, (0, 0), "")))
+    header = vcat(Vector{UInt8}(rpad("MATLAB 5.0 MAT-file", 116)), zeros(UInt8, 8),
+                  reinterpret(UInt8, UInt16[0x0100, 0x4D49]))
+    mktempdir() do dir
+        path = joinpath(dir, "empty_function_handle.mat")
+        write(path, vcat(header, fh, s))
+        vars = matread(path)
+        @test vars["fh"] isa Matrix{Any}
+        @test size(vars["fh"]) == (1, 0)
+        @test vars["s"]["cb"] isa Matrix{Any}
+        @test size(vars["s"]["cb"]) == (0, 0)
+    end
+end
+
 for format in ["v7", "v7.3"]
     @testset "char unicode $format" begin
         result = Dict(
