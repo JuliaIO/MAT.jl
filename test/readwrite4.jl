@@ -91,3 +91,15 @@ let tmp = "v4/tmp.mat"
     @test haskey(d, "testnamelen")
     rm(tmp)
 end
+
+@testset "missing variables and keys in every format" begin
+    for path in ("v4/testmulti_4.2c_SOL2.mat", "v7/simple.mat", "v7.3/simple.mat")
+        matopen(path) do fid
+            @test_throws KeyError read(fid, "no_such_variable")
+            names = keys(fid)
+            @test names isa Vector{String}
+            @test issorted(names)
+            @test all(n -> haskey(fid, n), names)
+        end
+    end
+end

@@ -46,8 +46,7 @@ import Tables
     @test get(s_arr, "wrong", nothing) === nothing
 
     # setindexing
-    msg = "field \"z\" not found in MatlabStructArray"
-    @test_throws ErrorException(msg) s_arr["z"] = [1.0, 2.0]
+    @test_throws KeyError("z") s_arr["z"] = [1.0, 2.0]
     s_arr["x"] = [1.0, 2.0]
     @test s_arr["x"] == Any[1.0, 2.0]
     msg = "size of input is not equal to MatlabStructArray column size"
@@ -317,6 +316,7 @@ end
         @test Tables.getcolumn(columns, i) == table.columns[i]
         @test Tables.getcolumn(columns, name) == table.columns[i]
     end
+    @test_throws KeyError(:d) table[:d]
     expected = (a=[1, 2], b=[3.0, 4.0], c=["five", "six"])
     @test Tables.columntable(table) == expected
     @test Tables.rowtable(table) == [(a=1, b=3.0, c="five"), (a=2, b=4.0, c="six")]
