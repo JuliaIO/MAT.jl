@@ -527,6 +527,27 @@ end
     end
 end
 
+@testset "empty char arrays v7" begin
+    # blanks(0) (1x0) and a 3x0 char array, as MATLAB writes them with -v6; an empty
+    # char array reads as String[] whatever its shape, as in v7.3
+    element(type, data) = vcat(reinterpret(UInt8, UInt32[type, length(data)]), data,
+                               zeros(UInt8, mod(-length(data), 8)))
+    chars(name, dims) = element(14, vcat(
+        element(6, reinterpret(UInt8, UInt32[4, 0])),
+        element(5, reinterpret(UInt8, Int32[dims...])),
+        element(1, Vector{UInt8}(name)),
+        element(4, UInt8[])))
+    header = vcat(Vector{UInt8}(rpad("MATLAB 5.0 MAT-file", 116)), zeros(UInt8, 8),
+                  reinterpret(UInt8, UInt16[0x0100, 0x4D49]))
+    mktempdir() do dir
+        path = joinpath(dir, "empty_chars.mat")
+        write(path, vcat(header, chars("b", (1, 0)), chars("c", (3, 0))))
+        vars = matread(path)
+        @test vars["b"] == String[]
+        @test vars["c"] == String[]
+    end
+end
+
 for format in ["v7", "v7.3"]
     @testset "char unicode $format" begin
         result = Dict(
