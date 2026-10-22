@@ -744,7 +744,7 @@ columns before converting to a destination that only accepts vectors.
 """
 struct MatlabTable
     names::Vector{Symbol}
-    columns::Vector
+    columns::Vector{Any}  # concrete, so code using it is type stable; columns differ in type
 end
 Tables.istable(::Type{MatlabTable}) = true
 Tables.columnaccess(::Type{MatlabTable}) = true
