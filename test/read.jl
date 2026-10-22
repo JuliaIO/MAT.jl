@@ -527,6 +527,46 @@ end
     end
 end
 
+@testset "struct arrays with no fields" begin
+    # repmat(struct(), 1, 3) and struct([]) as MATLAB writes them with -v6: a field
+    # name length of 1, no field names and no field values
+    element(type, data) = vcat(reinterpret(UInt8, UInt32[type, length(data)]), data,
+                               zeros(UInt8, mod(-length(data), 8)))
+    fieldless(dims, name) = element(14, vcat(
+        element(6, reinterpret(UInt8, UInt32[2, 0])),
+        element(5, reinterpret(UInt8, Int32[dims...])),
+        element(1, Vector{UInt8}(name)),
+        element(5, reinterpret(UInt8, Int32[1])),
+        element(1, UInt8[])))
+    header = vcat(Vector{UInt8}(rpad("MATLAB 5.0 MAT-file", 116)), zeros(UInt8, 8),
+                  reinterpret(UInt8, UInt16[0x0100, 0x4D49]))
+    mktempdir() do dir
+        v7 = joinpath(dir, "fieldless_v7.mat")
+        write(v7, vcat(header, fieldless((1, 3), "sa"), fieldless((0, 0), "e0"), fieldless((1, 1), "s1")))
+        # v7.3 stores each as an empty struct dataset holding its dimensions
+        v73 = joinpath(dir, "fieldless_v73.mat")
+        matwrite(v73, Dict("x" => 1.0))
+        HDF5.h5open(v73, "r+") do file
+            for (name, dims) in (("sa", UInt64[1, 3]), ("e0", UInt64[0, 0]), ("s1", UInt64[1, 1]))
+                file[name] = dims
+                data = file[name]
+                HDF5.attributes(data)["MATLAB_class"] = "struct"
+                HDF5.attributes(data)["MATLAB_empty"] = UInt8(1)
+                close(data)
+            end
+        end
+        for path in (v7, v73)
+            vars = matread(path)
+            @test vars["sa"] isa Matrix{Dict{String,Any}}
+            @test size(vars["sa"]) == (1, 3)
+            @test all(isempty, vars["sa"])
+            @test vars["e0"] isa Matrix{Dict{String,Any}}
+            @test size(vars["e0"]) == (0, 0)
+            @test vars["s1"] == Dict{String,Any}()
+        end
+    end
+end
+
 for format in ["v7", "v7.3"]
     @testset "char unicode $format" begin
         result = Dict(

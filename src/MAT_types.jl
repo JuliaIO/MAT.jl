@@ -429,6 +429,14 @@ struct EmptyStruct
 end
 class(m::EmptyStruct) = ""
 
+# A struct array with no fields, which MATLAB stores as its dimensions alone. A
+# `MatlabStructArray` keeps its size in its field columns, so it cannot hold one;
+# read it as an array of empty Dicts, or a single empty Dict when it is 1x1.
+function fieldless_struct_array(dims::Tuple)
+    dims == (1, 1) && return Dict{String,Any}()
+    return [Dict{String,Any}() for _ in CartesianIndices(dims)]
+end
+
 """
     FunctionHandle(d::Dict{String, Any}) <: AbstractDict{String, Any}
 
