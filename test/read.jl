@@ -465,9 +465,9 @@ end
         path = joinpath(dir, "empty_function_handle.mat")
         write(path, vcat(header, fh, s))
         vars = matread(path)
-        @test vars["fh"] isa Matrix{Any}
+        @test vars["fh"] isa Matrix{FunctionHandle}
         @test size(vars["fh"]) == (1, 0)
-        @test vars["s"]["cb"] isa Matrix{Any}
+        @test vars["s"]["cb"] isa Matrix{FunctionHandle}
         @test size(vars["s"]["cb"]) == (0, 0)
     end
 end
