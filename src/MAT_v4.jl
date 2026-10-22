@@ -192,7 +192,6 @@ function getvarnames(matfile::Matlabv4File)
 
             name = strip(String(read_bswap(f, M==mBIG_ENDIAN, Vector{UInt8}(undef, namlen))), '\0')
             varnames[name] = offset
-            imag_offset = 0
             skip(f, mrows*ncols*sizeof(pTYPE[P]))
             if imagf == imagfCOMPLEX
                 skip(f, mrows*ncols*sizeof(pTYPE[P]))

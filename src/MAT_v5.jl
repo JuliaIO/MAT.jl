@@ -245,8 +245,6 @@ function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::
         error("invalid dimensions encountered for sparse array")
     end
 
-    m = isempty(dimensions) ? 0 : dimensions[1]
-    n = length(dimensions) <= 1 ? 0 : dimensions[2]
     ir = plusone!(convert(Vector{Int}, read_element(f, swap_bytes, Int32)))
     jc = plusone!(convert(Vector{Int}, read_element(f, swap_bytes, Int32)))
     if (flags[1] & (1 << 9)) != 0 # logical
