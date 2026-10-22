@@ -32,9 +32,6 @@ import Base: read, write, close
 import ..MAT_types: construct_from_raw, matlab_empty_matrix, MATWriteStyle
 using StructUtils
 
-round_uint8(data) = round.(UInt8, data)
-complex_array(a, b) = complex.(a, b)
-
 mutable struct Matlabv4File <: HDF5.H5DataStore
     ios::IOStream
     swap_bytes::Bool
@@ -192,7 +189,6 @@ function getvarnames(matfile::Matlabv4File)
 
             name = strip(String(read_bswap(f, M==mBIG_ENDIAN, Vector{UInt8}(undef, namlen))), '\0')
             varnames[name] = offset
-            imag_offset = 0
             skip(f, mrows*ncols*sizeof(pTYPE[P]))
             if imagf == imagfCOMPLEX
                 skip(f, mrows*ncols*sizeof(pTYPE[P]))
