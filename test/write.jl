@@ -352,6 +352,23 @@ end
 
 end
 
+@testset "MatlabOpaque uint32 properties" begin
+    # an empty uint32 property (a `uint32([])` default) is not a nested object
+    d = Dict{String,Any}("empty" => UInt32[], "full" => UInt32[1, 2, 3])
+    var_dict = Dict("obj" => MatlabOpaque(d, "TestClassUInt32"))
+
+    mktempdir() do tmpdir
+        tmpfile = joinpath(tmpdir, "test.mat")
+        matwrite(tmpfile, var_dict)
+        obj = matread(tmpfile)["obj"]
+
+        @test obj isa MatlabOpaque
+        @test obj["empty"] isa Array{UInt32}
+        @test isempty(obj["empty"])
+        @test vec(obj["full"]) == UInt32[1, 2, 3]
+    end
+end
+
 @testset "Dates" begin
     dt = DateTime[
         DateTime(2016, 12, 20) # 20-Dec-2016
