@@ -405,14 +405,20 @@ for format in ["v7", "v7.3"]
     @testset "corrupted subsystem" begin
     let objtestfile = "corrupted_subsystem.mat"
         filepath = joinpath(dirname(@__FILE__), format, objtestfile)
-        # Subsystem data is corrupted - unsupported version (v=5); the warning names the cause
-        @test_logs (:warn,r"^Failed to load MAT-file subsystem data.*Unsupported FileWrapper version: 5") matread(filepath)
+        # Subsystem data is corrupted - unsupported version (v=5); the warning carries the error
+        @test_logs (:warn,r"^Failed to load MAT-file subsystem data") matread(filepath)
+        logs, _ = Test.collect_test_logs(() -> matread(filepath))
+        err = first(only(logs).kwargs[:exception])
+        @test occursin("Unsupported FileWrapper version: 5", sprint(showerror, err))
     end
 
     let objtestfile = "corrupted_mcos_object_metadata.mat"
         filepath = joinpath(dirname(@__FILE__), format, objtestfile)
         # object metadata is corrupted - object ID does not exist in file
         @test_logs (:warn,r"^Failed to load MCOS object") match_mode=:any matread(filepath)
+        logs, _ = Test.collect_test_logs(() -> matread(filepath))
+        failed = filter(l -> startswith(l.message, "Failed to load MCOS object"), logs)
+        @test first(failed).kwargs[:exception] isa Tuple{Exception,Any}
     end
     end
 

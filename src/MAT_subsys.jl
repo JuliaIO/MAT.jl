@@ -259,7 +259,7 @@ function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_
         check_unknown_regions(subsys)
         return subsys
     catch e
-        @warn "Failed to load MAT-file subsystem data. Opaque objects will be skipped. Error: $(sprint(showerror, e))"
+        @warn "Failed to load MAT-file subsystem data. Opaque objects will be skipped." exception = (e, catch_backtrace())
         return subsys
     end
 end
@@ -504,7 +504,7 @@ function load_mcos_object(metadata::Array{UInt32}, type_name::String, subsys::Su
         end
 
     catch e
-        @warn "Failed to load MCOS object. Returning raw metadata. Error: $e"
+        @warn "Failed to load MCOS object. Returning raw metadata." exception = (e, catch_backtrace())
         return metadata
     end
 end
