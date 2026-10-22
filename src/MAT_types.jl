@@ -404,8 +404,10 @@ end
 
 # 1D MatlabStructArray also counts as table (mostly for testing purposes)
 Tables.istable(::Type{MatlabStructArray{1}}) = true
-Tables.columns(t::MatlabStructArray{1}) = Symbol.(t.values)
-Tables.columnnames(t::MatlabStructArray{1}) = t.names
+Tables.columnaccess(::Type{MatlabStructArray{1}}) = true
+Tables.columns(t::MatlabStructArray{1}) = t
+Tables.columnnames(t::MatlabStructArray{1}) = Symbol.(t.names)
+Tables.getcolumn(t::MatlabStructArray{1}, i::Int) = t.values[i]
 Tables.getcolumn(t::MatlabStructArray{1}, nm::String) = t[nm]
 Tables.getcolumn(t::MatlabStructArray{1}, nm::Symbol) = Tables.getcolumn(t, string(nm))
 function MatlabStructArray{1}(t::Tables.CopiedColumns)
@@ -588,7 +590,7 @@ end
 
 value_isapprox(x1::AbstractString, x2::AbstractString; kwargs...) = isequal(x1, x2)
 value_isapprox(x1, x2; kwargs...) = isapprox(x1, x2; kwargs...)
-value_isapprox(d1::AbstractDict, d2::AbstractDict; kwargs...) = dict_isapprox(x1, x2; kwargs...)
+value_isapprox(d1::AbstractDict, d2::AbstractDict; kwargs...) = dict_isapprox(d1, d2; kwargs...)
 
 function convert_opaque(obj::MatlabOpaque; table::Type=Nothing)
     if obj.class == "string"
@@ -716,7 +718,8 @@ function from_categorical(obj::MatlabOpaque)
 end
 
 function promoted_eltype(v::AbstractArray{Any})
-    isempty(v) && return T
+    # a categorical with no categories, such as `categorical({})`
+    isempty(v) && return Any
     first_el, remaining = Iterators.peel(v)
     T_out = typeof(first_el)
     for el in remaining
