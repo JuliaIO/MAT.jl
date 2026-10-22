@@ -238,63 +238,30 @@ function read_cell(dset::HDF5.Dataset, subsys::Subsystem)
     return out
 end
 
-function m_read(dset::HDF5.Dataset, subsys::Subsystem)
-    if haskey(dset, empty_attr_matlab)
-        # Empty arrays encode the dimensions as the dataset
-        dims = convert(Vector{Int}, read(dset))
-        mattype = read_attribute(dset, name_type_attr_matlab)
-        if mattype == "char"
-            return String[]
-        elseif mattype == "struct"
-            # Not sure if this check is necessary but it is checked in
-            # `m_read(g::HDF5.Group)`
-            if haskey(dset, struct_field_attr_matlab)
-                field_names = [join(n) for n in read_attribute(dset, struct_field_attr_matlab)]
-                return MatlabStructArray(field_names, tuple(dims...))
-            else
-                return Dict{String,Any}()
-            end
-        else
-            T = mattype == "canonical empty" ? Union{} : str2type_matlab[mattype]
-            return Array{T}(undef, dims...)
-        end
-    end
-
-    objecttype = haskey(dset, object_type_attr_matlab) ? read_attribute(dset, object_type_attr_matlab) : nothing
-    mattype = haskey(dset, name_type_attr_matlab) ? read_attribute(dset, name_type_attr_matlab) : "struct_array_field"
-
-    if mattype == "cell" && objecttype === nothing
-        # Cell arrays, represented as an array of refs
-        return read_cell(dset, subsys)
-    elseif objecttype !== nothing
-        if objecttype != 3
-            @warn "MATLAB Object Type $mattype is currently not supported."
-            return missing
-        end
-        if mattype == "FileWrapper__"
-            return LazyCell(dset, subsys)
-        end
+function read_empty(dset::HDF5.Dataset)
+    # Empty arrays encode the dimensions as the dataset
+    dims = convert(Vector{Int}, read(dset))
+    mattype = read_attribute(dset, name_type_attr_matlab)
+    if mattype == "char"
+        return String[]
+    elseif mattype == "function_handle"
+        return Array{FunctionHandle}(undef, dims...)
+    elseif mattype == "struct"
+        # Struct array fields are represented by a dataset with no values.
         if haskey(dset, struct_field_attr_matlab)
-            @warn "Enumeration Instances are not supported currently."
-            return missing
+            field_names = [join(n) for n in read_attribute(dset, struct_field_attr_matlab)]
+            return MatlabStructArray(field_names, tuple(dims...))
+        else
+            return Dict{String,Any}()
         end
-    elseif mattype == "struct_array_field"
-        # This will be converted into MatlabStructArray in `m_read(g::HDF5.Group)`
-        return StructArrayField(read_cell(dset, subsys))
-    elseif !haskey(str2type_matlab,mattype)
-        @warn "MATLAB $mattype values are currently not supported."
-        return missing
-    end
-
-    # Regular arrays of values
-    # Convert to Julia type
-    if objecttype === nothing
-        T = str2type_matlab[mattype]
     else
-        T = UInt32 # FIXME: Default for MATLAB objects?
+        T = mattype == "canonical empty" ? Union{} : str2type_matlab[mattype]
+        return Array{T}(undef, dims...)
     end
+end
 
-    # Check for a COMPOUND data set, and if so handle complex numbers specially
+function read_numeric(dset::HDF5.Dataset, mattype::String, objecttype, subsys::Subsystem)
+    T = objecttype === nothing ? str2type_matlab[mattype] : UInt32
     dtype = datatype(dset)
     try
         class_id = HDF5.API.h5t_get_class(dtype.id)
@@ -307,6 +274,48 @@ function m_read(dset::HDF5.Dataset, subsys::Subsystem)
     finally
         close(dtype)
     end
+end
+
+function read_opaque(dset::HDF5.Dataset, mattype::String, objecttype, subsys::Subsystem)
+    if objecttype != 3
+        @warn "MATLAB Object Type $mattype is currently not supported."
+        return missing
+    elseif mattype == "FileWrapper__"
+        return LazyCell(dset, subsys)
+    elseif haskey(dset, struct_field_attr_matlab)
+        @warn "Enumeration Instances are not supported. Returning raw metadata."
+        return read(dset)
+    elseif HDF5.get_jl_type(dset) == UInt32
+        return MAT_subsys.load_mcos_object(read(dset, UInt32), "MCOS", subsys)
+    elseif HDF5.get_jl_type(dset) == Reference
+        return read_cell(dset, subsys)
+    end
+    @warn "MATLAB opaque type $mattype is not supported. Returning raw metadata."
+    return read(dset)
+end
+
+function m_read(dset::HDF5.Dataset, subsys::Subsystem)
+    if haskey(dset, empty_attr_matlab)
+        return read_empty(dset)
+    end
+
+    objecttype = haskey(dset, object_type_attr_matlab) ? read_attribute(dset, object_type_attr_matlab) : nothing
+    mattype = haskey(dset, name_type_attr_matlab) ? read_attribute(dset, name_type_attr_matlab) : "struct_array_field"
+
+    if mattype == "cell" && objecttype === nothing
+        # Cell arrays, represented as an array of refs.
+        return read_cell(dset, subsys)
+    elseif objecttype !== nothing
+        return read_opaque(dset, mattype, objecttype, subsys)
+    elseif mattype == "struct_array_field"
+        # This will be converted into MatlabStructArray in `m_read(g::HDF5.Group)`.
+        return StructArrayField(read_cell(dset, subsys))
+    elseif !haskey(str2type_matlab, mattype)
+        @warn "MATLAB $mattype values are currently not supported."
+        return missing
+    end
+
+    return read_numeric(dset, mattype, objecttype, subsys)
 end
 
 function add!(A, x)
@@ -364,6 +373,18 @@ function read_struct_as_dict(g::HDF5.Group, subsys::Subsystem)
     return s
 end
 
+function read_struct_group(g::HDF5.Group, subsys::Subsystem, class::String="")
+    return convert_struct_array(read_struct_as_dict(g, subsys), class)
+end
+
+function read_function_handle(g::HDF5.Group, subsys::Subsystem)
+    return read_struct_group(g, subsys, "function_handle")
+end
+
+function read_object(g::HDF5.Group, subsys::Subsystem, class::String)
+    return read_struct_group(g, subsys, class)
+end
+
 # reading a struct, struct array, or sparse matrix
 function m_read(g::HDF5.Group, subsys::Subsystem)
     mattype = read_attribute(g, name_type_attr_matlab)
@@ -371,33 +392,24 @@ function m_read(g::HDF5.Group, subsys::Subsystem)
 end
 
 function m_read(g::HDF5.Group, subsys::Subsystem, mattype::String)
-    is_object = false
-    if mattype != "struct"
-        attr = attributes(g)
-        # Check if this is a sparse matrix.
-        if haskey(attr, sparse_attr_matlab)
-            return read_sparse_matrix(g, mattype)
-        elseif mattype == "function_handle"
-            if haskey(attr, object_decode_attr_matlab) && read_attribute(g, object_decode_attr_matlab)==1
-                is_object = true
-            end
-        else
-            if haskey(attr, object_decode_attr_matlab) && read_attribute(g, object_decode_attr_matlab)==2
-                # I think this means it's an old object class similar to mXOBJECT_CLASS in MAT_v5
-                is_object = true
-            elseif mattype != "#subsystem#"
-                @warn "Unknown non-struct group of type $mattype detected; attempting to read as struct"
-            end
+    attr = attributes(g)
+    if haskey(attr, sparse_attr_matlab)
+        return read_sparse_matrix(g, mattype)
+    end
+
+    objecttype = haskey(attr, object_decode_attr_matlab) ? read_attribute(g, object_decode_attr_matlab) : nothing
+    if mattype == "function_handle"
+        if objecttype == 1
+            return read_function_handle(g, subsys)
         end
+    elseif objecttype == 2
+        # This is an old object class similar to mXOBJECT_CLASS in MAT_v5.
+        return read_object(g, subsys, mattype)
+    elseif mattype != "struct" && mattype != "#subsystem#"
+        @warn "Unknown non-struct group of type $mattype detected; attempting to read as struct"
     end
-    if is_object
-        class = mattype
-    else
-        class = ""
-    end
-    s = read_struct_as_dict(g, subsys)
-    out = convert_struct_array(s, class)
-    return out
+
+    return read_struct_group(g, subsys)
 end
 
 """
