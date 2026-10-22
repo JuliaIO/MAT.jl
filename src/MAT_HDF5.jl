@@ -42,6 +42,7 @@ import ..MAT_types:
     construct_from_raw,
     convert_struct_array,
     EmptyStruct,
+    fieldless_struct_array,
     MatlabClassObject,
     MatlabOpaque,
     MatlabStructArray,
@@ -256,7 +257,8 @@ function read_empty(dset::HDF5.Dataset)
             field_names = [join(n) for n in read_attribute(dset, struct_field_attr_matlab)]
             return MatlabStructArray(field_names, tuple(dims...))
         else
-            return Dict{String,Any}()
+            # no fields: `struct()`, `struct([])` or `repmat(struct(), 1, 3)`
+            return fieldless_struct_array(tuple(dims...))
         end
     else
         T = mattype == "canonical empty" ? Union{} : str2type_matlab[mattype]
