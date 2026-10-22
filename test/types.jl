@@ -248,7 +248,18 @@ end
         "Poor"  "Fair"
         "Fair"  "Good"
     ]
-    
+
+    # <undefined> elements have the code 0 and read as missing
+    d["codes"] = UInt8[0x01 0x00 0x02]
+    d["categoryNames"] = Any["a"; "b";;]
+    c = MAT.convert_opaque(MatlabOpaque(d, "categorical"))
+    @test isequal(c, ["a" missing "b"])
+    @test eltype(c) == Union{Missing, String}
+    # 255 categories fill a UInt8 code, so missing needs a wider one
+    d["codes"] = UInt8[0x01 0x00 0xff]
+    d["categoryNames"] = Any[string(i) for i in 1:255, _ in 1:1]
+    c = MAT.convert_opaque(MatlabOpaque(d, "categorical"))
+    @test isequal(c, ["1" missing "255"])
 end
 
 @testset "MatlabOpaque table" begin
