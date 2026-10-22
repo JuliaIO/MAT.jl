@@ -29,6 +29,8 @@
 module MAT_v4
 using HDF5, SparseArrays
 import Base: read, write, close
+import ..MAT_types: construct_from_raw, matlab_empty_matrix, MATWriteStyle
+using StructUtils
 
 round_uint8(data) = round.(UInt8, data)
 complex_array(a, b) = complex.(a, b)
@@ -216,6 +218,10 @@ function read(matfile::Matlabv4File, varname::String)
     data
 end
 
+function read(matfile::Matlabv4File, varname::String, ::Type{T}) where {T}
+    return construct_from_raw(read(matfile, varname), T)
+end
+
 function colvals(A::AbstractSparseMatrix)
     rows = rowvals(A)
     cols = similar(rows)
@@ -228,11 +234,21 @@ function colvals(A::AbstractSparseMatrix)
     cols
 end
 
-function write(parent::Matlabv4File, name::String, s::AbstractChar)
-    write(parent, name, string(s))
-end
+# Values are lowered on the way in, so that `StructUtils.lower(::MATWriteStyle, x)`
+# overloads apply to v4 writes as they do to v7.3 writes.
+write(parent::Matlabv4File, name::String, s) =
+    write_value(parent, name, StructUtils.lower(MATWriteStyle(), s))
 
-function write(parent::Matlabv4File, name::String, s)
+write_value(parent::Matlabv4File, name::String, s::AbstractChar) =
+    write_value(parent, name, string(s))
+
+write_value(parent::Matlabv4File, name::String, ::Nothing) =
+    write_value(parent, name, matlab_empty_matrix)
+
+write_value(parent::Matlabv4File, name::String, ::Missing) =
+    write_value(parent, name, matlab_empty_matrix)
+
+function write_value(parent::Matlabv4File, name::String, s)
     M = Int(parent.swap_bytes)
     O = 0
     P = 0
