@@ -438,6 +438,55 @@ function read(f::MatlabHDF5File, name::String, ::Type{T}) where {T}
     return construct_from_raw(read(f, name), T)
 end
 
+# `MAT.readlazy`. From HDF5.jl 0.18 a dataset is itself a lazy, chunk-aware array (a
+# DiskArrays.AbstractDiskArray), so a variable needs only the conversions `read` applies:
+# logical data is stored as uint8, and complex data as a real/imag compound.
+function read_lazy(f::MatlabHDF5File, name::String)
+    obj = f.plain[name]
+    local T
+    try
+        T = lazy_eltype(obj, name)
+    catch
+        close(obj)
+        rethrow()
+    end
+    T === Bool && return obj .!= 0
+    T <: Complex && return (x -> complex(x.real, x.imag)).(obj)
+    return obj
+end
+
+# The element type `read` gives a numeric, logical or complex variable; the classes `read`
+# converts in other ways throw.
+function lazy_eltype(obj, name::String)
+    unsupported(what) = throw(ArgumentError("MAT.readlazy reads numeric, logical and complex arrays, and \"$name\" is $what; use `read` instead"))
+    attr = attributes(obj)
+    mattype = haskey(attr, name_type_attr_matlab) ? read_attribute(obj, name_type_attr_matlab) : nothing
+    if obj isa HDF5.Group
+        unsupported(haskey(attr, sparse_attr_matlab) ? "a sparse array" :
+                    mattype === nothing || mattype == "struct" ? "a struct" : "of class $mattype")
+    elseif haskey(attr, empty_attr_matlab)
+        unsupported("an empty array")
+    elseif haskey(attr, object_type_attr_matlab)
+        unsupported("a $mattype object")
+    elseif mattype === nothing
+        unsupported("not a MATLAB variable")
+    elseif !(get(str2type_matlab, mattype, nothing) isa Type{<:Real})
+        unsupported("of class $mattype")
+    end
+    T = str2type_matlab[mattype]
+    dtype = datatype(obj)
+    try
+        if HDF5.API.h5t_get_class(dtype.id) == HDF5.API.H5T_COMPOUND
+            (T !== Bool && check_datatype_complex(dtype)) ||
+                error("Unrecognized compound data type when reading ", HDF5.name(obj))
+            return Complex{T}
+        end
+        return T
+    finally
+        close(dtype)
+    end
+end
+
 """
     keys(matfile_handle) -> Vector{String}
 

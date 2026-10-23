@@ -257,6 +257,40 @@ function matread(filename::AbstractString, varname::AbstractString, ::Type{T};
     val
 end
 
+"""
+    MAT.readlazy(matfile_handle, varname) -> AbstractArray
+
+Return a numeric, logical or complex variable of a v7.3 MAT file as a lazy array:
+indexing, views, broadcasting and reductions read only the parts of the file they need.
+Needs HDF5.jl 0.18 or later, whose datasets are lazy, chunk-aware arrays (see
+DiskArrays.jl).
+
+The elements are those `read` returns: `Bool` for a logical array and `Complex` for a
+complex one. Unlike `read`, a variable with one element stays an array.
+
+The array reads from the open file, so it can be used only until the file is closed.
+Other classes (char, cell, struct, sparse, objects and empty arrays) and v4, v6 and v7
+files throw an `ArgumentError`; read those with `read`.
+
+# Example
+
+```julia
+using MAT
+matopen("data.mat") do fid
+    A = MAT.readlazy(fid, "A")
+    A[1:10, :]             # reads the first ten rows
+    sum(view(A, :, 1))     # reads the first column
+end
+```
+"""
+function readlazy(f::MAT_HDF5.MatlabHDF5File, name::AbstractString)
+    HDF5.Dataset <: AbstractArray || throw(ArgumentError(
+        "MAT.readlazy needs HDF5.jl 0.18 or later, whose datasets are lazy arrays; this is HDF5.jl $(pkgversion(HDF5))"))
+    return MAT_HDF5.read_lazy(f, String(name))
+end
+readlazy(::Union{MAT_v5.Matlabv5File,MAT_v4.Matlabv4File}, ::AbstractString) =
+    throw(ArgumentError("MAT.readlazy reads v7.3 (HDF5) files only; use `read` for v4, v6 and v7 files"))
+
 # Write a dict to a MATLAB file
 """
     matwrite(filename, d::Dict; compress::Bool = false, version::String = "v7.3")
