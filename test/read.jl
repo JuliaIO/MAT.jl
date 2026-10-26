@@ -212,6 +212,61 @@ let objtestfile = "obj.mat"
     @test vars["A"].class == "Assoc"
 end
 
+@testset "v7.3 opaque type systems and enumeration metadata" begin
+    filepath = joinpath(dirname(@__FILE__), "v7.3", "test_type_systems.mat")
+    fid = matopen(filepath)
+    javatype = @test_logs (:warn, r"opaque type java.lang.String is not supported") read(fid, "javatype")
+    handletype = read(fid, "handletype")
+    close(fid)
+
+    @test javatype isa Matrix{UInt8}
+    @test vec(javatype) == UInt8[0xac, 0xed, 0x00, 0x05, 0x74, 0x00, 0x0b,
+                                 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77,
+                                 0x6f, 0x72, 0x6c, 0x64]
+    @test handletype isa Matrix{Any}
+    @test length(handletype) == 139
+
+    filepath = joinpath(dirname(@__FILE__), "v7.3", "test_enum.mat")
+    fid = matopen(filepath)
+    enum_scalar = read(fid, "enum_scalar")
+    enum_uint32 = read(fid, "enum_uint32")
+    enum_array = read(fid, "enum_array")
+    enum_nested = read(fid, "enum_nested")
+    close(fid)
+
+    for enum_metadata in (enum_scalar, enum_uint32, enum_array)
+        @test enum_metadata isa Dict{String,Any}
+        @test enum_metadata["EnumerationInstanceTag"] == 0xdd000000
+        @test haskey(enum_metadata, "Values")
+    end
+    @test enum_nested isa MatlabOpaque
+    @test enum_nested["a"] isa Dict{String,Any}
+    @test enum_nested["a"]["EnumerationInstanceTag"] == 0xdd000000
+end
+
+@testset "empty function handle" begin
+    mktempdir() do dir
+        filepath = joinpath(dir, "empty_function_handle.mat")
+        matwrite(filepath, Dict("x" => [1.0, 2.0]))
+        HDF5.h5open(filepath, "r+") do file
+            file["fh"] = UInt64[0, 0]
+            dset = file["fh"]
+            try
+                HDF5.attributes(dset)["MATLAB_class"] = "function_handle"
+                HDF5.attributes(dset)["MATLAB_empty"] = UInt8(1)
+            finally
+                close(dset)
+            end
+        end
+
+        value = matopen(filepath) do fid
+            read(fid, "fh")
+        end
+        @test value isa Matrix{FunctionHandle}
+        @test size(value) == (0, 0)
+    end
+end
+
 # test reading of a Matlab figure
 let objtestfile = "figure.fig"
     vars = matread(joinpath(dirname(@__FILE__), objtestfile))
@@ -518,6 +573,34 @@ let objtestfile = "function_handles.mat"
 
     @test isequal(vars["sin"], vars["sin"])
     @test isequal(vars["anonymous"], vars["anonymous"])
+end
+
+@testset "empty function handles v7" begin
+    # fh = function_handle.empty(1, 0); s.cb = function_handle.empty as MATLAB
+    # writes them with -v6: an mxFUNCTION_CLASS matrix with no data after the name
+    element(type, data) = vcat(reinterpret(UInt8, UInt32[type, length(data)]), data,
+                               zeros(UInt8, mod(-length(data), 8)))
+    matrix(class, dims, name, data=UInt8[]) = element(14, vcat(
+        element(6, reinterpret(UInt8, UInt32[class, 0])),
+        element(5, reinterpret(UInt8, Int32[dims...])),
+        element(1, Vector{UInt8}(name)),
+        data))
+    fh = matrix(16, (1, 0), "fh")
+    s = matrix(2, (1, 1), "s", vcat(
+        element(5, reinterpret(UInt8, Int32[8])),
+        element(1, UInt8['c', 'b', 0, 0, 0, 0, 0, 0]),
+        matrix(16, (0, 0), "")))
+    header = vcat(Vector{UInt8}(rpad("MATLAB 5.0 MAT-file", 116)), zeros(UInt8, 8),
+                  reinterpret(UInt8, UInt16[0x0100, 0x4D49]))
+    mktempdir() do dir
+        path = joinpath(dir, "empty_function_handle.mat")
+        write(path, vcat(header, fh, s))
+        vars = matread(path)
+        @test vars["fh"] isa Matrix{FunctionHandle}
+        @test size(vars["fh"]) == (1, 0)
+        @test vars["s"]["cb"] isa Matrix{FunctionHandle}
+        @test size(vars["s"]["cb"]) == (0, 0)
+    end
 end
 
 for format in ["v7", "v7.3"]

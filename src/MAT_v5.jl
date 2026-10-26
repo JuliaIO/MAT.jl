@@ -28,7 +28,7 @@
 module MAT_v5
 using CodecZlib, HDF5, SparseArrays
 import Base: read, write, close
-import ..MAT_types: MatlabStructArray, MatlabClassObject, MatlabTable, FunctionHandle, decode_char_array
+import ..MAT_types: MatlabStructArray, MatlabClassObject, MatlabTable, construct_from_raw, FunctionHandle, decode_char_array
 
 using ..MAT_subsys
 
@@ -303,7 +303,12 @@ function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
     data
 end
 
-function read_function_handle(f::IO, swap_bytes::Bool, subsys::Subsystem)
+function read_function_handle(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, subsys::Subsystem)
+    if prod(dimensions) == 0
+        # e.g. `function_handle.empty`, the default of an unset callback property;
+        # MATLAB writes nothing after the name
+        return Array{FunctionHandle}(undef, dimensions...)
+    end
     data = read_matrix(f, swap_bytes, subsys)[2] # read_matrix returns (var_name, data)
     return FunctionHandle(data)
 end
@@ -358,7 +363,7 @@ function read_matrix(f::IO, swap_bytes::Bool, subsys::Subsystem)
     elseif class == mxCHAR_CLASS
         data = read_string(f, swap_bytes, dimensions)
     elseif class == mxFUNCTION_CLASS
-        data = read_function_handle(f, swap_bytes, subsys)
+        data = read_function_handle(f, swap_bytes, dimensions, subsys)
     elseif class == mxOPAQUE_CLASS
         data = read_opaque(f, swap_bytes, subsys)
     else
@@ -475,6 +480,10 @@ function read(matfile::Matlabv5File, varname::String)
     seek(matfile.ios, varnames[varname])
     (name, data) = read_matrix(matfile.ios, matfile.swap_bytes, matfile.subsystem)
     data
+end
+
+function read(matfile::Matlabv5File, varname::String, ::Type{T}) where {T}
+    return construct_from_raw(read(matfile, varname), T)
 end
 
 # Complain about writing to a MAT file
