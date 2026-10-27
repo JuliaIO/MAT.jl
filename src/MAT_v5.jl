@@ -28,7 +28,7 @@
 module MAT_v5
 using CodecZlib, HDF5, SparseArrays
 import Base: read, write, close
-import ..MAT_types: MatlabStructArray, MatlabClassObject, MatlabTable, construct_from_raw, FunctionHandle, decode_char_array
+import ..MAT_types: MatlabStructArray, MatlabClassObject, MatlabTable, construct_from_raw, FunctionHandle, decode_char_array, fieldless_struct_array
 
 using ..MAT_subsys
 
@@ -207,6 +207,9 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
         if is_object
             data = MatlabClassObject(data, class)
         end
+    elseif n_fields == 0 && !is_object
+        # no fields, so nothing follows; as the v7.3 reader returns it
+        data = fieldless_struct_array(Tuple(convert(Vector{Int}, dimensions)))
     else
         # Read empty or multiple structs
         nfields = length(field_name_strings)
@@ -464,13 +467,13 @@ end
 Base.haskey(matfile::Matlabv5File, varname::String) =
     haskey(getvarnames(matfile), varname)
 Base.keys(matfile::Matlabv5File) =
-    keys(getvarnames(matfile))
+    sort!(collect(keys(getvarnames(matfile))))
 
 # Read a variable from a MAT file
 function read(matfile::Matlabv5File, varname::String)
     varnames = getvarnames(matfile)
     if !haskey(varnames, varname)
-        error("no variable $varname in file")
+        throw(KeyError(varname))
     end
     seek(matfile.ios, varnames[varname])
     (name, data) = read_matrix(matfile.ios, matfile.swap_bytes, matfile.subsystem)

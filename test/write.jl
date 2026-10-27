@@ -267,6 +267,9 @@ end
 end
 
 @testset "Empty Struct 1x1" begin
+    # Writing struct arrays with no fields (and other sizes, e.g. 1x3 or 0x0) is
+    # covered by the v7.3 round trip in the "struct arrays with no fields" testset
+    # in test/read.jl.
     var_dict = Dict("empty_struct" => Dict{String,Any}())
     mktempdir() do tmpdir
         tmpfile = joinpath(tmpdir, "test.mat")

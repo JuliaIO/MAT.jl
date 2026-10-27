@@ -400,52 +400,47 @@ for format in ["v7", "v7.3"]
     # a timetable's row times
     @testset "timetable $format" begin
         filepath = joinpath(dirname(@__FILE__), format, "timetable.mat")
-        if isfile(filepath)
-            # tt_calendar's step is calendar months, which has no fixed rate: left as read
-            vars = @test_logs (:warn, r"timetable row times") match_mode=:any matread(filepath)
-            @test vars["tt_calendar"] isa MatlabOpaque
-            @test vars["tt_calendar"].class == "timetable"
+        # tt_calendar's step is calendar months, which has no fixed rate: left as read
+        vars = @test_logs (:warn, r"timetable row times") match_mode=:any matread(filepath)
+        @test vars["tt_calendar"] isa MatlabOpaque
+        @test vars["tt_calendar"].class == "timetable"
 
-            t = vars["tt_datetime"]           # row times per row, as datetimes
-            @test t isa MatlabTable
-            @test t.names == [:Time, :Current, :Channel]
-            @test t[:Time] == DateTime(2022, 7, 20, 2, 27, 27) .+ Millisecond.([428, 496, 564])
-            @test t[:Current] == [1.5e-11, 2.5e-11, -3e-12]
-            @test t[:Channel] == ["AB", "A", "B"]
+        t = vars["tt_datetime"]           # row times per row, as datetimes
+        @test t isa MatlabTable
+        @test t.names == [:Time, :Current, :Channel]
+        @test t[:Time] == DateTime(2022, 7, 20, 2, 27, 27) .+ Millisecond.([428, 496, 564])
+        @test t[:Current] == [1.5e-11, 2.5e-11, -3e-12]
+        @test t[:Channel] == ["AB", "A", "B"]
 
-            t = vars["tt_duration"]           # row times per row, as durations
-            @test t.names == [:Time, :x]
-            @test t[:Time] == Millisecond.([0, 500, 1250])
-            @test t[:x] == [1.0, 2.0, 3.0]
+        t = vars["tt_duration"]           # row times per row, as durations
+        @test t.names == [:Time, :x]
+        @test t[:Time] == Millisecond.([0, 500, 1250])
+        @test t[:x] == [1.0, 2.0, 3.0]
 
-            t = vars["tt_rate"]               # regular: start and sample rate
-            @test t.names == [:Time, :x]
-            @test t[:Time] == Millisecond.(0:3)
-            @test t[:x] == [10.0, 20.0, 30.0, 40.0]
+        t = vars["tt_rate"]               # regular: start and sample rate
+        @test t.names == [:Time, :x]
+        @test t[:Time] == Millisecond.(0:3)
+        @test t[:x] == [10.0, 20.0, 30.0, 40.0]
 
-            t = vars["tt_step"]               # regular: datetime start and time step
-            @test t[:Time] == DateTime(2022, 7, 20, 2) .+ Millisecond.([0, 250, 500])
-            @test t[:y] == [1.0, 2.0, 3.0]
+        t = vars["tt_step"]               # regular: datetime start and time step
+        @test t[:Time] == DateTime(2022, 7, 20, 2) .+ Millisecond.([0, 250, 500])
+        @test t[:y] == [1.0, 2.0, 3.0]
 
-            t = vars["tt_empty"]              # no rows, no variables
-            @test t isa MatlabTable
-            @test t.names == [:Time]
-            @test isempty(t[:Time])
+        t = vars["tt_empty"]              # no rows, no variables
+        @test t isa MatlabTable
+        @test t.names == [:Time]
+        @test isempty(t[:Time])
 
-            t = vars["tt_matrix"]             # a two-column variable stays a matrix
-            @test t[:Time] == Millisecond.([1000, 2000])
-            @test t[:m] == [1.0 2.0; 3.0 4.0]
+        t = vars["tt_matrix"]             # a two-column variable stays a matrix
+        @test t[:Time] == Millisecond.([1000, 2000])
+        @test t[:m] == [1.0 2.0; 3.0 4.0]
 
-            @test vars["tt_dimname"].names == [:Timestamp, :x]   # the row-times dimension's own name
+        @test vars["tt_dimname"].names == [:Timestamp, :x]   # the row-times dimension's own name
 
-            # using Nothing keeps the MatlabOpaque
-            raw = matread(filepath; table=Nothing)["tt_rate"]
-            @test raw isa MatlabOpaque
-            @test raw.class == "timetable"
-        else
-            # generated in MATLAB by test/timetable_gen.m; skipped until it is committed
-            @test_skip isfile(filepath)
-        end
+        # using Nothing keeps the MatlabOpaque
+        raw = matread(filepath; table=Nothing)["tt_rate"]
+        @test raw isa MatlabOpaque
+        @test raw.class == "timetable"
     end
 
     # timezone.mat is written by timezone_gen.m. MATLAB stores a zoned datetime as its UTC
@@ -453,7 +448,7 @@ for format in ["v7", "v7.3"]
     @testset "time zones, without TimeZones.jl $format" begin
         filepath = joinpath(dirname(@__FILE__), format, "timezone.mat")
         ext_loaded = isdefined(Base, :get_extension) && Base.get_extension(MAT, :MATTimeZonesExt) !== nothing
-        if isfile(filepath) && !ext_loaded
+        if !ext_loaded
             vars = @test_logs (:warn, r"timezone") match_mode=:any matread(filepath)
             @test vars["dt_unzoned"] == DateTime(2022, 7, 20, 12)          # no zone: wall clock
             @test vars["dt_utc"] == DateTime(2022, 7, 20, 12)
@@ -467,8 +462,8 @@ for format in ["v7", "v7.3"]
             @test vars["tt_zoned"][:Time] == DateTime(2022, 7, 20, 11) .+ Millisecond.([0, 1500])
             @test vars["tt_zoned_step"][:Time] == DateTime(2022, 7, 20, 11) .+ Millisecond.([0, 500, 1000])
         else
-            # generated in MATLAB by test/timezone_gen.m; skipped until it is committed
-            @test_skip isfile(filepath) && !ext_loaded
+            # covered instead by "time zones with TimeZones.jl" once the extension is loaded
+            @test_skip !ext_loaded
         end
     end
 
@@ -748,6 +743,41 @@ end
         @test size(vars["fh"]) == (1, 0)
         @test vars["s"]["cb"] isa Matrix{FunctionHandle}
         @test size(vars["s"]["cb"]) == (0, 0)
+    end
+end
+
+@testset "struct arrays with no fields" begin
+    # repmat(struct(), 1, 3) and struct([]) as MATLAB writes them with -v6: a field
+    # name length of 1, no field names and no field values
+    element(type, data) = vcat(reinterpret(UInt8, UInt32[type, length(data)]), data,
+                               zeros(UInt8, mod(-length(data), 8)))
+    fieldless(dims, name) = element(14, vcat(
+        element(6, reinterpret(UInt8, UInt32[2, 0])),
+        element(5, reinterpret(UInt8, Int32[dims...])),
+        element(1, Vector{UInt8}(name)),
+        element(5, reinterpret(UInt8, Int32[1])),
+        element(1, UInt8[])))
+    header = vcat(Vector{UInt8}(rpad("MATLAB 5.0 MAT-file", 116)), zeros(UInt8, 8),
+                  reinterpret(UInt8, UInt16[0x0100, 0x4D49]))
+    mktempdir() do dir
+        v7 = joinpath(dir, "fieldless_v7.mat")
+        write(v7, vcat(header, fieldless((1, 3), "sa"), fieldless((0, 0), "e0"), fieldless((1, 1), "s1")))
+        # v7.3 stores each as an empty struct dataset holding its dimensions
+        v73 = joinpath(dir, "fieldless_v73.mat")
+        matwrite(v73, Dict(
+            "sa" => fill(Dict{String,Any}(), 1, 3),
+            "e0" => Matrix{Dict{String,Any}}(undef, 0, 0),
+            "s1" => fill(Dict{String,Any}(), 1, 1),
+        ))
+        for path in (v7, v73)
+            vars = matread(path)
+            @test vars["sa"] isa Matrix{Dict{String,Any}}
+            @test size(vars["sa"]) == (1, 3)
+            @test all(isempty, vars["sa"])
+            @test vars["e0"] isa Matrix{Dict{String,Any}}
+            @test size(vars["e0"]) == (0, 0)
+            @test vars["s1"] == Dict{String,Any}()
+        end
     end
 end
 

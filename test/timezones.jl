@@ -6,10 +6,7 @@ using TimeZones, Dates
     for format in ("v7", "v7.3")
         # timezone.mat is written in MATLAB by timezone_gen.m
         filepath = joinpath(dirname(@__FILE__), format, "timezone.mat")
-        if !isfile(filepath) || VERSION < v"1.9"
-            @test_skip isfile(filepath) && VERSION >= v"1.9"
-            continue
-        end
+
         vars = @test_logs (:warn, r"UTCLeapSeconds") match_mode=:any matread(filepath)
         london, newyork = tz"Europe/London", tz"America/New_York"
 
