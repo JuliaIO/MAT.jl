@@ -965,7 +965,7 @@ m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::AbstractDict
             [StructUtils.lower(MATWriteStyle(), v) for v in values(s)])
 
 # `nothing` and `missing` are written as MATLAB's empty matrix `[]`; see
-# `matlab_empty_matrix` in MAT_types.jl for the round-trip asymmetry this implies.
+# `matlab_empty_matrix` in types/structutils.jl for the round-trip asymmetry this implies.
 m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, ::Nothing) =
     m_write(mfile, parent, name, matlab_empty_matrix)
 
