@@ -346,6 +346,9 @@ end
 
 @testset "MatlabTable column consumers" begin
     table = MatlabTable([:a, :b, :c], [[1, 2], [3.0, 4.0], ["five", "six"]])
+    # the columns field has a concrete type, whatever the columns hold
+    @test isconcretetype(fieldtype(MatlabTable, :columns))
+    @test table.columns isa Vector{Any}
     columns = Tables.columns(table)
     @test Tables.columnnames(columns) == [:a, :b, :c]
     for (i, name) in enumerate(table.names)
