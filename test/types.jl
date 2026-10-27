@@ -166,6 +166,16 @@ end
     obj = MatlabOpaque(Dict{String, Any}("any" => dat), "string")
     str = MAT.convert_opaque(obj)
     @test str == "Jones"
+    @test str isa String
+
+    # ["a", missing, "bc"] and string(missing), as MATLAB R2025a stores them: a missing
+    # string has the character count 0xffffffffffffffff and no characters
+    dat = reshape(UInt64[1, 2, 1, 3, 1, typemax(UInt64), 2, 0x0000006300620061], 1, :)
+    str = MAT.convert_opaque(MatlabOpaque(Dict{String, Any}("any" => dat), "string"))
+    @test isequal(str, ["a" missing "bc"])
+    @test eltype(str) == Union{Missing, String}
+    dat = reshape(UInt64[1, 2, 1, 1, typemax(UInt64)], 1, :)
+    @test ismissing(MAT.convert_opaque(MatlabOpaque(Dict{String, Any}("any" => dat), "string")))
 end
 
 @testset "MatlabOpaque datetime" begin
