@@ -405,8 +405,8 @@ for format in ["v7", "v7.3"]
     @testset "corrupted subsystem" begin
     let objtestfile = "corrupted_subsystem.mat"
         filepath = joinpath(dirname(@__FILE__), format, objtestfile)
-        # Subsystem data is corrupted - unsupported version (v=5)
-        @test_logs (:warn,r"^Failed to load MAT-file subsystem data") matread(filepath)
+        # Subsystem data is corrupted - unsupported version (v=5); the warning names the cause
+        @test_logs (:warn,r"^Failed to load MAT-file subsystem data.*Unsupported FileWrapper version: 5") matread(filepath)
     end
 
     let objtestfile = "corrupted_mcos_object_metadata.mat"
