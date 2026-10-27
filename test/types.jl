@@ -24,6 +24,10 @@ import Tables
     @test !isapprox(MatlabStructArray(["a"], [[0.1, 0.2]]), MatlabStructArray(["a"], [[0.11, 0.2]]))
     # name order shouldn't matter in isapprox
     @test isapprox(MatlabStructArray(["a", "b"], [[0.1], [0.2]]), MatlabStructArray(["b", "a"], [[0.2], [0.1]]))
+    # nor should a struct nested in a field
+    nested(x) = MatlabClassObject(Dict{String,Any}("s" => Dict{String,Any}("b" => x)), "C")
+    @test isapprox(nested(0.1), nested(0.1 + eps(0.1)))
+    @test !isapprox(nested(0.1), nested(0.11))
 
     # empty struct array constructor
     s_arr = MatlabStructArray(["x", "y"], (0,1))
@@ -259,6 +263,16 @@ end
         "Fair"  "Good"
     ]
 
+    # categorical({}): no categories and no codes
+    d = Dict{String,Any}(
+        "isProtected"   => false,
+        "codes"         => Matrix{UInt8}(undef, 0, 0),
+        "categoryNames" => Matrix{Any}(undef, 0, 0),
+        "isOrdinal"     => false,
+    )
+    c = MAT.convert_opaque(MatlabOpaque(d, "categorical"))
+    @test size(c) == (0, 0)
+
     # <undefined> elements have the code 0 and read as missing
     d["codes"] = UInt8[0x01 0x00 0x02]
     d["categoryNames"] = Any["a"; "b";;]
@@ -350,4 +364,11 @@ end
     @test Tables.columnnames(Tables.columns(empty_table)) == [:a, :b]
     @test isempty(Tables.rowtable(empty_table))
     @test Tables.columntable(empty_table) == (a=Int[], b=String[])
+
+    # a 1-D struct array is a table too
+    s = MatlabStructArray(["a", "b"], [Any[1, 2], Any["x", "y"]])
+    @test Tables.columnnames(Tables.columns(s)) == [:a, :b]
+    @test Tables.getcolumn(Tables.columns(s), 2) == Any["x", "y"]
+    @test Tables.columntable(s) == (a=Any[1, 2], b=Any["x", "y"])
+    @test Tables.rowtable(s) == [(a=1, b="x"), (a=2, b="y")]
 end
