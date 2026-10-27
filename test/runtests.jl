@@ -7,4 +7,5 @@ using Test, MAT
     include("readwrite4.jl")
     include("write.jl")
     include("structutils.jl")
+    include("timezones.jl")   # last: loading TimeZones.jl changes how zoned datetimes read
 end
