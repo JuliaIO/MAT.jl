@@ -103,3 +103,28 @@ end
         end
     end
 end
+
+@testset "v4 sparse matrices and text as MATLAB writes them" begin
+    # a v4 variable: type (1 text, 2 sparse), rows, columns, complex flag, name, data
+    v4var(name, type, mrows, ncols, data; imagf=0) =
+        vcat(reinterpret(UInt8, Int32[type, mrows, ncols, imagf, ncodeunits(name) + 1]),
+             Vector{UInt8}(name), UInt8[0], reinterpret(UInt8, Float64.(data)))
+    mktempdir() do dir
+        tmp = joinpath(dir, "tmp.mat")
+        # sparse matrices end with a row of (m, n, 0) giving the size
+        write(tmp, vcat(
+            v4var("s", 2, 2, 3, [1, 3, 1, 3, 5, 0]),                # sparse(1, 1, 5, 3, 3)
+            v4var("c", 2, 2, 4, [1, 2, 1, 4, 1, 0, 2, 0]),          # sparse(1, 1, 1+2i, 2, 4)
+            v4var("z", 2, 1, 3, [3, 3, 0]),                         # sparse(3, 3)
+            v4var("t", 1, 1, 6, [181, 109, 32, 177, 176, 67])))     # 'µm ±°C'
+        d = matread(tmp)
+        @test d["s"] == sparse([1], [1], [5.0], 3, 3) && nnz(d["s"]) == 1
+        @test d["c"] == sparse([1], [1], [1.0 + 2.0im], 2, 4) && nnz(d["c"]) == 1
+        @test size(d["z"]) == (3, 3) && nnz(d["z"]) == 0
+        @test d["t"] == "µm ±°C"
+
+        # MAT.jl writes no size row: the last row is a stored value
+        write(tmp, v4var("s", 2, 1, 3, [1, 2, 5]))
+        @test matread(tmp)["s"] == sparse([1], [2], [5.0], 1, 2)
+    end
+end
