@@ -693,16 +693,11 @@ end
         write(v7, vcat(header, fieldless((1, 3), "sa"), fieldless((0, 0), "e0"), fieldless((1, 1), "s1")))
         # v7.3 stores each as an empty struct dataset holding its dimensions
         v73 = joinpath(dir, "fieldless_v73.mat")
-        matwrite(v73, Dict("x" => 1.0))
-        HDF5.h5open(v73, "r+") do file
-            for (name, dims) in (("sa", UInt64[1, 3]), ("e0", UInt64[0, 0]), ("s1", UInt64[1, 1]))
-                file[name] = dims
-                data = file[name]
-                HDF5.attributes(data)["MATLAB_class"] = "struct"
-                HDF5.attributes(data)["MATLAB_empty"] = UInt8(1)
-                close(data)
-            end
-        end
+        matwrite(v73, Dict(
+            "sa" => fill(Dict{String,Any}(), 1, 3),
+            "e0" => Matrix{Dict{String,Any}}(undef, 0, 0),
+            "s1" => fill(Dict{String,Any}(), 1, 1),
+        ))
         for path in (v7, v73)
             vars = matread(path)
             @test vars["sa"] isa Matrix{Dict{String,Any}}

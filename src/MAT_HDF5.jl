@@ -790,6 +790,13 @@ end
 
 # Struct array: Array of Dict => MATLAB struct array
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::AbstractArray{<:AbstractDict})
+    if isempty(arr) || all(isempty, arr)
+        # A struct array with no fields (e.g. `struct([])` or `repmat(struct(), 1, 3)`)
+        # has no field columns, so it cannot be represented by `MatlabStructArray`,
+        # which stores its size in its field columns. Write its dimensions directly
+        # instead, as MATLAB itself does.
+        return m_write(mfile, parent, name, EmptyStruct(collect(UInt64, size(arr))))
+    end
     m_write(mfile, parent, name, MatlabStructArray(arr))
 end
 
