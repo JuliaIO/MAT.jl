@@ -675,6 +675,30 @@ end
     end
 end
 
+@testset "v6 text with characters U+0080 to U+00FF" begin
+    # MATLAB R2025a writes 'µm' and '±0.5 °C' with -v6 as miUINT16 character codes;
+    # v6/string.mat holds the packed UTF-8 an older MATLAB wrote
+    element(type, data) = vcat(reinterpret(UInt8, UInt32[type, length(data)]), data,
+                               zeros(UInt8, mod(-length(data), 8)))
+    chars(name, s) = element(14, vcat(
+        element(6, reinterpret(UInt8, UInt32[4, 0])),
+        element(5, reinterpret(UInt8, Int32[1, length(s)])),
+        element(1, Vector{UInt8}(name)),
+        element(4, reinterpret(UInt8, UInt16[Int(c) for c in s]))))
+    header = vcat(Vector{UInt8}(rpad("MATLAB 5.0 MAT-file", 116)), zeros(UInt8, 8),
+                  reinterpret(UInt8, UInt16[0x0100, 0x4D49]))
+    mktempdir() do dir
+        path = joinpath(dir, "latin1.mat")
+        write(path, vcat(header, chars("u", "µm"), chars("t", "±0.5 °C")))
+        vars = matread(path)
+        @test vars["u"] == "µm"
+        @test vars["t"] == "±0.5 °C"
+    end
+    # packed UTF-8 that leaves the last byte of "€" (E2 82 AC) in a value of its own
+    # still reads as packed
+    @test MAT.MAT_types._decode_row(UInt16[0xe282, 0x00ac, 0x0078], :utf8) == "€x"
+end
+
 for format in ["v7", "v7.3"]
     @testset "char unicode $format" begin
         result = Dict(
