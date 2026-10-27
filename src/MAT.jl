@@ -131,11 +131,12 @@ keyword argument only affects write operations.
 
 Use with `read`, `write`, `close`, `keys`, and `haskey`.
 
-Optional keyword argument is the `table` type, for automatic conversion of Matlab tables.
+Optional keyword argument is the `table` type, for automatic conversion of Matlab tables
+and timetables (a timetable's row times become its first column).
 Note that Matlab tables may contain non-vector columns which cannot always be converted to a Julia table, like `DataFrame`.
 
-With `convert_opaque = false`, MATLAB `string`, `datetime`, `duration`, `categorical`
-and `table` objects are returned as `MatlabOpaque` rather than converted to Julia types.
+With `convert_opaque = false`, MATLAB `string`, `datetime`, `duration`, `categorical`,
+`table` and `timetable` objects are returned as `MatlabOpaque` rather than converted to Julia types.
 
 # Example
 
@@ -175,9 +176,9 @@ matopen
 Return a dictionary of all the variables and values in a Matlab file,
 opening and closing it automatically.
 
-Optionally provide the `table` type to convert Matlab tables into. Default uses a simple `MatlabTable` type.
-With `convert_opaque = false`, MATLAB `string`, `datetime`, `duration`, `categorical`
-and `table` objects are returned as `MatlabOpaque` rather than converted to Julia types.
+Optionally provide the `table` type to convert Matlab tables and timetables into. Default uses a simple `MatlabTable` type.
+With `convert_opaque = false`, MATLAB `string`, `datetime`, `duration`, `categorical`,
+`table` and `timetable` objects are returned as `MatlabOpaque` rather than converted to Julia types.
 
 # Example
 
