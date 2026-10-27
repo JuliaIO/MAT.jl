@@ -30,6 +30,8 @@ generated; one stepped in calendar units (months, for example) has no fixed rate
 left as a `MatlabOpaque`, with a warning. Row times are rounded to whole milliseconds,
 the resolution of `Dates.DateTime`.
 
+Note that single element arrays are typically converted to scalars in Julia, because MATLAB cannot distinguish between scalars and `1x1` sized arrays.
+
 ## Time zones
 
 MATLAB stores a `datetime` that has a time zone as its UTC instant together with the
@@ -47,5 +49,3 @@ warning. A `datetime` without a time zone is always a `DateTime` of the stored w
 time. Zoned row times of a timetable follow the same rules. The `UTCLeapSeconds` zone counts
 leap seconds, which neither type can represent, so such a `datetime` is left as a
 `MatlabOpaque`, with a warning.
-
-Note that single element arrays are typically converted to scalars in Julia, because MATLAB cannot distinguish between scalars and `1x1` sized arrays.
