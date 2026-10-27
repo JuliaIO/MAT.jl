@@ -312,7 +312,7 @@ end
 function find_index(m::MatlabStructArray, s::AbstractString)
     idx = findfirst(isequal(s), m.names)
     if isnothing(idx)
-        error("field \"$s\" not found in MatlabStructArray")
+        throw(KeyError(s))
     end
     return idx
 end
@@ -807,7 +807,7 @@ Tables.getcolumn(t::MatlabTable, nm::Symbol) = t[nm]
 function find_index(m::MatlabTable, s::Symbol)
     idx = findfirst(isequal(s), m.names)
     if isnothing(idx)
-        error("column :$s not found in MatlabTable")
+        throw(KeyError(s))
     end
     return idx
 end

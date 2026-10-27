@@ -214,13 +214,13 @@ end
 Base.haskey(matfile::Matlabv4File, varname::String) =
     haskey(getvarnames(matfile), varname)
 Base.keys(matfile::Matlabv4File) =
-    keys(getvarnames(matfile))
+    sort!(collect(keys(getvarnames(matfile))))
 
 # Read a variable from a MAT file
 function read(matfile::Matlabv4File, varname::String)
     varnames = getvarnames(matfile)
     if !haskey(varnames, varname)
-        error("no variable $varname in file")
+        throw(KeyError(varname))
     end
     seek(matfile.ios, varnames[varname])
     (name, data) = read_matrix(matfile.ios, matfile.swap_bytes)
