@@ -440,7 +440,6 @@ struct FunctionHandle{D<:AbstractDict{String,Any}} <: AbstractDict{String,Any}
     d::D
 end
 
-Base.eltype(::Type{FunctionHandle}) = Pair{String,Any}
 Base.length(m::FunctionHandle) = length(m.d)
 Base.keys(m::FunctionHandle) = keys(m.d)
 Base.values(m::FunctionHandle) = values(m.d)
@@ -476,7 +475,6 @@ end
 
 class(m::MatlabClassObject) = m.class
 
-Base.eltype(::Type{MatlabClassObject}) = Pair{String,Any}
 Base.length(m::MatlabClassObject) = length(m.d)
 Base.keys(m::MatlabClassObject) = keys(m.d)
 Base.values(m::MatlabClassObject) = values(m.d)
@@ -555,7 +553,6 @@ struct MatlabOpaque{D<:AbstractDict{String,Any}} <: AbstractDict{String,Any}
 end
 class(m::MatlabOpaque) = m.class
 
-Base.eltype(::Type{MatlabOpaque}) = Pair{String,Any}
 Base.length(m::MatlabOpaque) = length(m.d)
 Base.keys(m::MatlabOpaque) = keys(m.d)
 Base.values(m::MatlabOpaque) = values(m.d)

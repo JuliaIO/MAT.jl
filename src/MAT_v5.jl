@@ -32,7 +32,6 @@ import ..MAT_types: MatlabStructArray, MatlabClassObject, MatlabTable, construct
 
 using ..MAT_subsys
 
-round_uint8(data) = round.(UInt8, data)
 complex_array(a, b) = complex.(a, b)
 
 mutable struct Matlabv5File <: HDF5.H5DataStore
@@ -245,8 +244,6 @@ function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::
         error("invalid dimensions encountered for sparse array")
     end
 
-    m = isempty(dimensions) ? 0 : dimensions[1]
-    n = length(dimensions) <= 1 ? 0 : dimensions[2]
     ir = plusone!(convert(Vector{Int}, read_element(f, swap_bytes, Int32)))
     jc = plusone!(convert(Vector{Int}, read_element(f, swap_bytes, Int32)))
     if (flags[1] & (1 << 9)) != 0 # logical
@@ -273,8 +270,6 @@ function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::
     end
     SparseMatrixCSC(m, n, jc, ir, pr)
 end
-
-truncate_to_uint8(x) = x % UInt8
 
 function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
