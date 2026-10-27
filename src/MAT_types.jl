@@ -914,7 +914,8 @@ function decode_char_array(arr::AbstractArray{T}, codec::Symbol) where T <: Unio
     other_dims = (size(arr, 1), size(arr)[3:end]...)
 
     if char_len == 0
-        return fill("", other_dims)
+        # an empty char array of any shape, as the v7.3 reader returns it
+        return String[]
     end
 
     if ndims(arr) == 2 && size(arr, 1) == 1
