@@ -400,52 +400,47 @@ for format in ["v7", "v7.3"]
     # a timetable's row times
     @testset "timetable $format" begin
         filepath = joinpath(dirname(@__FILE__), format, "timetable.mat")
-        if isfile(filepath)
-            # tt_calendar's step is calendar months, which has no fixed rate: left as read
-            vars = @test_logs (:warn, r"timetable row times") match_mode=:any matread(filepath)
-            @test vars["tt_calendar"] isa MatlabOpaque
-            @test vars["tt_calendar"].class == "timetable"
+        # tt_calendar's step is calendar months, which has no fixed rate: left as read
+        vars = @test_logs (:warn, r"timetable row times") match_mode=:any matread(filepath)
+        @test vars["tt_calendar"] isa MatlabOpaque
+        @test vars["tt_calendar"].class == "timetable"
 
-            t = vars["tt_datetime"]           # row times per row, as datetimes
-            @test t isa MatlabTable
-            @test t.names == [:Time, :Current, :Channel]
-            @test t[:Time] == DateTime(2022, 7, 20, 2, 27, 27) .+ Millisecond.([428, 496, 564])
-            @test t[:Current] == [1.5e-11, 2.5e-11, -3e-12]
-            @test t[:Channel] == ["AB", "A", "B"]
+        t = vars["tt_datetime"]           # row times per row, as datetimes
+        @test t isa MatlabTable
+        @test t.names == [:Time, :Current, :Channel]
+        @test t[:Time] == DateTime(2022, 7, 20, 2, 27, 27) .+ Millisecond.([428, 496, 564])
+        @test t[:Current] == [1.5e-11, 2.5e-11, -3e-12]
+        @test t[:Channel] == ["AB", "A", "B"]
 
-            t = vars["tt_duration"]           # row times per row, as durations
-            @test t.names == [:Time, :x]
-            @test t[:Time] == Millisecond.([0, 500, 1250])
-            @test t[:x] == [1.0, 2.0, 3.0]
+        t = vars["tt_duration"]           # row times per row, as durations
+        @test t.names == [:Time, :x]
+        @test t[:Time] == Millisecond.([0, 500, 1250])
+        @test t[:x] == [1.0, 2.0, 3.0]
 
-            t = vars["tt_rate"]               # regular: start and sample rate
-            @test t.names == [:Time, :x]
-            @test t[:Time] == Millisecond.(0:3)
-            @test t[:x] == [10.0, 20.0, 30.0, 40.0]
+        t = vars["tt_rate"]               # regular: start and sample rate
+        @test t.names == [:Time, :x]
+        @test t[:Time] == Millisecond.(0:3)
+        @test t[:x] == [10.0, 20.0, 30.0, 40.0]
 
-            t = vars["tt_step"]               # regular: datetime start and time step
-            @test t[:Time] == DateTime(2022, 7, 20, 2) .+ Millisecond.([0, 250, 500])
-            @test t[:y] == [1.0, 2.0, 3.0]
+        t = vars["tt_step"]               # regular: datetime start and time step
+        @test t[:Time] == DateTime(2022, 7, 20, 2) .+ Millisecond.([0, 250, 500])
+        @test t[:y] == [1.0, 2.0, 3.0]
 
-            t = vars["tt_empty"]              # no rows, no variables
-            @test t isa MatlabTable
-            @test t.names == [:Time]
-            @test isempty(t[:Time])
+        t = vars["tt_empty"]              # no rows, no variables
+        @test t isa MatlabTable
+        @test t.names == [:Time]
+        @test isempty(t[:Time])
 
-            t = vars["tt_matrix"]             # a two-column variable stays a matrix
-            @test t[:Time] == Millisecond.([1000, 2000])
-            @test t[:m] == [1.0 2.0; 3.0 4.0]
+        t = vars["tt_matrix"]             # a two-column variable stays a matrix
+        @test t[:Time] == Millisecond.([1000, 2000])
+        @test t[:m] == [1.0 2.0; 3.0 4.0]
 
-            @test vars["tt_dimname"].names == [:Timestamp, :x]   # the row-times dimension's own name
+        @test vars["tt_dimname"].names == [:Timestamp, :x]   # the row-times dimension's own name
 
-            # using Nothing keeps the MatlabOpaque
-            raw = matread(filepath; table=Nothing)["tt_rate"]
-            @test raw isa MatlabOpaque
-            @test raw.class == "timetable"
-        else
-            # generated in MATLAB by test/timetable_gen.m; skipped until it is committed
-            @test_skip isfile(filepath)
-        end
+        # using Nothing keeps the MatlabOpaque
+        raw = matread(filepath; table=Nothing)["tt_rate"]
+        @test raw isa MatlabOpaque
+        @test raw.class == "timetable"
     end
 
     # timezone.mat is written by timezone_gen.m. MATLAB stores a zoned datetime as its UTC
@@ -453,7 +448,7 @@ for format in ["v7", "v7.3"]
     @testset "time zones, without TimeZones.jl $format" begin
         filepath = joinpath(dirname(@__FILE__), format, "timezone.mat")
         ext_loaded = isdefined(Base, :get_extension) && Base.get_extension(MAT, :MATTimeZonesExt) !== nothing
-        if isfile(filepath) && !ext_loaded
+        if !ext_loaded
             vars = @test_logs (:warn, r"timezone") match_mode=:any matread(filepath)
             @test vars["dt_unzoned"] == DateTime(2022, 7, 20, 12)          # no zone: wall clock
             @test vars["dt_utc"] == DateTime(2022, 7, 20, 12)
@@ -467,8 +462,8 @@ for format in ["v7", "v7.3"]
             @test vars["tt_zoned"][:Time] == DateTime(2022, 7, 20, 11) .+ Millisecond.([0, 1500])
             @test vars["tt_zoned_step"][:Time] == DateTime(2022, 7, 20, 11) .+ Millisecond.([0, 500, 1000])
         else
-            # generated in MATLAB by test/timezone_gen.m; skipped until it is committed
-            @test_skip isfile(filepath) && !ext_loaded
+            # covered instead by "time zones with TimeZones.jl" once the extension is loaded
+            @test_skip !ext_loaded
         end
     end
 
