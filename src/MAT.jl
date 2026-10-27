@@ -119,8 +119,8 @@ function matopen(f::Function, args...; kwargs...)
 end
 
 """
-    matopen(filename [, mode]; compress = false, table = MatlabTable) -> handle
-    matopen(f::Function, filename [, mode]; compress = false, table = MatlabTable) -> f(handle)
+    matopen(filename [, mode]; compress = false, table = MatlabTable, convert_opaque = true) -> handle
+    matopen(f::Function, filename [, mode]; compress = false, table = MatlabTable, convert_opaque = true) -> f(handle)
 
 Mode defaults to `"r"` for read.
 It can also be `"w"` for write,
@@ -131,8 +131,12 @@ keyword argument only affects write operations.
 
 Use with `read`, `write`, `close`, `keys`, and `haskey`.
 
-Optional keyword argument is the `table` type, for automatic conversion of Matlab tables.
-Note that Matlab tables may contain non-vector colums which cannot always be converted to a Julia table, like `DataFrame`.
+Optional keyword argument is the `table` type, for automatic conversion of Matlab tables
+and timetables (a timetable's row times become its first column).
+Note that Matlab tables may contain non-vector columns which cannot always be converted to a Julia table, like `DataFrame`.
+
+With `convert_opaque = false`, MATLAB `string`, `datetime`, `duration`, `categorical`,
+`table` and `timetable` objects are returned as `MatlabOpaque` rather than converted to Julia types.
 
 # Example
 
@@ -167,12 +171,14 @@ matopen
 
 # Read all variables from a MATLAB file
 """
-    matread(filename; table = MatlabTable) -> Dict
+    matread(filename; table = MatlabTable, convert_opaque = true) -> Dict
 
 Return a dictionary of all the variables and values in a Matlab file,
 opening and closing it automatically.
 
-Optionally provide the `table` type to convert Matlab tables into. Default uses a simple `MatlabTable` type.
+Optionally provide the `table` type to convert Matlab tables and timetables into. Default uses a simple `MatlabTable` type.
+With `convert_opaque = false`, MATLAB `string`, `datetime`, `duration`, `categorical`,
+`table` and `timetable` objects are returned as `MatlabOpaque` rather than converted to Julia types.
 
 # Example
 
@@ -205,7 +211,7 @@ function matread(filename::AbstractString; table::Type=MatlabTable, convert_opaq
 end
 
 """
-    matread(filename, varname, T; table = MatlabTable) -> T
+    matread(filename, varname, T; table = MatlabTable, convert_opaque = true) -> T
 
 Read a single variable from a Matlab file and construct it as type `T`
 using StructUtils.jl. This enables round-tripping Julia structs through .mat files.

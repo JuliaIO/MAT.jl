@@ -864,6 +864,22 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::F
     end
 end
 
+# An empty function handle array is a dataset of its dimensions, as MATLAB writes it
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::AbstractArray{<:FunctionHandle})
+    if !isempty(arr)
+        return m_write(mfile, parent, name, MatlabStructArray(arr))
+    end
+    adata = UInt64[size(arr)...]
+    dset, dtype = create_dataset(parent, name, adata)
+    try
+        write_attribute(dset, empty_attr_matlab, 0x01)
+        write_attribute(dset, name_type_attr_matlab, "function_handle")
+        write_dataset(dset, dtype, adata)
+    finally
+        close(dtype); close(dset)
+    end
+end
+
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::AbstractArray{MatlabClassObject})
     m_write(mfile, parent, name, MatlabStructArray(arr))
 end

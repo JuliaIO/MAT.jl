@@ -312,7 +312,7 @@ end
 function find_index(m::MatlabStructArray, s::AbstractString)
     idx = findfirst(isequal(s), m.names)
     if isnothing(idx)
-        error("field \"$s\" not found in MatlabStructArray")
+        throw(KeyError(s))
     end
     return idx
 end
@@ -404,8 +404,10 @@ end
 
 # 1D MatlabStructArray also counts as table (mostly for testing purposes)
 Tables.istable(::Type{MatlabStructArray{1}}) = true
-Tables.columns(t::MatlabStructArray{1}) = Symbol.(t.values)
-Tables.columnnames(t::MatlabStructArray{1}) = t.names
+Tables.columnaccess(::Type{MatlabStructArray{1}}) = true
+Tables.columns(t::MatlabStructArray{1}) = t
+Tables.columnnames(t::MatlabStructArray{1}) = Symbol.(t.names)
+Tables.getcolumn(t::MatlabStructArray{1}, i::Int) = t.values[i]
 Tables.getcolumn(t::MatlabStructArray{1}, nm::String) = t[nm]
 Tables.getcolumn(t::MatlabStructArray{1}, nm::Symbol) = Tables.getcolumn(t, string(nm))
 function MatlabStructArray{1}(t::Tables.CopiedColumns)
@@ -446,7 +448,6 @@ struct FunctionHandle{D<:AbstractDict{String,Any}} <: AbstractDict{String,Any}
     d::D
 end
 
-Base.eltype(::Type{FunctionHandle}) = Pair{String,Any}
 Base.length(m::FunctionHandle) = length(m.d)
 Base.keys(m::FunctionHandle) = keys(m.d)
 Base.values(m::FunctionHandle) = values(m.d)
@@ -482,7 +483,6 @@ end
 
 class(m::MatlabClassObject) = m.class
 
-Base.eltype(::Type{MatlabClassObject}) = Pair{String,Any}
 Base.length(m::MatlabClassObject) = length(m.d)
 Base.keys(m::MatlabClassObject) = keys(m.d)
 Base.values(m::MatlabClassObject) = values(m.d)
@@ -561,7 +561,6 @@ struct MatlabOpaque{D<:AbstractDict{String,Any}} <: AbstractDict{String,Any}
 end
 class(m::MatlabOpaque) = m.class
 
-Base.eltype(::Type{MatlabOpaque}) = Pair{String,Any}
 Base.length(m::MatlabOpaque) = length(m.d)
 Base.keys(m::MatlabOpaque) = keys(m.d)
 Base.values(m::MatlabOpaque) = values(m.d)
@@ -596,7 +595,7 @@ end
 
 value_isapprox(x1::AbstractString, x2::AbstractString; kwargs...) = isequal(x1, x2)
 value_isapprox(x1, x2; kwargs...) = isapprox(x1, x2; kwargs...)
-value_isapprox(d1::AbstractDict, d2::AbstractDict; kwargs...) = dict_isapprox(x1, x2; kwargs...)
+value_isapprox(d1::AbstractDict, d2::AbstractDict; kwargs...) = dict_isapprox(d1, d2; kwargs...)
 
 function convert_opaque(obj::MatlabOpaque; table::Type=Nothing)
     if obj.class == "string"
@@ -609,10 +608,15 @@ function convert_opaque(obj::MatlabOpaque; table::Type=Nothing)
         return from_categorical(obj)
     elseif obj.class == "table"
         return from_table(obj, table)
+    elseif obj.class == "timetable"
+        return from_timetable(obj, table)
     else
         return obj
     end
 end
+
+# the character count MATLAB stores for a <missing> string
+const MISSING_STRING_COUNT = typemax(UInt64)
 
 # for reference: https://github.com/foreverallama/matio/blob/main/matio/utils/converters/matstring.py
 function from_string(obj::MatlabOpaque, encoding::Encoding=Encoding(Symbol("UTF-16LE")))
@@ -631,16 +635,23 @@ function from_string(obj::MatlabOpaque, encoding::Encoding=Encoding(Symbol("UTF-
     byte_data = data[1, (3 + ndims + num_strings):end]
     bytes = reinterpret(UInt8, byte_data)
 
-    strings = String[]
+    strings = Union{Missing,String}[]
     pos = 1
 
     for char_count in char_counts
+        if char_count == MISSING_STRING_COUNT
+            # <missing> has no characters stored
+            push!(strings, missing)
+            continue
+        end
         byte_length = char_count * 2  # UTF-16 encoding
         extracted_bytes = bytes[pos:(pos + byte_length - 1)]
         str = StringEncodings.decode(extracted_bytes, encoding)
         push!(strings, str)
         pos += byte_length
     end
+    # keep the element type String unless a string is missing
+    any(ismissing, strings) || (strings = convert(Vector{String}, strings))
 
     if num_strings == 1
         return first(strings)
@@ -649,22 +660,50 @@ function from_string(obj::MatlabOpaque, encoding::Encoding=Encoding(Symbol("UTF-
     end
 end
 
+"""
+    to_zoned(utc::DateTime, tz::String)
+
+A zoned datetime from its UTC instant and MATLAB's name for the zone (an IANA name such
+as "Europe/London", "UTC", or a fixed offset such as "+05:30"). Defined by the TimeZones
+extension (Julia 1.9 and later, when TimeZones.jl is loaded), which returns a
+`ZonedDateTime`; without it, zoned datetimes are read as their UTC instant.
+"""
+function to_zoned end
+
 function from_datetime(obj::MatlabOpaque)
     dat = obj["data"]
     if isnothing(dat) || isempty(dat)
         return DateTime[]
     end
-    if haskey(obj, "tz") && !isempty(obj["tz"])
-        tz = obj["tz"]
-        @warn "no timezone conversion yet for datetime objects. timezone of \"$tz\" ignored"
-    end
     #isdate = obj["isDateOnly"] # optional: convert to Date instead of DateTime?
-    return map_or_not(ms_to_datetime, dat)
+    tz = haskey(obj, "tz") ? obj["tz"] : ""
+    if !(tz isa AbstractString) || isempty(tz)
+        return map_or_not(ms_to_datetime, dat)  # no zone: the stored wall-clock time
+    end
+    # MATLAB stores a zoned datetime as its UTC instant, except in "UTCLeapSeconds", where
+    # the count includes leap seconds, which DateTime cannot represent
+    if tz == "UTCLeapSeconds"
+        @warn "datetime with timezone \"UTCLeapSeconds\" is not converted (leap seconds cannot be represented); returning the MatlabOpaque"
+        return obj
+    end
+    utc = map_or_not(ms_to_datetime, dat)
+    if !hasmethod(to_zoned, Tuple{DateTime,String})
+        @warn "datetime with timezone \"$tz\" is returned as its UTC instant; load TimeZones.jl to read it as a ZonedDateTime"
+        return utc
+    end
+    try
+        return map_or_not(t -> ismissing(t) ? missing : to_zoned(t, String(tz)), utc)
+    catch err
+        @warn "timezone \"$tz\" was not recognised ($(sprint(showerror, err))); returning the UTC instant"
+        return utc
+    end
 end
 
-# is the complex part the submilliseconds?
+# The imaginary part is the low half of a double-double: smaller than half an ulp of the
+# real part, so real + imag == real in Float64 and nothing is lost at DateTime resolution.
 ms_to_datetime(ms::Complex) = ms_to_datetime(real(ms))
 function ms_to_datetime(ms::Real)
+    isfinite(ms) || return missing  # NaT is stored as NaN; DateTime has no ±Inf either
     s, ms_rem = fldmod(ms, 1_000)  # whole seconds and remainder milliseconds
     return DateTime(1970, 1, 1) + Second(s) + Millisecond(round(Int, ms_rem))
 end
@@ -697,8 +736,12 @@ function from_duration(obj::MatlabOpaque)
     if isnothing(dat) || isempty(dat)
         return Millisecond[]
     end
-    return map_or_not(Millisecond, dat)
+    return map_or_not(ms_to_millisecond, dat)
 end
+
+# milliseconds are stored as Float64: rounded to whole ones, as datetimes are, and a
+# missing (NaN) or infinite duration is missing
+ms_to_millisecond(ms::Real) = isfinite(ms) ? Millisecond(round(Int, ms)) : missing
 
 to_matlab_millis(d::Millisecond) = Float64(Dates.value(d))
 
@@ -715,6 +758,14 @@ function from_categorical(obj::MatlabOpaque)
     category_names = obj["categoryNames"]
     codes = obj["codes"]
     pool = vec(Array{promoted_eltype(category_names)}(category_names))
+    if any(iszero, codes)
+        # an <undefined> element has the code 0, which a PooledArray cannot hold; it
+        # keeps `missing` as a pool entry instead, which may need a wider code type
+        pool = Union{Missing,eltype(pool)}[pool; missing]
+        n = length(pool)
+        C = n <= typemax(eltype(codes)) ? eltype(codes) : widen(eltype(codes))
+        codes = map(c -> iszero(c) ? C(n) : C(c), codes)
+    end
     code_type = eltype(codes)
     pool_type = eltype(pool)
     invpool = Dict{pool_type,code_type}(pool .=> code_type.(1:length(pool)))
@@ -724,7 +775,8 @@ function from_categorical(obj::MatlabOpaque)
 end
 
 function promoted_eltype(v::AbstractArray{Any})
-    isempty(v) && return T
+    # a categorical with no categories, such as `categorical({})`
+    isempty(v) && return Any
     first_el, remaining = Iterators.peel(v)
     T_out = typeof(first_el)
     for el in remaining
@@ -752,7 +804,7 @@ columns before converting to a destination that only accepts vectors.
 """
 struct MatlabTable
     names::Vector{Symbol}
-    columns::Vector
+    columns::Vector{Any}  # concrete, so code using it is type stable; columns differ in type
 end
 Tables.istable(::Type{MatlabTable}) = true
 Tables.columnaccess(::Type{MatlabTable}) = true
@@ -763,7 +815,7 @@ Tables.getcolumn(t::MatlabTable, nm::Symbol) = t[nm]
 function find_index(m::MatlabTable, s::Symbol)
     idx = findfirst(isequal(s), m.names)
     if isnothing(idx)
-        error("column :$s not found in MatlabTable")
+        throw(KeyError(s))
     end
     return idx
 end
@@ -783,6 +835,39 @@ end
 # option to not convert and get the MatlabOpaque as table
 from_table(obj::MatlabOpaque, ::Type{Nothing}) = obj
 
+# A timetable is a table whose first column holds the row times, named after the row
+# dimension ("Time" unless renamed), then the variables. Row times are DateTime or
+# Millisecond; they are stored one per row, or, for a regular timetable, as a start time
+# and a sample rate (or time step), from which they are generated here. Row times that
+# cannot be interpreted leave the timetable as the MatlabOpaque it was read as.
+function from_timetable(obj::MatlabOpaque, ::Type{T}=MatlabTable) where {T}
+    tt = haskey(obj, "any") ? obj["any"] : obj
+    times = timetable_rowtimes(tt["rowTimes"], Int(tt["numRows"]))
+    if isnothing(times)
+        @warn "timetable row times of this kind are not converted; returning the MatlabOpaque"
+        return obj
+    end
+    names = Symbol[Symbol(tt["dimNames"][1]); Symbol.(vec(tt["varNames"]))]
+    cols = vcat(Any[times], Any[try_vec(c) for c in vec(tt["data"])])
+    t = MatlabTable(names, cols)
+    return T(Tables.CopiedColumns(t))
+end
+from_timetable(obj::MatlabOpaque, ::Type{Nothing}) = obj
+
+# row times stored one per row, already converted to DateTime or Millisecond
+timetable_rowtimes(times::AbstractArray, n::Int) = vec(times)
+# a regular timetable: a start time and a sample rate in Hz; MATLAB also stores the rate
+# when the time step was given instead, so the rate serves for both
+function timetable_rowtimes(regular::AbstractDict, n::Int)
+    origin, rate = get(regular, "origin", nothing), get(regular, "sampleRate", nothing)
+    # the start is a DateTime, a ZonedDateTime (TimeZones extension) or a duration
+    if !(origin isa Union{Dates.AbstractDateTime,Dates.Period} && rate isa Real && isfinite(rate) && rate > 0)
+        return nothing
+    end
+    return [origin + Millisecond(round(Int, 1000 * k / rate)) for k in 0:(n-1)]
+end
+timetable_rowtimes(times, n::Int) = nothing
+
 try_vec(c::Vector) = c
 try_vec(c) = [c]
 function try_vec(c::AbstractArray)
@@ -791,7 +876,9 @@ end
 
 # MATLAB char array storage types:
 # - miUINT8: ASCII or UTF-8. Can be directly converted to String.
-# - miUINT16: UTF-8 encoding packed in 16-bit values. Reinterpret as uint8 and remove 0x00 MSB bytes
+# - miUINT16: one character code per value, as current MATLAB writes v6 text (codes above
+#   U+00FF are lost on save). Older MATLAB versions packed UTF-8 bytes into the values,
+#   two to a value; a row holding any value above 0x00FF is read that way, as before.
 # - miUTF8/16/32: UTF-8/16/32 encoding. Transcode to UTF-8 if needed, then convert to String
 _decode_row(row::AbstractVector{UInt8},  codec)  = String(row)
 _decode_row(row::AbstractVector{UInt32}, codec) = String(transcode(UInt8, row))
@@ -799,6 +886,9 @@ function _decode_row(row::AbstractVector{UInt16}, codec)
     if codec == :utf16
         return String(transcode(UInt8, row))
     end
+
+    # packed UTF-8 can leave a lone byte of a character in a value of its own
+    packed = any(>(0x00ff), row)
 
     n = length(row)
     out = Vector{UInt8}(undef, 2n)
@@ -808,9 +898,14 @@ function _decode_row(row::AbstractVector{UInt16}, codec)
         msb = UInt8(x >> 8)
         lsb = UInt8(x & 0xff)
 
-        if msb == 0x00
+        if msb == 0x00 && (lsb < 0x80 || packed)
             out[j] = lsb
             j += 1
+        elseif msb == 0x00
+            # the code point U+0080 to U+00FF, as two UTF-8 bytes
+            out[j] = 0xc0 | (lsb >> 6)
+            out[j+1] = 0x80 | (lsb & 0x3f)
+            j += 2
         else
             out[j] = msb
             out[j+1] = lsb
@@ -827,7 +922,8 @@ function decode_char_array(arr::AbstractArray{T}, codec::Symbol) where T <: Unio
     other_dims = (size(arr, 1), size(arr)[3:end]...)
 
     if char_len == 0
-        return fill("", other_dims)
+        # an empty char array of any shape, as the v7.3 reader returns it
+        return String[]
     end
 
     if ndims(arr) == 2 && size(arr, 1) == 1
