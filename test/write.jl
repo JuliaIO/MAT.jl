@@ -391,6 +391,22 @@ end
     end
 end
 
+@testset "empty function handles" begin
+    for dims in ((0, 0), (1, 0), (0, 3))
+        mktempdir() do tmpdir
+            tmpfile = joinpath(tmpdir, "test.mat")
+            fh = Matrix{FunctionHandle}(undef, dims...)
+            matwrite(tmpfile, Dict("fh" => fh, "s" => Dict("cb" => fh)))
+            vars = matread(tmpfile)
+
+            @test vars["fh"] isa Matrix{FunctionHandle}
+            @test size(vars["fh"]) == dims
+            @test vars["s"]["cb"] isa Matrix{FunctionHandle}
+            @test size(vars["s"]["cb"]) == dims
+        end
+    end
+end
+
 @testset "char arrays julia" begin
     m = Dict(
         "ascii_vector_chars" => ['A', 'B', 'C', 'D'],
