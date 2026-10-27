@@ -7,4 +7,5 @@ using Test, MAT
     include("readwrite4.jl")
     include("write.jl")
     include("structutils.jl")
+    include("lazy.jl")
 end
