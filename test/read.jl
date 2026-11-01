@@ -573,6 +573,19 @@ end
     end
 end
 
+# Simulink saves logged signals in a v7.3 group /#sigstream# without a MATLAB_class
+@testset "v7.3 group #sigstream# is not a variable" begin
+    mktempdir() do dir
+        path = joinpath(dir, "sigstream.mat")
+        matwrite(path, Dict("after" => 42.0); version="v7.3")
+        HDF5.h5open(path, "r+") do file
+            file["#sigstream#/#version#"] = UInt64[1]
+        end
+        @test matopen(keys, path) == ["after"]
+        @test matread(path) == Dict("after" => 42.0)
+    end
+end
+
 let objtestfile = "function_handles.mat"
     vars = matread(joinpath(dirname(@__FILE__), "v7", objtestfile))
     @test haskey(vars, "sin")

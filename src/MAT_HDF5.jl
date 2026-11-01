@@ -440,6 +440,8 @@ function read(f::MatlabHDF5File, name::String, ::Type{T}) where {T}
     return construct_from_raw(read(f, name), T)
 end
 
+# MATLAB keeps internal data in groups like #refs#, #subsystem# and #sigstream# (Simulink
+# logs). Variable names start with a letter, so these are never variables.
 """
     keys(matfile_handle) -> Vector{String}
 
@@ -447,7 +449,7 @@ Return a list of variables in an opened Matlab file.
 
 See `matopen`.
 """
-Base.keys(f::MatlabHDF5File) = filter!(x -> x!="#refs#" && x!="#subsystem#", keys(f.plain))
+Base.keys(f::MatlabHDF5File) = filter!(x -> !startswith(x, "#"), keys(f.plain))
 
 """
     haskey(matfile_handle, varname) -> Bool
