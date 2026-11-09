@@ -8,4 +8,5 @@ using Test, MAT
     include("write.jl")
     include("structutils.jl")
     include("lazy.jl")
+    include("timezones.jl")   # last: loading TimeZones.jl changes how zoned datetimes read
 end

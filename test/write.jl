@@ -267,6 +267,9 @@ end
 end
 
 @testset "Empty Struct 1x1" begin
+    # Writing struct arrays with no fields (and other sizes, e.g. 1x3 or 0x0) is
+    # covered by the v7.3 round trip in the "struct arrays with no fields" testset
+    # in test/read.jl.
     var_dict = Dict("empty_struct" => Dict{String,Any}())
     mktempdir() do tmpdir
         tmpfile = joinpath(tmpdir, "test.mat")
@@ -352,6 +355,23 @@ end
 
 end
 
+@testset "MatlabOpaque uint32 properties" begin
+    # an empty uint32 property (a `uint32([])` default) is not a nested object
+    d = Dict{String,Any}("empty" => UInt32[], "full" => UInt32[1, 2, 3])
+    var_dict = Dict("obj" => MatlabOpaque(d, "TestClassUInt32"))
+
+    mktempdir() do tmpdir
+        tmpfile = joinpath(tmpdir, "test.mat")
+        matwrite(tmpfile, var_dict)
+        obj = matread(tmpfile)["obj"]
+
+        @test obj isa MatlabOpaque
+        @test obj["empty"] isa Array{UInt32}
+        @test isempty(obj["empty"])
+        @test vec(obj["full"]) == UInt32[1, 2, 3]
+    end
+end
+
 @testset "Dates" begin
     dt = DateTime[
         DateTime(2016, 12, 20) # 20-Dec-2016
@@ -387,6 +407,22 @@ end
 
             @test isequal(vars_write["sin"], vars["sin"])
             @test isequal(vars_write["anonymous"], vars["anonymous"])
+        end
+    end
+end
+
+@testset "empty function handles" begin
+    for dims in ((0, 0), (1, 0), (0, 3))
+        mktempdir() do tmpdir
+            tmpfile = joinpath(tmpdir, "test.mat")
+            fh = Matrix{FunctionHandle}(undef, dims...)
+            matwrite(tmpfile, Dict("fh" => fh, "s" => Dict("cb" => fh)))
+            vars = matread(tmpfile)
+
+            @test vars["fh"] isa Matrix{FunctionHandle}
+            @test size(vars["fh"]) == dims
+            @test vars["s"]["cb"] isa Matrix{FunctionHandle}
+            @test size(vars["s"]["cb"]) == dims
         end
     end
 end

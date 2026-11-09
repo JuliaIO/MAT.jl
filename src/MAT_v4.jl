@@ -32,9 +32,6 @@ import Base: read, write, close
 import ..MAT_types: construct_from_raw, matlab_empty_matrix, MATWriteStyle
 using StructUtils
 
-round_uint8(data) = round.(UInt8, data)
-complex_array(a, b) = complex.(a, b)
-
 mutable struct Matlabv4File <: HDF5.H5DataStore
     ios::IOStream
     swap_bytes::Bool
@@ -147,22 +144,35 @@ function read_matrix(f::IO, swap_bytes::Bool)
         if T == tNUMERIC
             return (name, datamat)
         elseif T == tSPARSE
-            if size(datamat,2) == 3
-                return (name, sparse(datamat[:,1], datamat[:,2], datamat[:,3]))
-            else
-                return (name, sparse(datamat[:,1], datamat[:,2], complex.(datamat[:,3], datamat[:,4])))
-            end
+            return (name, read_sparse(datamat))
         end
     elseif T == tTEXT
+        # one character code per value (MATLAB writes U+0000 to U+00FF)
         if mrows > 1
-            charvec = UInt8.(read_bswap(f, M==mBIG_ENDIAN, Vector{pTYPE[P]}(undef, ncols*mrows)))
+            charvec = UInt16.(read_bswap(f, M==mBIG_ENDIAN, Vector{pTYPE[P]}(undef, ncols*mrows)))
             charmat = reshape(charvec, Int(mrows), Int(ncols))
-            data = [String(charmat[i,:]) for i in 1:mrows]
+            data = [transcode(String, charmat[i,:]) for i in 1:mrows]
         else
-            data = String(UInt8.(read_bswap(f, M==mBIG_ENDIAN, Vector{pTYPE[P]}(undef, ncols))))
+            data = transcode(String, UInt16.(read_bswap(f, M==mBIG_ENDIAN, Vector{pTYPE[P]}(undef, ncols))))
         end
         return (name, data)
     end
+end
+
+# A sparse matrix is stored as rows of (row, column, real[, imag]) and a last row of
+# (m, n, 0[, 0]) giving its size. Files written by MAT.jl lack that row; their last row
+# holds a stored value instead, which is kept.
+function read_sparse(datamat::AbstractMatrix)
+    vals(rows) = size(datamat, 2) == 3 ? datamat[rows, 3] : complex.(datamat[rows, 3], datamat[rows, 4])
+    last_row = size(datamat, 1)
+    if all(iszero, datamat[last_row, 3:end])
+        entries = 1:(last_row - 1)
+        m, n = Int(datamat[last_row, 1]), Int(datamat[last_row, 2])
+    else
+        entries = 1:last_row
+        m, n = Int(maximum(datamat[:, 1])), Int(maximum(datamat[:, 2]))
+    end
+    return sparse(Int.(datamat[entries, 1]), Int.(datamat[entries, 2]), vals(entries), m, n)
 end
 
 # Open MAT file for reading
@@ -192,7 +202,6 @@ function getvarnames(matfile::Matlabv4File)
 
             name = strip(String(read_bswap(f, M==mBIG_ENDIAN, Vector{UInt8}(undef, namlen))), '\0')
             varnames[name] = offset
-            imag_offset = 0
             skip(f, mrows*ncols*sizeof(pTYPE[P]))
             if imagf == imagfCOMPLEX
                 skip(f, mrows*ncols*sizeof(pTYPE[P]))
@@ -205,13 +214,13 @@ end
 Base.haskey(matfile::Matlabv4File, varname::String) =
     haskey(getvarnames(matfile), varname)
 Base.keys(matfile::Matlabv4File) =
-    keys(getvarnames(matfile))
+    sort!(collect(keys(getvarnames(matfile))))
 
 # Read a variable from a MAT file
 function read(matfile::Matlabv4File, varname::String)
     varnames = getvarnames(matfile)
     if !haskey(varnames, varname)
-        error("no variable $varname in file")
+        throw(KeyError(varname))
     end
     seek(matfile.ios, varnames[varname])
     (name, data) = read_matrix(matfile.ios, matfile.swap_bytes)

@@ -28,11 +28,10 @@
 module MAT_v5
 using CodecZlib, HDF5, SparseArrays
 import Base: read, write, close
-import ..MAT_types: MatlabStructArray, MatlabClassObject, MatlabTable, construct_from_raw, FunctionHandle, decode_char_array
+import ..MAT_types: MatlabStructArray, MatlabClassObject, MatlabTable, construct_from_raw, FunctionHandle, decode_char_array, fieldless_struct_array
 
 using ..MAT_subsys
 
-round_uint8(data) = round.(UInt8, data)
 complex_array(a, b) = complex.(a, b)
 
 mutable struct Matlabv5File <: HDF5.H5DataStore
@@ -208,6 +207,9 @@ function read_struct(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, is_obje
         if is_object
             data = MatlabClassObject(data, class)
         end
+    elseif n_fields == 0 && !is_object
+        # no fields, so nothing follows; as the v7.3 reader returns it
+        data = fieldless_struct_array(Tuple(convert(Vector{Int}, dimensions)))
     else
         # Read empty or multiple structs
         nfields = length(field_name_strings)
@@ -245,8 +247,6 @@ function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::
         error("invalid dimensions encountered for sparse array")
     end
 
-    m = isempty(dimensions) ? 0 : dimensions[1]
-    n = length(dimensions) <= 1 ? 0 : dimensions[2]
     ir = plusone!(convert(Vector{Int}, read_element(f, swap_bytes, Int32)))
     jc = plusone!(convert(Vector{Int}, read_element(f, swap_bytes, Int32)))
     if (flags[1] & (1 << 9)) != 0 # logical
@@ -273,8 +273,6 @@ function read_sparse(f::IO, swap_bytes::Bool, dimensions::Vector{Int32}, flags::
     end
     SparseMatrixCSC(m, n, jc, ir, pr)
 end
-
-truncate_to_uint8(x) = x % UInt8
 
 function read_string(f::IO, swap_bytes::Bool, dimensions::Vector{Int32})
     (dtype, nbytes, hbytes) = read_header(f, swap_bytes)
@@ -469,13 +467,13 @@ end
 Base.haskey(matfile::Matlabv5File, varname::String) =
     haskey(getvarnames(matfile), varname)
 Base.keys(matfile::Matlabv5File) =
-    keys(getvarnames(matfile))
+    sort!(collect(keys(getvarnames(matfile))))
 
 # Read a variable from a MAT file
 function read(matfile::Matlabv5File, varname::String)
     varnames = getvarnames(matfile)
     if !haskey(varnames, varname)
-        error("no variable $varname in file")
+        throw(KeyError(varname))
     end
     seek(matfile.ios, varnames[varname])
     (name, data) = read_matrix(matfile.ios, matfile.swap_bytes, matfile.subsystem)

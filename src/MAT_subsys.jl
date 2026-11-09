@@ -258,8 +258,8 @@ function load_subsys!(subsys::Subsystem, subsystem_data::Dict{String,Any}, swap_
         subsys.prop_vals_defaults = mcos_data[end, 1]
         check_unknown_regions(subsys)
         return subsys
-    catch
-        @warn "Failed to load MAT-file subsystem data. Opaque objects will be skipped. Error: $(catch_backtrace())"
+    catch e
+        @warn "Failed to load MAT-file subsystem data. Opaque objects will be skipped." exception = (e, catch_backtrace())
         return subsys
     end
 end
@@ -314,7 +314,8 @@ function update_nested_props!(prop_value::Array{UInt32}, subsys::Subsystem)
     # MATLAB probably uses some kind of placeholders to decode
     # But this should work here
 
-    if first(prop_value) == MCOS_IDENTIFIER
+    # an empty uint32 property, such as a `uint32([])` default, holds no object
+    if !isempty(prop_value) && first(prop_value) == MCOS_IDENTIFIER
         # MATLAB identifies any uint32 array with first value 0xdd000000 as an MCOS object
         return load_mcos_object(prop_value, "MCOS", subsys)
     else
@@ -503,7 +504,7 @@ function load_mcos_object(metadata::Array{UInt32}, type_name::String, subsys::Su
         end
 
     catch e
-        @warn "Failed to load MCOS object. Returning raw metadata. Error: $e"
+        @warn "Failed to load MCOS object. Returning raw metadata." exception = (e, catch_backtrace())
         return metadata
     end
 end

@@ -42,6 +42,7 @@ import ..MAT_types:
     construct_from_raw,
     convert_struct_array,
     EmptyStruct,
+    fieldless_struct_array,
     MatlabClassObject,
     MatlabOpaque,
     MatlabStructArray,
@@ -256,7 +257,8 @@ function read_empty(dset::HDF5.Dataset)
             field_names = [join(n) for n in read_attribute(dset, struct_field_attr_matlab)]
             return MatlabStructArray(field_names, tuple(dims...))
         else
-            return Dict{String,Any}()
+            # no fields: `struct()`, `struct([])` or `repmat(struct(), 1, 3)`
+            return fieldless_struct_array(tuple(dims...))
         end
     else
         T = mattype == "canonical empty" ? Union{} : str2type_matlab[mattype]
@@ -837,6 +839,13 @@ end
 
 # Struct array: Array of Dict => MATLAB struct array
 function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::AbstractArray{<:AbstractDict})
+    if isempty(arr) || all(isempty, arr)
+        # A struct array with no fields (e.g. `struct([])` or `repmat(struct(), 1, 3)`)
+        # has no field columns, so it cannot be represented by `MatlabStructArray`,
+        # which stores its size in its field columns. Write its dimensions directly
+        # instead, as MATLAB itself does.
+        return m_write(mfile, parent, name, EmptyStruct(collect(UInt64, size(arr))))
+    end
     m_write(mfile, parent, name, MatlabStructArray(arr))
 end
 
@@ -908,6 +917,22 @@ function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, obj::F
         end
     finally
         close(g)
+    end
+end
+
+# An empty function handle array is a dataset of its dimensions, as MATLAB writes it
+function m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, arr::AbstractArray{<:FunctionHandle})
+    if !isempty(arr)
+        return m_write(mfile, parent, name, MatlabStructArray(arr))
+    end
+    adata = UInt64[size(arr)...]
+    dset, dtype = create_dataset(parent, name, adata)
+    try
+        write_attribute(dset, empty_attr_matlab, 0x01)
+        write_attribute(dset, name_type_attr_matlab, "function_handle")
+        write_dataset(dset, dtype, adata)
+    finally
+        close(dtype); close(dset)
     end
 end
 
@@ -989,7 +1014,7 @@ m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, s::AbstractDict
             [StructUtils.lower(MATWriteStyle(), v) for v in values(s)])
 
 # `nothing` and `missing` are written as MATLAB's empty matrix `[]`; see
-# `matlab_empty_matrix` in MAT_types.jl for the round-trip asymmetry this implies.
+# `matlab_empty_matrix` in types/structutils.jl for the round-trip asymmetry this implies.
 m_write(mfile::MatlabHDF5File, parent::HDF5Parent, name::String, ::Nothing) =
     m_write(mfile, parent, name, matlab_empty_matrix)
 
